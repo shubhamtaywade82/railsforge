@@ -87,4 +87,24 @@ describe.skipIf(!isPersistentIndexSupported())('PersistentIndexer', () => {
     expect((db.prepare('SELECT COUNT(*) as c FROM methods').get() as { c: number }).c).toBe(0)
     expect((db.prepare('SELECT COUNT(*) as c FROM dependencies').get() as { c: number }).c).toBe(0)
   })
+
+  it('records include dependencies as non-hard-coded edges', () => {
+    const db = freshDb()
+    indexFileIntoDb(db, '/repo/app/services/order_job.rb', `
+class OrderJob
+  include Sidekiq::Job
+  include Retryable
+
+  def perform
+    nil
+  end
+end
+`, parser)
+
+    const deps = db.prepare('SELECT to_name, kind, hard_coded FROM dependencies WHERE from_name = ?').all('OrderJob') as Array<{ to_name: string; kind: string; hard_coded: number }>
+    const includeDeps = deps.filter(d => d.kind === 'include')
+    expect(includeDeps.map(d => d.to_name)).toContain('Sidekiq::Job')
+    expect(includeDeps.map(d => d.to_name)).toContain('Retryable')
+    expect(includeDeps.every(d => d.hard_coded === 0)).toBe(true)
+  })
 })

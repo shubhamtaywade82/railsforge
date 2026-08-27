@@ -46,6 +46,22 @@ export default class extends Controller {
     const def = indexer.parseControllerCode('/app/javascript/controllers/nested/dropdown_menu_controller.js', code)
     expect(def.identifier).toBe('nested--dropdown-menu')
   })
+
+  it('defaults to application identifier when file path does not match the pattern', () => {
+    const def = indexer.parseControllerCode('/app/javascript/some/random/file.js', 'export default class extends Controller {}')
+    expect(def.identifier).toBe('application')
+  })
+
+  it('retrieves controllers via getController and getAllControllers', () => {
+    const def = indexer.parseControllerCode('/app/javascript/controllers/clipboard_controller.js', `
+export default class extends Controller {
+  static targets = ["source"]
+  copy() {}
+}
+`)
+    expect(indexer.getController('clipboard')).toBe(def)
+    expect(indexer.getAllControllers()).toContain(def)
+  })
 })
 
 describe('StimulusIndexer.removeFile', () => {

@@ -127,4 +127,91 @@ end
     expect(find('PATCH', '/profile')).toMatchObject({ controller: 'profiles', action: 'update' })
     expect(find('GET', '/api/stats')).toMatchObject({ controller: 'admin/reports', action: 'index' })
   })
+
+  it('skips route table lines without a controller#action separator', () => {
+    const indexer = new RoutesIndexer()
+    indexer.parseRoutesTable(`
+      Prefix Verb   URI Pattern    Controller#Action
+        root GET    /               home#index
+             GET    /health        OK
+`)
+    expect(indexer.getAllRoutes().length).toBe(1)
+    expect(indexer.getAllRoutes()[0].controller).toBe('home')
+  })
+
+  it('parses singular resource with a do block and pushes to scope stack', () => {
+    const indexer = new RoutesIndexer()
+    indexer.parseRoutesDsl(`
+Rails.application.routes.draw do
+  resource :profile do
+    get :settings
+  end
+end
+`)
+    const routes = indexer.getAllRoutes()
+    const find = (verb: string, uri: string) => routes.find(r => r.verb === verb && r.uriPattern === uri)
+    expect(find('GET', '/profile/settings')).toMatchObject({ controller: 'profile', action: 'settings' })
+  })
+
+  it('singularize leaves non-s-plural words unchanged when nesting under a singular resource', () => {
+    const indexer = new RoutesIndexer()
+    indexer.parseRoutesDsl(`
+Rails.application.routes.draw do
+  resource :profile do
+    resources :photos, only: [:index]
+  end
+end
+`)
+    const routes = indexer.getAllRoutes()
+    const find = (verb: string, uri: string) => routes.find(r => r.verb === verb && r.uriPattern === uri)
+    expect(find('GET', '/profile/:profile_id/photos')).toMatchObject({ controller: 'photos' })
+  })
+
+  it('parses route table lines with fewer than 3 parts', () => {
+    const indexer = new RoutesIndexer()
+    indexer.parseRoutesTable('\n   \n')
+    expect(indexer.getAllRoutes()).toEqual([])
+  })
+
+  it('parses singular resources with y-ending names (pluralize to ies)', () => {
+    const indexer = new RoutesIndexer()
+    indexer.parseRoutesDsl(`
+Rails.application.routes.draw do
+  resource :category
+end
+`)
+    const routes = indexer.getAllRoutes()
+    const find = (verb: string, uri: string) => routes.find(r => r.verb === verb && r.uriPattern === uri)
+    expect(find('GET', '/category')).toMatchObject({ controller: 'categories' })
+  })
+
+  it('uses collection do block (not member do) for collection actions', () => {
+    const indexer = new RoutesIndexer()
+    indexer.parseRoutesDsl(`
+Rails.application.routes.draw do
+  resources :articles do
+    collection do
+      get :search
+    end
+  end
+end
+`)
+    const routes = indexer.getAllRoutes()
+    const find = (verb: string, uri: string) => routes.find(r => r.verb === verb && r.uriPattern === uri)
+    expect(find('GET', '/articles/search')).toMatchObject({ controller: 'articles', action: 'search' })
+  })
+
+  it('pluralizes parent name ending in s when nesting under a plural resource', () => {
+    const indexer = new RoutesIndexer()
+    indexer.parseRoutesDsl(`
+Rails.application.routes.draw do
+  resources :users do
+    resources :posts, only: [:index]
+  end
+end
+`)
+    const routes = indexer.getAllRoutes()
+    const find = (verb: string, uri: string) => routes.find(r => r.verb === verb && r.uriPattern === uri)
+    expect(find('GET', '/users/:user_id/posts')).toMatchObject({ controller: 'posts' })
+  })
 })

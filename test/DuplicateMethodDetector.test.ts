@@ -86,4 +86,5 @@ describe.skipIf(!isPersistentIndexSupported())('DuplicateMethodDetector', () => 
     const forWelcome = detector.findDuplicatesForFile('/repo/app/services/send_welcome_email_service.rb')
     expect(forWelcome.length).toBeGreaterThan(0)
   })
+
 })

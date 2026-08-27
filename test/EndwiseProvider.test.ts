@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { needsEndKeyword } from '../src/editing/EndwiseProvider'
+import { needsEndKeyword, EndwiseProvider } from '../src/editing/EndwiseProvider'
 
 describe('needsEndKeyword', () => {
   it('requires end for def/class/module/case/begin/for', () => {
@@ -54,3 +54,38 @@ describe('needsEndKeyword', () => {
     expect(needsEndKeyword('   ')).toBe(false)
   })
 })
+
+describe('EndwiseProvider', () => {
+  it('returns an empty array for line 0', () => {
+    const provider = new EndwiseProvider()
+    const doc = { lineAt: () => ({ text: 'def foo', firstNonWhitespaceCharacterIndex: 0 }) }
+    const result = provider.provideOnTypeFormattingEdits(doc as any, { line: 0, character: 0 })
+    expect(result).toEqual([])
+  })
+
+  it('inserts an indented end after a line that needs it', () => {
+    const provider = new EndwiseProvider()
+    const doc = {
+      lineAt: (lineNum: number) => ({
+        text: '  def foo',
+        firstNonWhitespaceCharacterIndex: 2,
+      }),
+    }
+    const result = provider.provideOnTypeFormattingEdits(doc as any, { line: 1, character: 0 })
+    expect(result).toHaveLength(1)
+    expect(result[0].newText).toBe('\n  end')
+  })
+
+  it('returns empty array when previous line does not need end', () => {
+    const provider = new EndwiseProvider()
+    const doc = {
+      lineAt: (lineNum: number) => ({
+        text: '  user.save!',
+        firstNonWhitespaceCharacterIndex: 2,
+      }),
+    }
+    const result = provider.provideOnTypeFormattingEdits(doc as any, { line: 1, character: 0 })
+    expect(result).toEqual([])
+  })
+})
+

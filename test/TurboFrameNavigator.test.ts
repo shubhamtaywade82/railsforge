@@ -43,6 +43,25 @@ describe('TurboFrameNavigator', () => {
 
     expect(nav3.findFrameLocations('cart')).toEqual([])
   })
+
+  it('removes only one file\'s locations for a shared frame id, keeping the other', () => {
+    const nav4 = new TurboFrameNavigator()
+    nav4.indexTemplateFrames('/app/views/a.html.erb', '<turbo-frame id="cart">')
+    nav4.indexTemplateFrames('/app/views/b.html.erb', '<turbo-frame id="cart">')
+
+    expect(nav4.findFrameLocations('cart').length).toBe(2)
+    nav4.removeFile('/app/views/a.html.erb')
+    expect(nav4.findFrameLocations('cart').length).toBe(1)
+    expect(nav4.findFrameLocations('cart')[0].filePath).toBe('/app/views/b.html.erb')
+  })
+
+  it('getAllFrames returns all indexed frame ids', () => {
+    const nav5 = new TurboFrameNavigator()
+    nav5.indexTemplateFrames('/app/views/a.html.erb', '<turbo-frame id="cart">\n<turbo-frame id="sidebar">')
+    const frames = nav5.getAllFrames()
+    expect(frames).toContain('cart')
+    expect(frames).toContain('sidebar')
+  })
 })
 
 describe('extractFrameIdAtPosition', () => {

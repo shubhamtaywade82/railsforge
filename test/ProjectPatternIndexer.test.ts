@@ -79,4 +79,55 @@ describe('ProjectPatternIndexer', () => {
 
     expect(indexer.getAllPatterns()).toHaveLength(0)
   })
+
+  it('finds a pattern at a specific file path and line', () => {
+    const indexer = new ProjectPatternIndexer()
+    indexer.indexFile('/repo/app/services/create_order_service.rb', createOrderService)
+
+    // Class starts at line 2 in createOrderService
+    const found = indexer.findPatternAt('/repo/app/services/create_order_service.rb', 2)
+    expect(found?.name).toBe('CreateOrderService')
+    expect(indexer.findPatternAt('/repo/app/services/create_order_service.rb', 99)).toBeUndefined()
+  })
+
+  it('sorts multiple similar patterns by descending score', () => {
+    const indexer = new ProjectPatternIndexer()
+    indexer.indexFile('/repo/app/services/create_order_service.rb', createOrderService)
+    indexer.indexFile('/repo/app/services/update_order_service.rb', cancelOrderService.replace(/CancelOrderService/g, 'UpdateOrderService'))
+    indexer.indexFile('/repo/app/services/send_order_email_service.rb', `
+class SendOrderEmailService < ApplicationService
+  def call
+    validate!
+    persist!
+  end
+end
+`)
+
+    const target = indexer.getPatternsByType('service').find(p => p.name === 'CreateOrderService')!
+    const similar = indexer.findSimilar(target, 10)
+    expect(similar.length).toBeGreaterThan(1)
+    // Verify sorted by descending score
+    for (let i = 1; i < similar.length; i++) {
+      const scoreA = indexer['similarityScore'](target, similar[i - 1])
+      const scoreB = indexer['similarityScore'](target, similar[i])
+      expect(scoreA).toBeGreaterThanOrEqual(scoreB)
+    }
+  })
+
+  it('correctly handles do blocks in public method extraction', () => {
+    const code = `
+class ReportService < ApplicationService
+  def call
+    items.each do |item|
+      process(item)
+    end
+  end
+end
+`
+    const indexer = new ProjectPatternIndexer()
+    indexer.indexFile('/repo/app/services/report_service.rb', code)
+
+    const pattern = indexer.getPatternsByType('service')[0]
+    expect(pattern.publicMethods).toContain('call')
+  })
 })

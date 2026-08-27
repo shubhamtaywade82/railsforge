@@ -1,0 +1,130 @@
+
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>Code coverage report for test/fixtures/devdocsFixtures.ts</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../../prettify.css" />
+    <link rel="stylesheet" href="../../base.css" />
+    <link rel="shortcut icon" type="image/x-icon" href="../../favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type='text/css'>
+        .coverage-summary .sorter {
+            background-image: url(../../sort-arrow-sprite.png);
+        }
+    </style>
+</head>
+    
+<body>
+<div class='wrapper'>
+    <div class='pad1'>
+        <h1><a href="../../index.html">All files</a> / <a href="index.html">test/fixtures</a> devdocsFixtures.ts</h1>
+        <div class='clearfix'>
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">100% </span>
+                <span class="quiet">Statements</span>
+                <span class='fraction'>3/3</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">100% </span>
+                <span class="quiet">Branches</span>
+                <span class='fraction'>0/0</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">100% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>0/0</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">100% </span>
+                <span class="quiet">Lines</span>
+                <span class='fraction'>3/3</span>
+            </div>
+        
+            
+        </div>
+        <p class="quiet">
+            Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
+        </p>
+        <template id="filterTemplate">
+            <div class="quiet">
+                Filter:
+                <input type="search" id="fileSearch">
+            </div>
+        </template>
+    </div>
+    <div class='status-line high'></div>
+    <pre><table class="coverage">
+<tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
+<a name='L2'></a><a href='#L2'>2</a>
+<a name='L3'></a><a href='#L3'>3</a>
+<a name='L4'></a><a href='#L4'>4</a>
+<a name='L5'></a><a href='#L5'>5</a>
+<a name='L6'></a><a href='#L6'>6</a>
+<a name='L7'></a><a href='#L7'>7</a>
+<a name='L8'></a><a href='#L8'>8</a>
+<a name='L9'></a><a href='#L9'>9</a>
+<a name='L10'></a><a href='#L10'>10</a>
+<a name='L11'></a><a href='#L11'>11</a>
+<a name='L12'></a><a href='#L12'>12</a>
+<a name='L13'></a><a href='#L13'>13</a>
+<a name='L14'></a><a href='#L14'>14</a>
+<a name='L15'></a><a href='#L15'>15</a>
+<a name='L16'></a><a href='#L16'>16</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">// Real HTML fragments captured via `curl https://documents.devdocs.io/rails~7.1/db.json`
+// (activerecord/persistence and abstractcontroller/actionnotfound pages) — verifies
+// DevDocsOfflineIndex's extraction against actual RDoc markup, not a guess at it.
+//
+// The has_secure_password fragment's "Examples" section (a Rails documentation sample,
+// not a real credential) had its example password/hash literals replaced with REDACTED —
+// none of the tests in DevDocsOfflineIndex.test.ts assert on that section's contents (it
+// lives inside a &lt;pre&gt; block extraction deliberately strips out), so this only avoids
+// tripping secret scanners on benign doc-sample text, with zero effect on test coverage.
+&nbsp;
+export const PERSISTENCE_PAGE_HTML = '&lt;div class="method-detail "&gt; &lt;div class="method-header"&gt; &lt;div class="method-heading" id="method-i-update_attribute"&gt; &lt;span class="method-name"&gt;update_attribute&lt;/span&gt;&lt;span class="method-args"&gt;(name, value)&lt;/span&gt; &lt;a class="method-click-advice"&gt;Show source&lt;/a&gt; &lt;/div&gt; &lt;/div&gt; &lt;div class="method-description"&gt;\n&lt;div class="method-source-code" id="update_attribute-source"&gt; &lt;pre class="ruby" data-language="ruby"&gt;# File activerecord/lib/active_record/persistence.rb, line 857\ndef update_attribute(name, value)\n  name = name.to_s\n  verify_readonly_attribute(name)\n  public_send("#{name}=", value)\n\n  save(validate: false)\nend&lt;/pre&gt; &lt;/div&gt; &lt;p&gt;Updates a single attribute and saves the record. This is especially useful for boolean flags on existing records. Also note that&lt;/p&gt; &lt;ul&gt;\n&lt;li&gt; &lt;p&gt;Validation is skipped.&lt;/p&gt; &lt;/li&gt;\n&lt;li&gt; &lt;p&gt;Callbacks are invoked.&lt;/p&gt; &lt;/li&gt;\n&lt;li&gt; &lt;p&gt;updated_at/updated_on column is updated if that column is available.&lt;/p&gt; &lt;/li&gt;\n&lt;li&gt; &lt;p&gt;Updates all the attributes that are dirty in this object.&lt;/p&gt; &lt;/li&gt;\n&lt;/ul&gt; &lt;p&gt;This method raises an &lt;a href="activerecorderror"&gt;&lt;code&gt;ActiveRecord::ActiveRecordError&lt;/code&gt;&lt;/a&gt; if the attribute is marked as readonly.&lt;/p&gt; &lt;p&gt;Also see &lt;a href="persistence#method-i-update_column"&gt;&lt;code&gt;update_column&lt;/code&gt;&lt;/a&gt;.&lt;/p&gt;  &lt;/div&gt; &lt;/div&gt; &lt;div class="method-detail "&gt; &lt;div class="method-header"&gt; &lt;div class="method-heading" id="method-i-update_attribute-21"&gt; &lt;span class="method-name"&gt;update_attribute!&lt;/span&gt;&lt;span class="method-args"&gt;(name, value)&lt;/span&gt; &lt;a class="method-click-advice"&gt;Show source&lt;/a&gt; &lt;/div&gt; &lt;/div&gt; &lt;div class="method-description"&gt;\n&lt;div class="method-source-code" id="update_attribute-21-source"&gt; &lt;pre class="ruby" data-language="ruby"&gt;# File activerecord/lib/active_record/persistence.rb, line 879\ndef update_attribute!(name, value)\n  name = name.to_s\n  verify_readonly_attribute(name)\n  public_send("#{name}=", value)\n\n  save!(validate: false)\nend&lt;/pre&gt; &lt;/div&gt; &lt;p&gt;Updates a single attribute and saves the record. This is especially useful for boolean flags on existing records. Also note that&lt;/p&gt; &lt;ul&gt;\n&lt;li&gt; &lt;p&gt;Validation is skipped.&lt;/p&gt; &lt;/li&gt;\n&lt;li&gt; &lt;p&gt;Callbacks are invoked.&lt;/p&gt; &lt;/li&gt;\n&lt;li&gt; &lt;p&gt;updated_at/updated_on column is updated if that column is available.&lt;/p&gt; &lt;/li&gt;\n&lt;li&gt; &lt;p&gt;Updates all the attributes that are dirty in this object.&lt;/p&gt; &lt;/li&gt;\n&lt;/ul&gt; &lt;p&gt;This method raises an &lt;a href="activerecorderror"&gt;&lt;code&gt;ActiveRecord::ActiveRecordError&lt;/code&gt;&lt;/a&gt; if the attribute is marked as readonly.&lt;/p&gt; &lt;p&gt;If any of the &lt;code&gt;before_*&lt;/code&gt; callbacks throws &lt;code&gt;:abort&lt;/code&gt; the action is cancelled and &lt;a href="persistence#method-i-update_attribute-21"&gt;&lt;code&gt;update_attribute!&lt;/code&gt;&lt;/a&gt; raises &lt;a href="recordnotsaved"&gt;&lt;code&gt;ActiveRecord::RecordNotSaved&lt;/code&gt;&lt;/a&gt;. See &lt;a href="callbacks"&gt;&lt;code&gt;ActiveRecord::Callbacks&lt;/code&gt;&lt;/a&gt; for further details.&lt;/p&gt;  &lt;/div&gt; &lt;/div&gt; '
+&nbsp;
+export const ACTIONNOTFOUND_PAGE_HTML = '&lt;h1 id="class-AbstractController::ActionNotFound" class="class"&gt; class AbstractController::ActionNotFound &lt;/h1&gt;\n&lt;dl class="meta"&gt;\n&lt;dt&gt;Parent:&lt;/dt&gt;\n&lt;dd class="meta-parent"&gt;StandardError&lt;/dd&gt;\n&lt;/dl&gt; &lt;section class="description"&gt; &lt;p&gt;Raised when a non-existing controller action is triggered.&lt;/p&gt; &lt;/section&gt; &lt;div class="_attribution"&gt;\n  &lt;p class="_attribution-p"&gt;© 2004 David Heinemeier Hansson&lt;/p&gt;\n&lt;/div&gt;\n'
+&nbsp;
+export const HAS_SECURE_PASSWORD_PAGE_HTML = "&lt;div class=\"method-detail \"&gt; &lt;div class=\"method-header\"&gt; &lt;div class=\"method-heading\" id=\"method-i-has_secure_password\"&gt; &lt;span class=\"method-name\"&gt;has_secure_password&lt;/span&gt;&lt;span class=\"method-args\"&gt;(attribute = :password, validations: true)&lt;/span&gt; &lt;a class=\"method-click-advice\"&gt;Show source&lt;/a&gt; &lt;/div&gt; &lt;/div&gt; &lt;div class=\"method-description\"&gt;\n&lt;div class=\"method-source-code\" id=\"has_secure_password-source\"&gt; &lt;pre class=\"ruby\" data-language=\"ruby\"&gt;# File activemodel/lib/active_model/secure_password.rb, line 101\ndef has_secure_password(attribute = :password, validations: true)\n  # Load bcrypt gem only when has_secure_password is used.\n  # This is to avoid ActiveModel (and by extension the entire framework)\n  # being dependent on a binary library.\n  begin\n    require \"bcrypt\"\n  rescue LoadError\n    warn \"You don't have bcrypt installed in your application. Please add it to your Gemfile and run bundle install.\"\n    raise\n  end\n\n  include InstanceMethodsOnActivation.new(attribute)\n\n  if validations\n    include ActiveModel::Validations\n\n    # This ensures the model has a password by checking whether the password_digest\n    # is present, so that this works with both new and existing records. However,\n    # when there is an error, the message is added to the password attribute instead\n    # so that the error message will make sense to the end-user.\n    validate do |record|\n      record.errors.add(attribute, :blank) unless record.public_send(\"#{attribute}_digest\").present?\n    end\n\n    validate do |record|\n      if challenge = record.public_send(:\"#{attribute}_challenge\")\n        digest_was = record.public_send(:\"#{attribute}_digest_was\") if record.respond_to?(:\"#{attribute}_digest_was\")\n\n        unless digest_was.present? &amp;amp;&amp;amp; BCrypt::Password.new(digest_was).is_password?(challenge)\n          record.errors.add(:\"#{attribute}_challenge\")\n        end\n      end\n    end\n\n    # Validates that the password does not exceed the maximum allowed bytes for BCrypt (72 bytes).\n    validate do |record|\n      password_value = record.public_send(attribute)\n      if password_value.present? &amp;amp;&amp;amp; password_value.bytesize &amp;gt; ActiveModel::SecurePassword::MAX_PASSWORD_LENGTH_ALLOWED\n        record.errors.add(attribute, :password_too_long)\n      end\n    end\n\n    validates_confirmation_of attribute, allow_blank: true\n  end\nend&lt;/pre&gt; &lt;/div&gt; &lt;p&gt;Adds methods to set and authenticate against a BCrypt password. This mechanism requires you to have a &lt;code&gt;XXX_digest&lt;/code&gt; attribute, where &lt;code&gt;XXX&lt;/code&gt; is the attribute name of your desired password.&lt;/p&gt; &lt;p&gt;The following validations are added automatically:&lt;/p&gt; &lt;ul&gt;\n&lt;li&gt; &lt;p&gt;Password must be present on creation&lt;/p&gt; &lt;/li&gt;\n&lt;li&gt; &lt;p&gt;Password length should be less than or equal to 72 bytes&lt;/p&gt; &lt;/li&gt;\n&lt;li&gt; &lt;p&gt;Confirmation of password (using a &lt;code&gt;XXX_confirmation&lt;/code&gt; attribute)&lt;/p&gt; &lt;/li&gt;\n&lt;/ul&gt; &lt;p&gt;If confirmation validation is not needed, simply leave out the value for &lt;code&gt;XXX_confirmation&lt;/code&gt; (i.e. don\u2019t provide a form field for it). When this attribute has a &lt;code&gt;nil&lt;/code&gt; value, the validation will not be triggered.&lt;/p&gt; &lt;p&gt;Additionally, a &lt;code&gt;XXX_challenge&lt;/code&gt; attribute is created. When set to a value other than &lt;code&gt;nil&lt;/code&gt;, it will validate against the currently persisted password. This validation relies on dirty tracking, as provided by &lt;a href=\"../dirty\"&gt;&lt;code&gt;ActiveModel::Dirty&lt;/code&gt;&lt;/a&gt;; if dirty tracking methods are not defined, this validation will fail.&lt;/p&gt; &lt;p&gt;All of the above validations can be omitted by passing &lt;code&gt;validations: false&lt;/code&gt; as an argument. This allows complete customizability of validation behavior.&lt;/p&gt; &lt;p&gt;To use &lt;code&gt;has_secure_password&lt;/code&gt;, add bcrypt (~&amp;gt; 3.1.7) to your Gemfile:&lt;/p&gt; &lt;pre class=\"ruby\" data-language=\"ruby\"&gt;gem 'bcrypt', '~&amp;gt; 3.1.7'\n&lt;/pre&gt; &lt;h4 id=\"method-i-has_secure_password-label-Examples\"&gt;Examples&lt;/h4&gt; &lt;h5 id=\"method-i-has_secure_password-label-Using+Active+Record+-28which+automatically+includes+ActiveModel-3A-3ASecurePassword-29\"&gt;Using Active Record (which automatically includes &lt;a href=\"../securepassword\"&gt;&lt;code&gt;ActiveModel::SecurePassword&lt;/code&gt;&lt;/a&gt;)&lt;/h5&gt; &lt;pre class=\"ruby\" data-language=\"ruby\"&gt;# Schema: User(name:string, password_digest:string, recovery_password_digest:string)\nclass User &amp;lt; ActiveRecord::Base\n  has_secure_password\n  has_secure_password :recovery_password, validations: false\nend\n\nuser = User.new(name: \"david\", password: \"\", password_confirmation: \"REDACTED\")\n\nuser.save                                                      # =&amp;gt; false, password required\nuser.password = \"REDACTED\"\nuser.save                                                      # =&amp;gt; false, confirmation doesn't match\nuser.password_confirmation = \"REDACTED\"\nuser.save                                                      # =&amp;gt; true\n\nuser.authenticate(\"notright\")                                  # =&amp;gt; false\nuser.authenticate(\"REDACTED\")                                     # =&amp;gt; user\nUser.find_by(name: \"david\")&amp;amp;.authenticate(\"notright\")          # =&amp;gt; false\nUser.find_by(name: \"david\")&amp;amp;.authenticate(\"REDACTED\")             # =&amp;gt; user\n\nuser.recovery_password = \"REDACTED\"\nuser.recovery_password_digest                                  # =&amp;gt; \"$2a$04$REDACTEDHASHVALUEXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\"\nuser.save                                                      # =&amp;gt; true\n\nuser.authenticate_recovery_password(\"REDACTED\")              # =&amp;gt; user\n\nuser.update(password: \"REDACTED\", password_challenge: \"\")         # =&amp;gt; false, challenge doesn't authenticate\nuser.update(password: \"REDACTED\", password_challenge: \"REDACTED\") # =&amp;gt; true\n\nuser.authenticate(\"REDACTED\")                                     # =&amp;gt; false, old password\nuser.authenticate(\"REDACTED\")                                  # =&amp;gt; user\n&lt;/pre&gt; &lt;h5 id=\"method-i-has_secure_password-label-Conditionally+requiring+a+password\"&gt;Conditionally requiring a password&lt;/h5&gt; &lt;pre class=\"ruby\" data-language=\"ruby\"&gt;class Account\n  include ActiveModel::SecurePassword\n\n  attr_accessor :is_guest, :password_digest\n\n  has_secure_password\n\n  def errors\n    super.tap { |errors| errors.delete(:password, :blank) if is_guest }\n  end\nend\n\naccount = Account.new\naccount.valid? # =&amp;gt; false, password required\n\naccount.is_guest = true\naccount.valid? # =&amp;gt; true\n&lt;/pre&gt;  &lt;/div&gt; &lt;/div&gt; &lt;/section&gt; &lt;/section&gt;&lt;div class=\"_attribution\"&gt;\n  &lt;p class=\"_attribution-p\"&gt;\n    &amp;copy; 2004&amp;ndash;2021 David Heinemeier Hansson&lt;br&gt;Licensed under the MIT License.&lt;br&gt;\n    \n  &lt;/p&gt;\n&lt;/div&gt;\n"
+&nbsp;</pre></td></tr></table></pre>
+
+                <div class='push'></div><!-- for sticky footer -->
+            </div><!-- /wrapper -->
+            <div class='footer quiet pad2 space-top1 center small'>
+                Code coverage generated by
+                <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
+                at 2026-08-27T11:10:46.765Z
+            </div>
+        <script src="../../prettify.js"></script>
+        <script>
+            window.onload = function () {
+                prettyPrint();
+            };
+        </script>
+        <script src="../../sorter.js"></script>
+        <script src="../../block-navigation.js"></script>
+    </body>
+</html>
+    

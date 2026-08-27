@@ -77,4 +77,28 @@ OrderMailer.confirmation(order).deliver_later
       expect(res.serviceCode).toBe('class SendInviteService < ApplicationService\n  def call\n    Invite.create!\n  end\nend\n')
     })
   })
+
+  describe('saveServiceFile', () => {
+    let tmpRoot: string
+
+    afterEach(() => {
+      if (tmpRoot) {fs.rmSync(tmpRoot, { recursive: true, force: true })}
+    })
+
+    it('creates parent directories if they do not exist', () => {
+      tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'railsforge-save-test-'))
+      const filePath = path.join(tmpRoot, 'app', 'services', 'nested', 'my_service_service.rb')
+
+      extractor.saveServiceFile(filePath, 'class MyService; end')
+
+      expect(fs.existsSync(filePath)).toBe(true)
+      expect(fs.readFileSync(filePath, 'utf8')).toBe('class MyService; end')
+    })
+  })
+
+  it('camelizes underscored service names correctly', () => {
+    const res = extractor.extractService('process_order', 'do_thing', ['id'], '/root')
+    expect(res.serviceCode).toContain('class ProcessOrderService')
+    expect(res.serviceFilePath).toContain('process_order_service.rb')
+  })
 })

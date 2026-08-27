@@ -36,7 +36,7 @@ function parseGlibcFromLibc(libcPath: string): string | undefined {
     if (!matches) return undefined
     // Find the highest version
     const versions = matches
-      .map((m: string) => m.slice(7))
+      .map((m: string) => m.slice(6))
       .map((v: string) => v.split('.').map(Number) as [number, number])
       .sort((a: [number, number], b: [number, number]) => b[0] - a[0] || b[1] - a[1])
     const [major, minor] = versions[0]

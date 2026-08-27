@@ -47,4 +47,17 @@ describe('findCustomTemplate', () => {
     fs.writeFileSync(path.join(tmpRoot, '.railsforge', 'templates', 'service.erb'), 'x')
     expect(findCustomTemplate(tmpRoot, 'query')).toBeNull()
   })
+
+  it('returns null when the template file exists but cannot be read', () => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'railsforge-tmpl-'))
+    fs.mkdirSync(path.join(tmpRoot, '.railsforge', 'templates'), { recursive: true })
+    const filePath = path.join(tmpRoot, '.railsforge', 'templates', 'service.erb')
+    fs.writeFileSync(filePath, 'content')
+    try {
+      fs.chmodSync(filePath, 0o000)
+      expect(findCustomTemplate(tmpRoot, 'service')).toBeNull()
+    } finally {
+      fs.chmodSync(filePath, 0o644)
+    }
+  })
 })

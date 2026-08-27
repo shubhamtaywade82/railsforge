@@ -121,4 +121,81 @@ describe('Logger', () => {
 
     expect(show).toHaveBeenCalledWith(false)
   })
+
+  it('falls back to createOutputChannel without { log: true } when it throws', () => {
+    const subscriptions: unknown[] = []
+    const context = { subscriptions } as unknown as vscode.ExtensionContext
+
+    let callCount = 0
+    const originalCreate = (vscode as Record<string, unknown>).window as { createOutputChannel: (...args: unknown[]) => unknown }
+    const realCreate = originalCreate.createOutputChannel.bind(originalCreate)
+    ;(originalCreate as { createOutputChannel: (...args: unknown[]) => unknown }).createOutputChannel = (...args: unknown[]) => {
+      callCount++
+      if (callCount === 1) {
+        throw new Error('not supported')
+      }
+      return realCreate(...args)
+    }
+
+    Logger.init(context)
+
+    // Restore
+    originalCreate.createOutputChannel = realCreate
+    expect(subscriptions.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('handles objects with circular references in log args', () => {
+    Logger.setLevel('debug')
+    const appendLine = vi.fn()
+    Logger['channel'] = {
+      appendLine,
+      show: vi.fn(),
+      dispose: vi.fn(),
+    } as unknown as vscode.OutputChannel
+
+    const circular: Record<string, unknown> = { key: 'value' }
+    circular.self = circular
+
+    Logger.info('circular', circular)
+    expect(appendLine).toHaveBeenCalled()
+  })
+
+  it('disables log file when mkdir fails (parent is a file, not a directory)', async () => {
+    Logger.setLevel('debug')
+    const appendLine = vi.fn()
+    Logger['channel'] = {
+      appendLine,
+      show: vi.fn(),
+      dispose: vi.fn(),
+    } as unknown as vscode.OutputChannel
+
+    // /dev/null is a file, not a directory, so mkdir under it will fail
+    Logger.setLogFile('/dev/null/railsforge.log')
+    Logger.info('trigger mkdir failure')
+
+    await Logger['fileQueue']
+    expect(Logger['logFile']).toBeUndefined()
+    Logger.setLogFile(undefined)
+  })
+
+  it('disables log file when appendFile fails (target is a directory)', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'railsforge-logger-append-'))
+    Logger.setLevel('debug')
+    const appendLine = vi.fn()
+    Logger['channel'] = {
+      appendLine,
+      show: vi.fn(),
+      dispose: vi.fn(),
+    } as unknown as vscode.OutputChannel
+
+    // Point logFile at a directory path (appendFile to a dir fails with EISDIR)
+    Logger['logFile'] = dir
+    Logger['fileQueue'] = Promise.resolve()
+    Logger.info('trigger append failure')
+
+    await Logger['fileQueue']
+    expect(Logger['logFile']).toBeUndefined()
+    Logger.setLogFile(undefined)
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
 })
