@@ -11,7 +11,7 @@ Gem::Specification.new do |spec|
     Install it alongside Shopify's ruby-lsp gem; ruby-lsp discovers and loads it
     automatically via the addon API.
   DESC
-  spec.homepage      = 'https://github.com/shubhamtaywade82/railsforge'
+  spec.homepage      = 'https://github.com/shubhamtaywade82/ruby-rails-extension'
   spec.license       = 'MIT'
   spec.required_ruby_version = '>= 3.0'
 

@@ -163,3 +163,32 @@ describe('formatProjectType', () => {
     expect(formatProjectType('script')).toBe('Script')
   })
 })
+
+describe('EnvironmentDetector version grounding', () => {
+  const detector = new EnvironmentDetector()
+  const mk = (files: Record<string, string>): string => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'railsforge-ver-'))
+    for (const [name, content] of Object.entries(files)) {fs.writeFileSync(path.join(dir, name), content)}
+    return dir
+  }
+
+  it('reports unknown Ruby instead of fabricating a version', () => {
+    expect(detector.detectEnvironment(mk({})).rubyVersion).toBe('unknown')
+  })
+
+  it('falls back to the Gemfile ruby directive, then Gemfile.lock RUBY VERSION', () => {
+    expect(detector.detectEnvironment(mk({ Gemfile: "source 'x'\nruby '3.2.4'\n" })).rubyVersion).toBe('3.2.4')
+    expect(detector.detectEnvironment(mk({ 'Gemfile.lock': 'RUBY VERSION\n   ruby 3.1.2p20\n\nBUNDLED WITH\n   2.4.1\n' })).rubyVersion).toBe('3.1.2')
+  })
+
+  it('parses prerelease Rails versions', () => {
+    const env = detector.detectEnvironment(mk({ 'Gemfile.lock': 'GEM\n  specs:\n    rails (8.1.0.beta1)\n' }))
+    expect(env.railsVersion).toBe('8.1.0.beta1')
+    expect(env.majorRailsVersion).toBe(8)
+  })
+
+  it('does not infer Hotwire from the Rails major version alone', () => {
+    const env = detector.detectEnvironment(mk({ 'Gemfile.lock': 'GEM\n  specs:\n    rails (7.1.0)\n' }))
+    expect(env.hasHotwire).toBe(false)
+  })
+})

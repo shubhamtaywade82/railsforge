@@ -78,6 +78,13 @@ export class StimulusIndexer {
       .filter(Boolean)
   }
 
+  /** Drops every controller defined in `filePath` (called when the file is deleted). */
+  removeFile(filePath: string): void {
+    for (const [identifier, def] of this.controllers) {
+      if (def.filePath === filePath) {this.controllers.delete(identifier)}
+    }
+  }
+
   getController(identifier: string): StimulusControllerDef | undefined {
     return this.controllers.get(identifier)
   }

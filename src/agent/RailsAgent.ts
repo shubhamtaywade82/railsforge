@@ -4,7 +4,7 @@
 
 import { SchemaIndexer } from '../rails/SchemaIndexer'
 import { RoutesIndexer } from '../rails/RoutesIndexer'
-import { ProjectEnvironment } from '../environment/EnvironmentDetector'
+import { ProjectEnvironment, UNKNOWN_VERSION, isKnownVersion } from '../environment/EnvironmentDetector'
 import { ProjectPatternIndexer } from '../patterns/ProjectPatternIndexer'
 
 import { OllamaClient } from '@nemesis-oss/ollama-sdk'
@@ -562,24 +562,43 @@ private buildFixRetryInstruction(code: string, diagnosticMessage: string, previo
     }
   }
 
+  /** Version grounding: only assert versions the project actually declares. */
+  private versionConstraintLines(rubyVer: string, railsVer: string | undefined): string[] {
+    const rubyKnown = isKnownVersion(rubyVer)
+    const railsKnown = isKnownVersion(railsVer)
+    if (rubyKnown && railsKnown) {
+      return [
+        `CRITICAL CONSTRAINT: The active project strictly uses Ruby ${rubyVer} and Rails ${railsVer}.`,
+        `Do NOT use or suggest features from newer Ruby or Rails versions. Only use standard library modules and gem APIs compatible with Ruby ${rubyVer} and Rails ${railsVer}.`,
+      ]
+    }
+    const lines = [
+      `CRITICAL CONSTRAINT: Project versions: Ruby ${rubyKnown ? rubyVer : 'UNKNOWN (not declared)'}, Rails ${railsKnown ? railsVer : 'UNKNOWN (not declared)'}.`,
+      'Do NOT assume a specific version for any UNKNOWN component and do not claim version-specific compatibility; prefer APIs that are stable across supported releases and flag anything version-dependent.',
+    ]
+    if (rubyKnown || railsKnown) {
+      lines.push(`Do NOT use or suggest features newer than the declared ${rubyKnown ? `Ruby ${rubyVer}` : `Rails ${railsVer}`}.`)
+    }
+    return lines
+  }
+
   private buildSystemPrompt(context: RailsAgentContext): string {
     const tables = this.schemaIndexer.getAllTables().map(t => `${t.name} (${Array.from(t.columns.keys()).join(', ')})`)
     const routes = this.routesIndexer.getAllRoutes().slice(0, 30).map(r => `${r.verb} ${r.uriPattern} => ${r.controller}#${r.action}`)
-    const rubyVer = this.env?.rubyVersion ?? '3.3.0'
+    const rubyVer = this.env?.rubyVersion ?? UNKNOWN_VERSION
     const isRailsProject = this.env === undefined || this.env.hasRails
 
     const parts: string[] = isRailsProject
       ? [
         'You are RailsForge AI, a senior Ruby on Rails engineering assistant.',
-        `CRITICAL CONSTRAINT: The active project strictly uses Ruby ${rubyVer} and Rails ${this.env?.railsVersion ?? '7.1.0'}.`,
-        `Do NOT use or suggest features from newer Ruby or Rails versions. Only use standard library modules and gem APIs compatible with Ruby ${rubyVer} and Rails ${this.env?.railsVersion ?? '7.1.0'}.`,
+        ...this.versionConstraintLines(rubyVer, this.env?.railsVersion),
         'Always produce clean, modern, idiomatic code adhering to RuboCop-Rails standards.',
         'Follow SOLID principles, avoid fat controllers, extract business logic to Service Objects, and prevent N+1 queries.',
         'Before generating a new Service, Query, Form, Policy, or Decorator, search the "Existing Project Patterns" list below. If a close match exists, reuse or extend it instead of writing a new one from scratch, and say so explicitly.',
       ]
       : [
         'You are RailsForge AI, a senior Ruby engineering assistant.',
-        `CRITICAL CONSTRAINT: The active project is a standalone Ruby codebase (gem or script) using Ruby ${rubyVer}. It does NOT depend on Rails — do not assume ActiveRecord, ActionController, or any other Rails framework API is available unless it appears as an actual dependency below.`,
+        `CRITICAL CONSTRAINT: The active project is a standalone Ruby codebase (gem or script) using Ruby ${isKnownVersion(rubyVer) ? rubyVer : '(version not declared — do not assume one)'}. It does NOT depend on Rails — do not assume ActiveRecord, ActionController, or any other Rails framework API is available unless it appears as an actual dependency below.`,
         'Only use Ruby standard library and gem APIs that are actually declared as dependencies.',
         'Follow SOLID principles and keep classes focused on a single responsibility.',
         'Before generating new code, search the "Existing Project Patterns" list below. If a close match exists, reuse or extend it instead of writing a new one from scratch, and say so explicitly.',
@@ -627,19 +646,19 @@ private buildFixRetryInstruction(code: string, diagnosticMessage: string, previo
   }
 
   private buildFixSystemPrompt(diagnosticMessage: string, context: RailsAgentContext): string {
-    const rubyVer = this.env?.rubyVersion ?? '3.3.0'
+    const rubyVer = this.env?.rubyVersion ?? UNKNOWN_VERSION
     const isRailsProject = this.env === undefined || this.env.hasRails
 
     const parts: string[] = isRailsProject
       ? [
         'You are RailsForge AI, a senior Ruby on Rails engineering assistant.',
-        `CRITICAL CONSTRAINT: The active project strictly uses Ruby ${rubyVer} and Rails ${this.env?.railsVersion ?? '7.1.0'}.`,
+        ...this.versionConstraintLines(rubyVer, this.env?.railsVersion),
         'Follow SOLID principles, avoid fat controllers, extract business logic to Service Objects, and prevent N+1 queries.',
         'Output ONLY a minimal unified diff. No explanation, no markdown fences.',
       ]
       : [
         'You are RailsForge AI, a senior Ruby engineering assistant.',
-        `CRITICAL CONSTRAINT: The active project is a standalone Ruby codebase using Ruby ${rubyVer}. No Rails APIs unless explicitly available.`,
+        `CRITICAL CONSTRAINT: The active project is a standalone Ruby codebase using Ruby ${isKnownVersion(rubyVer) ? rubyVer : '(version not declared — do not assume one)'}. No Rails APIs unless explicitly available.`,
         'Follow SOLID principles. Output ONLY a minimal unified diff. No explanation, no markdown fences.',
       ]
 

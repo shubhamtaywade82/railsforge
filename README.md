@@ -276,7 +276,7 @@ Install both:
 
 ```json
 // .vscode/extensions.json
-{ "recommendations": ["shopify.ruby-lsp", "nemesis.railsforge"] }
+{ "recommendations": ["shopify.ruby-lsp", "ShubhamTaywade.railsforge"] }
 ```
 
 `ruby-lsp` (plus `ruby-lsp-rails`) remains the source of truth for Ruby syntax,

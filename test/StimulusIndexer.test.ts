@@ -47,3 +47,13 @@ export default class extends Controller {
     expect(def.identifier).toBe('nested--dropdown-menu')
   })
 })
+
+describe('StimulusIndexer.removeFile', () => {
+  it('drops controllers defined in a deleted file', () => {
+    const idx = new StimulusIndexer()
+    idx.parseControllerCode('/app/javascript/controllers/admin/users_controller.js', 'export default class {}')
+    expect(idx.getController('admin--users')).toBeDefined()
+    idx.removeFile('/app/javascript/controllers/admin/users_controller.js')
+    expect(idx.getController('admin--users')).toBeUndefined()
+  })
+})

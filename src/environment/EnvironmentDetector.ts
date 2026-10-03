@@ -24,7 +24,15 @@ export function formatProjectType(type: ProjectType): string {
   }
 }
 
+/** Sentinel for a version the project never declared. Never substitute a guess. */
+export const UNKNOWN_VERSION = 'unknown'
+
+export function isKnownVersion(v: string | undefined): v is string {
+  return Boolean(v) && v !== UNKNOWN_VERSION
+}
+
 export interface ProjectEnvironment {
+  /** Declared Ruby version, or UNKNOWN_VERSION when no file/Gemfile/lockfile declares one. */
   rubyVersion: string
   /** True only when `rails` is an actual Gemfile.lock dependency — a plain gem/script isn't a Rails app. */
   hasRails: boolean
@@ -54,7 +62,8 @@ export class EnvironmentDetector {
 
     const hasTurbo = gemfileLockContent.includes('turbo-rails')
     const hasStimulus = gemfileLockContent.includes('stimulus-rails')
-    const hasHotwire = hasTurbo || hasStimulus || majorRails >= 7
+    // Hotwire is only "active" when a Hotwire gem is actually locked; Rails 7+ alone doesn't imply it.
+    const hasHotwire = hasTurbo || hasStimulus
     const hasPundit = gemfileLockContent.includes('pundit')
     const hasViewComponent = gemfileLockContent.includes('view_component')
     const hasStrongMigrations = gemfileLockContent.includes('strong_migrations')
@@ -105,17 +114,37 @@ export class EnvironmentDetector {
       const lines = fs.readFileSync(toolVersions, 'utf8').split('\n')
       for (const line of lines) {
         if (line.startsWith('ruby ')) {
-          return line.replace('ruby ', '').trim()
+          const val = line.replace('ruby ', '').trim().split(/\s+/)[0]
+          if (val) {return val}
         }
       }
     }
 
     const dotRbenv = path.join(root, '.rbenv-version')
     if (fs.existsSync(dotRbenv)) {
-      return fs.readFileSync(dotRbenv, 'utf8').trim()
+      const val = fs.readFileSync(dotRbenv, 'utf8').trim()
+      if (val) {return val}
     }
 
-    return '3.3.0'
+    const fromGemfile = this.rubyFromGemfile(root)
+    if (fromGemfile) {return fromGemfile}
+
+    const fromLock = this.rubyFromGemfileLock(root)
+    if (fromLock) {return fromLock}
+
+    return UNKNOWN_VERSION
+  }
+
+  private rubyFromGemfile(root: string): string | null {
+    const gemfile = path.join(root, 'Gemfile')
+    if (!fs.existsSync(gemfile)) {return null}
+    const match = /^\s*ruby\s+['"]([0-9][^'"]*)['"]/m.exec(fs.readFileSync(gemfile, 'utf8'))
+    return match ? match[1] : null
+  }
+
+  private rubyFromGemfileLock(root: string): string | null {
+    const match = /^RUBY VERSION\s*\n\s+ruby\s+([0-9][0-9A-Za-z.]*?)(?:p\d+)?\s*$/m.exec(this.readGemfileLock(root))
+    return match ? match[1] : null
   }
 
   private readGemfileLock(root: string): string {
@@ -127,7 +156,7 @@ export class EnvironmentDetector {
   }
 
   private extractGemVersion(gemfileLock: string, gemName: string): string | null {
-    const regex = new RegExp(`^\\s+${gemName}\\s+\\(([0-9.]+)\\)`, 'm')
+    const regex = new RegExp(`^\\s+${gemName}\\s+\\(([0-9][0-9A-Za-z.]*)\\)`, 'm')
     const match = regex.exec(gemfileLock)
     return match ? match[1] : null
   }

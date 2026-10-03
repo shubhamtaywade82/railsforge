@@ -31,7 +31,8 @@ import { ViewPartialResolver } from './rails/ViewPartialResolver'
 import { ViewPartialDefinitionProvider } from './rails/ViewPartialDefinitionProvider'
 import { TestExplorerController } from './testing/TestExplorerController'
 import { TestCodeLensProvider } from './testing/TestCodeLensProvider'
-import { EnvironmentDetector, ProjectEnvironment } from './environment/EnvironmentDetector'
+import { patchFileMatches } from './patch/PatchPaths'
+import { EnvironmentDetector, ProjectEnvironment, isKnownVersion } from './environment/EnvironmentDetector'
 import { RailsDeprecationLinter } from './lint/RailsDeprecationLinter'
 import { DesignPrincipleLinter } from './principles/DesignPrincipleLinter'
 import { VersionDocsEngine } from './docs/VersionDocsEngine'
@@ -175,9 +176,9 @@ export function activate(context: vscode.ExtensionContext): void {
     timeoutMs: config.devdocsFetchTimeoutMs,
     baseUrl: config.devdocsDataBaseUrl,
   })
-  const devDocsSlugs = [config.devdocsRubySlug || toDevDocsSlug('ruby', env.rubyVersion)]
+  const devDocsSlugs = [config.devdocsRubySlug || (isKnownVersion(env.rubyVersion) ? toDevDocsSlug('ruby', env.rubyVersion) : 'ruby')]
   if (env.hasRails) {
-    devDocsSlugs.push(config.devdocsRailsSlug || toDevDocsSlug('rails', env.railsVersion))
+    devDocsSlugs.push(config.devdocsRailsSlug || (isKnownVersion(env.railsVersion) ? toDevDocsSlug('rails', env.railsVersion) : 'rails'))
   }
   // Empty until the background download (kicked off below, once workspaceRoot is confirmed
   // non-empty) finishes — DevDocsHoverProvider reads through this holder (same "mutable
@@ -560,7 +561,7 @@ async function suggestRubyLspAddon(context: vscode.ExtensionContext, root: strin
     "Don't show again",
   )
   if (choice === 'Show Instructions') {
-    void vscode.env.openExternal(vscode.Uri.parse('https://github.com/shubhamtaywade82/railsforge/tree/main/ruby-lsp-addon'))
+    void vscode.env.openExternal(vscode.Uri.parse('https://github.com/shubhamtaywade82/ruby-rails-extension/tree/master/ruby-lsp-addon'))
   }
   if (choice) {
     void context.globalState.update(dismissedKey, true)
@@ -569,17 +570,22 @@ async function suggestRubyLspAddon(context: vscode.ExtensionContext, root: strin
 
 function loadStimulusControllers(root: string, indexer: StimulusIndexer): void {
   const controllersDir = path.join(root, 'app', 'javascript', 'controllers')
-  if (fs.existsSync(controllersDir)) {
-    const files = fs.readdirSync(controllersDir)
-    for (const f of files) {
-      if (f.endsWith('_controller.js') || f.endsWith('_controller.ts')) {
-        const full = path.join(controllersDir, f)
-        if (isExcludedByConfig(full)) {continue}
-        const code = fs.readFileSync(full, 'utf8')
-        indexer.parseControllerCode(full, code)
+  if (!fs.existsSync(controllersDir)) {return}
+  // Recursive, matching the watcher glob — nested controllers (admin/foo_controller.js)
+  // must be indexed at startup, not only after their first edit.
+  const walk = (dir: string): void => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        if (entry.name !== 'node_modules') {walk(full)}
+      } else if (/_controller\.[jt]s$/.test(entry.name) && !isExcludedByConfig(full)) {
+        try {
+          indexer.parseControllerCode(full, fs.readFileSync(full, 'utf8'))
+        } catch { /* skip unreadable */ }
       }
     }
   }
+  walk(controllersDir)
 }
 
 function watchStimulusControllers(context: vscode.ExtensionContext, indexer: StimulusIndexer): void {
@@ -595,6 +601,7 @@ function watchStimulusControllers(context: vscode.ExtensionContext, indexer: Sti
   }
   watcher.onDidChange(uri => void reindex(uri))
   watcher.onDidCreate(uri => void reindex(uri))
+  watcher.onDidDelete(uri => indexer.removeFile(uri.fsPath))
   context.subscriptions.push(watcher)
 }
 
@@ -1167,29 +1174,51 @@ function watchProjectFiles(
   routesIndexer: RoutesIndexer,
   migrationDiagnostics: MigrationDiagnostics,
 ): void {
+  // Only react to files inside the workspace root this indexer set was built for
+  // (a multi-root window delivers events for every folder).
+  const inRoot = (uri: vscode.Uri): boolean => {
+    const rel = path.relative(root, uri.fsPath)
+    return !rel.startsWith('..') && !path.isAbsolute(rel)
+  }
+
   if (readConfig().schemaAutoIndex) {
     const schemaWatcher = vscode.workspace.createFileSystemWatcher('**/db/schema.rb')
-    schemaWatcher.onDidChange(uri => {
-      if (isExcludedByConfig(uri.fsPath)) {return}
-      loadSchema(root, schemaIndexer)
+    const refresh = (uri: vscode.Uri): void => {
+      if (!inRoot(uri) || isExcludedByConfig(uri.fsPath)) {return}
+      void loadSchema(root, schemaIndexer)
+    }
+    schemaWatcher.onDidChange(refresh)
+    schemaWatcher.onDidCreate(refresh)
+    schemaWatcher.onDidDelete(uri => {
+      if (!inRoot(uri)) {return}
+      schemaIndexer.parseSchema('')
     })
     context.subscriptions.push(schemaWatcher)
   }
 
   if (readConfig().routesAutoIndex) {
     const routesWatcher = vscode.workspace.createFileSystemWatcher('**/config/routes.rb')
-    routesWatcher.onDidChange(uri => {
-      if (isExcludedByConfig(uri.fsPath)) {return}
-      loadRoutes(root, routesIndexer)
+    const refresh = (uri: vscode.Uri): void => {
+      if (!inRoot(uri) || isExcludedByConfig(uri.fsPath)) {return}
+      void loadRoutes(root, routesIndexer)
+    }
+    routesWatcher.onDidChange(refresh)
+    routesWatcher.onDidCreate(refresh)
+    routesWatcher.onDidDelete(uri => {
+      if (!inRoot(uri)) {return}
+      routesIndexer.parseRoutesDsl('')
     })
     context.subscriptions.push(routesWatcher)
   }
 
   const migrationWatcher = vscode.workspace.createFileSystemWatcher('**/db/migrate/*.rb')
-  migrationWatcher.onDidChange(uri => {
-    if (isExcludedByConfig(uri.fsPath)) {return}
-    void vscode.workspace.openTextDocument(uri).then(doc => migrationDiagnostics.updateDiagnostics(doc))
-  })
+  const analyzeMigration = (uri: vscode.Uri): void => {
+    if (!inRoot(uri) || isExcludedByConfig(uri.fsPath)) {return}
+    void vscode.workspace.openTextDocument(uri).then(doc => migrationDiagnostics.updateDiagnostics(doc), () => undefined)
+  }
+  migrationWatcher.onDidChange(analyzeMigration)
+  migrationWatcher.onDidCreate(analyzeMigration)
+  migrationWatcher.onDidDelete(uri => migrationDiagnostics.clearFile(uri))
   context.subscriptions.push(migrationWatcher)
 }
 
@@ -1551,8 +1580,8 @@ function registerCommands(
             if (proposal.type === 'patch') {
               // Apply hunks for this file only; hunks for other files (multi-file
               // fixes) are reported and skipped.
-              const targetName = path.basename(document.uri.fsPath)
-              const relevant = proposal.hunks.filter(h => h.file === null || path.basename(h.file) === targetName)
+              const docRoot = vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath ?? path.dirname(document.uri.fsPath)
+              const relevant = proposal.hunks.filter(h => h.file === null || patchFileMatches(h.file, document.uri.fsPath, docRoot))
               if (relevant.length === 0) {
                 vscode.window.showInformationMessage('RailsForge: AI fix only targeted other files — nothing applied to this one.')
                 return null
@@ -1993,9 +2022,13 @@ function registerCommands(
       // selected range in the original file changes, plus the new service file — nothing
       // else in the controller/model is touched (unless the developer opts into replacing
       // other exact duplicates of this same selection, below).
+      if (fs.existsSync(res.serviceFilePath)) {
+        vscode.window.showErrorMessage(`RailsForge: ${path.relative(root, res.serviceFilePath)} already exists — choose a different name. Nothing was changed.`)
+        return
+      }
       const edit = new vscode.WorkspaceEdit()
       const serviceUri = vscode.Uri.file(res.serviceFilePath)
-      edit.createFile(serviceUri, { ignoreIfExists: true })
+      edit.createFile(serviceUri, { overwrite: false, ignoreIfExists: false })
       edit.insert(serviceUri, new vscode.Position(0, 0), res.serviceCode)
       edit.replace(editor.document.uri, editor.selection, res.replacementCall)
 
@@ -2040,9 +2073,13 @@ function registerCommands(
       const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? ''
       const res = queryExtractor.extractQuery(name, model, selection, [], root)
 
+      if (fs.existsSync(res.queryFilePath)) {
+        vscode.window.showErrorMessage(`RailsForge: ${path.relative(root, res.queryFilePath)} already exists — choose a different name. Nothing was changed.`)
+        return
+      }
       const edit = new vscode.WorkspaceEdit()
       const queryUri = vscode.Uri.file(res.queryFilePath)
-      edit.createFile(queryUri, { ignoreIfExists: true })
+      edit.createFile(queryUri, { overwrite: false, ignoreIfExists: false })
       edit.insert(queryUri, new vscode.Position(0, 0), res.queryCode)
       edit.replace(editor.document.uri, editor.selection, res.replacementCall)
 
