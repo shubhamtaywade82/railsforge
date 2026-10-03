@@ -1,0 +1,2 @@
+class Betas < ApplicationRecord
+end

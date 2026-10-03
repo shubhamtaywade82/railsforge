@@ -1,0 +1,2 @@
+class Alphas < ApplicationRecord
+end

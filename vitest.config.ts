@@ -15,5 +15,7 @@ export default defineConfig({
     // process — a known-flaky combination for native modules on some platforms. 'forks'
     // isolates each test file in its own child process instead, sidestepping it entirely.
     pool: 'forks',
+    // test-host/ runs inside a real VS Code Extension Host (mocha), not vitest.
+    exclude: ['**/node_modules/**', 'test-host/**', 'out/**', 'dist/**'],
   },
 })

@@ -102,7 +102,13 @@ function applyLogSettings(config: RailsForgeConfig, workspaceRoot: string): void
   Logger.setLogFile(config.logFileEnabled && workspaceRoot ? path.join(workspaceRoot, '.railsforge', 'railsforge.log') : undefined)
 }
 
-export function activate(context: vscode.ExtensionContext): void {
+/** Read-only state exposed to the Extension Host integration tests (`extension.exports`). */
+export interface RailsForgeTestApi {
+  getActiveProjectRoot(): string
+  getSchemaTableNames(): string[]
+}
+
+export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   Logger.init(context)
   const config = readConfig()
   Logger.setLevel(config.logLevel)
@@ -597,6 +603,11 @@ export function activate(context: vscode.ExtensionContext): void {
   statusBar.tooltip = 'RailsForge: Active'
   statusBar.show()
   context.subscriptions.push(statusBar)
+
+  return {
+    getActiveProjectRoot: () => activeProject.root,
+    getSchemaTableNames: () => schemaIndexer.getAllTables().map(t => t.name),
+  }
 }
 
 async function suggestRubyLspAddon(context: vscode.ExtensionContext, root: string): Promise<void> {
