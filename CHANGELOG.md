@@ -23,6 +23,7 @@
 - Agent-native: every RailsForge MCP tool is also a VS Code Language Model tool (`railsforge_*`, agent mode / `#` references) via one shared implementation (`src/mcp/tools`); package.json's `languageModelTools` is generated from it and checked by a sync test. A native MCP server definition provider registers the bundled server per workspace root. New `get_runtime_introspection` tool.
 - `railsForge.ai.provider = "vscode-lm"` uses VS Code's model picker (Copilot or any Language Model provider) through the Language Model API, no API key stored by RailsForge.
 - Fixed: the standalone MCP server bundle no longer pulls in `vscode` (CI now guards this).
+- Editor context submenu (RailsForge), explorer "Rails Generate…", getting-started and Rake empty states (`viewsWelcome`), `railsforge:` virtual documents (routes, schema, runtime, toolchain) that refresh when schema/routes change, and `workspaceState` memory for the last analyzers/generator.
 
 ### Changed
 - `@rails` slash commands now run distinct workflows: `/optimize` performs schema-aware N+1 static analysis, `/migrate` runs the strong_migrations checks, `/fix` includes active diagnostics, `/service` `/scaffold` `/spec` ground the prompt in existing patterns, tables and the detected test framework.

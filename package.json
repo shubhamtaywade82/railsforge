@@ -583,6 +583,11 @@
           "id": "railsforge.rakeTasksView",
           "name": "Rake Tasks",
           "when": "railsforge.hasRakefile"
+        },
+        {
+          "id": "railsforge.gettingStarted",
+          "name": "Getting Started",
+          "when": "!railsforge.isRailsApp"
         }
       ]
     },
@@ -823,6 +828,11 @@
         "title": "RailsForge: Apply Chat Response (diff/create/replace)",
         "category": "RailsForge",
         "enablement": "railsforge.aiProvider"
+      },
+      {
+        "command": "railsforge.openVirtualDoc",
+        "title": "RailsForge: Open Project Overview (routes, schema, runtime, toolchain)",
+        "category": "RailsForge"
       }
     ],
     "menus": {
@@ -922,6 +932,10 @@
         {
           "command": "railsforge.generateRBS",
           "when": "railsforge.projectType != 'script'"
+        },
+        {
+          "command": "railsforge.openVirtualDoc",
+          "when": "workbenchState != empty"
         }
       ],
       "view/title": [
@@ -929,6 +943,67 @@
           "command": "railsforge.refreshRakeTasks",
           "when": "view == railsforge.rakeTasksView",
           "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "submenu": "railsforge.editorSubmenu",
+          "when": "resourceLangId == ruby || resourceLangId == erb",
+          "group": "navigation@9"
+        }
+      ],
+      "railsforge.editorSubmenu": [
+        {
+          "command": "railsforge.extractService",
+          "when": "editorHasSelection && resourceLangId == ruby && railsforge.isRailsApp",
+          "group": "1_refactor@1"
+        },
+        {
+          "command": "railsforge.extractQuery",
+          "when": "editorHasSelection && resourceLangId == ruby && railsforge.isRailsApp",
+          "group": "1_refactor@2"
+        },
+        {
+          "command": "railsforge.refactorSelection",
+          "when": "editorHasSelection && resourceLangId == ruby",
+          "group": "1_refactor@3"
+        },
+        {
+          "command": "railsforge.goToSpec",
+          "when": "resourceLangId == ruby",
+          "group": "2_navigate@1"
+        },
+        {
+          "command": "railsforge.goToView",
+          "when": "railsforge.hasViews",
+          "group": "2_navigate@2"
+        },
+        {
+          "command": "railsforge.showRelatedFiles",
+          "when": "resourceLangId == ruby",
+          "group": "2_navigate@3"
+        },
+        {
+          "command": "railsforge.runAnalyzers",
+          "when": "resourceLangId == ruby",
+          "group": "3_analyze@1"
+        },
+        {
+          "command": "railsforge.runBrakeman",
+          "when": "railsforge.isRailsApp",
+          "group": "3_analyze@2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "railsforge.generate",
+          "when": "explorerResourceIsFolder && railsforge.isRailsApp",
+          "group": "z_railsforge@1"
+        },
+        {
+          "command": "railsforge.openVirtualDoc",
+          "when": "explorerResourceIsRoot",
+          "group": "z_railsforge@2"
         }
       ]
     },
@@ -1461,6 +1536,28 @@
       {
         "id": "railsforge.mcp",
         "label": "RailsForge (Rails project context)"
+      }
+    ],
+    "viewsWelcome": [
+      {
+        "view": "railsforge.rakeTasksView",
+        "contents": "No Rake tasks were found. Rake may not be installed in this project's bundle, or the Rakefile defines no described tasks.\n[Refresh](command:railsforge.refreshRakeTasks)\n[Show Logs](command:railsforge.showLogs)"
+      },
+      {
+        "view": "railsforge.gettingStarted",
+        "contents": "RailsForge did not detect a Rails application in the active project (it looks for config/application.rb and `rails` in Gemfile.lock). Ruby, gem and script projects still get RuboCop, tests, analyzers and the AI tools.\n[Run Code Analyzers](command:railsforge.runAnalyzers)\n[Open Ruby Console](command:railsforge.openRailsConsole)\n[Show Toolchain](command:railsforge.openVirtualDoc?%5B%22toolchain%22%5D)",
+        "when": "workbenchState != empty"
+      },
+      {
+        "view": "railsforge.gettingStarted",
+        "contents": "Open a Ruby or Rails project folder to get started.\n[Open Folder](command:workbench.action.files.openFolder)",
+        "when": "workbenchState == empty"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "railsforge.editorSubmenu",
+        "label": "RailsForge"
       }
     ]
   },

@@ -36,6 +36,9 @@ import { isInside, resolveWorkspaceRoot } from './workspace/WorkspaceRoots'
 import { RubyAnalyzersProvider, AnalyzerRunResult } from './lint/RubyAnalyzersProvider'
 import { ANALYZER_IDS, AnalyzerId } from './lint/AnalyzerParsers'
 import { LmApiLike, registerRailsLanguageModelTools } from './ai/RailsLanguageModelTools'
+import { ProjectState } from './util/ProjectState'
+import { VIRTUAL_DOC_KINDS, VIRTUAL_DOC_SCHEME, VirtualDocKind } from './views/VirtualDocs'
+import { VirtualDocsProvider, virtualDocUri } from './views/VirtualDocsProvider'
 import { showRuntimeSnapshot } from './rails/RuntimeIntrospectionService'
 import { RAILSFORGE_TASK_TYPE, RailsTaskProvider } from './tasks/RailsTaskProvider'
 import { GENERATORS, GeneratorMode, buildGeneratorArgs, parseAttributes, parseGeneratorOutput, validateGeneratorName } from './rails/RailsGenerators'
@@ -127,6 +130,7 @@ export interface RailsForgeTestApi {
 }
 
 export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
+  projectState = new ProjectState(context.workspaceState)
   setVersionManagerSettingProvider(() => readConfig().rubyVersionManager)
   Logger.init(context)
   const config = readConfig()
@@ -379,7 +383,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     }, 2000)
 
     // File watchers are cheap to register, do immediately.
-    watchProjectFiles(context, () => activeProject.root, schemaIndexer, routesIndexer, migrationDiagnostics)
+    watchProjectFiles(context, () => activeProject.root, schemaIndexer, routesIndexer, migrationDiagnostics, (root, kind) => virtualDocs.refresh(root, [kind]))
     watchPatternFiles(context, projectPatternIndexer, patternCodeLensProvider, dependencyGraph, dependencyDiagnostics, relatedCodeLensProvider, semanticSearchIndex)
     watchSpecFiles(context, relatedFilesIndex, relatedCodeLensProvider)
     watchStimulusControllers(context, stimulusIndexer, () => activeProject.root)
@@ -648,6 +652,28 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   }
 
   registerAgentIntegrations(context)
+
+  // Read-only project overview documents (railsforge:/routes.md?root=…) and the empty-state view.
+  const virtualDocs = new VirtualDocsProvider()
+  context.subscriptions.push(
+    virtualDocs,
+    vscode.workspace.registerTextDocumentContentProvider(VIRTUAL_DOC_SCHEME, virtualDocs),
+    vscode.window.registerTreeDataProvider('railsforge.gettingStarted', {
+      getTreeItem: item => item,
+      getChildren: () => [],
+    } satisfies vscode.TreeDataProvider<vscode.TreeItem>),
+    vscode.commands.registerCommand('railsforge.openVirtualDoc', async (preselected?: VirtualDocKind) => {
+      const root = activeWorkspaceRoot()
+      if (!root) {return}
+      const kind = preselected ?? (await vscode.window.showQuickPick(
+        VIRTUAL_DOC_KINDS.map(k => ({ label: k, description: `railsforge:/${k}.md` })),
+        { placeHolder: 'Open which project overview?' },
+      ))?.label as VirtualDocKind | undefined
+      if (!kind) {return}
+      const doc = await vscode.workspace.openTextDocument(virtualDocUri(kind, root))
+      await vscode.window.showTextDocument(doc, { preview: true })
+    }),
+  )
   context.subscriptions.push(vscode.tasks.registerTaskProvider(RAILSFORGE_TASK_TYPE, new RailsTaskProvider()))
 
   // 6. Status Bar
@@ -1399,6 +1425,7 @@ function watchProjectFiles(
   schemaIndexer: SchemaIndexer,
   routesIndexer: RoutesIndexer,
   migrationDiagnostics: MigrationDiagnostics,
+  onIndexChanged?: (root: string, kind: 'schema' | 'routes') => void,
 ): void {
   // Only react to files inside the workspace root this indexer set was built for
   // (a multi-root window delivers events for every folder).
@@ -1408,13 +1435,14 @@ function watchProjectFiles(
     const schemaWatcher = vscode.workspace.createFileSystemWatcher('**/db/schema.rb')
     const refresh = (uri: vscode.Uri): void => {
       if (!inRoot(uri) || isExcludedByConfig(uri.fsPath)) {return}
-      void loadSchema(getRoot(), schemaIndexer)
+      void loadSchema(getRoot(), schemaIndexer).then(() => onIndexChanged?.(getRoot(), 'schema'))
     }
     schemaWatcher.onDidChange(refresh)
     schemaWatcher.onDidCreate(refresh)
     schemaWatcher.onDidDelete(uri => {
       if (!inRoot(uri)) {return}
       schemaIndexer.parseSchema('')
+      onIndexChanged?.(getRoot(), 'schema')
     })
     context.subscriptions.push(schemaWatcher)
   }
@@ -1423,13 +1451,14 @@ function watchProjectFiles(
     const routesWatcher = vscode.workspace.createFileSystemWatcher('**/config/routes.rb')
     const refresh = (uri: vscode.Uri): void => {
       if (!inRoot(uri) || isExcludedByConfig(uri.fsPath)) {return}
-      void loadRoutes(getRoot(), routesIndexer)
+      void loadRoutes(getRoot(), routesIndexer).then(() => onIndexChanged?.(getRoot(), 'routes'))
     }
     routesWatcher.onDidChange(refresh)
     routesWatcher.onDidCreate(refresh)
     routesWatcher.onDidDelete(uri => {
       if (!inRoot(uri)) {return}
       routesIndexer.parseRoutesDsl('')
+      onIndexChanged?.(getRoot(), 'routes')
     })
     context.subscriptions.push(routesWatcher)
   }
@@ -2677,6 +2706,9 @@ function registerAgentIntegrations(context: vscode.ExtensionContext): void {
   }
 }
 
+/** Per-workspace UI memory (last analyzers / generator), initialised in activate(). */
+let projectState: ProjectState | undefined
+
 /** Runs the configured (or user-picked) analyzers over the active project and publishes findings. */
 async function runCodeAnalyzers(provider: RubyAnalyzersProvider): Promise<void> {
   const root = activeWorkspaceRoot()
@@ -2688,11 +2720,12 @@ async function runCodeAnalyzers(provider: RubyAnalyzersProvider): Promise<void> 
   let ids = cfg.analyzersEnabled.filter((x): x is AnalyzerId => (ANALYZER_IDS as readonly string[]).includes(x))
   if (ids.length === 0) {
     const picked = await vscode.window.showQuickPick(
-      ANALYZER_IDS.map(id => ({ label: id, picked: id === 'reek' || id === 'flog' })),
+      ANALYZER_IDS.map(id => ({ label: id, picked: (projectState?.get<string[]>('lastAnalyzers', ['reek', 'flog']) ?? ['reek', 'flog']).includes(id) })),
       { canPickMany: true, placeHolder: 'Analyzers to run (they must be in your Gemfile; set railsForge.analyzers.enabled to skip this prompt)' },
     )
     if (!picked || picked.length === 0) {return}
     ids = picked.map(p => p.label as AnalyzerId)
+    void projectState?.set('lastAnalyzers', ids)
   }
 
   const results = await vscode.window.withProgress(
@@ -2747,11 +2780,15 @@ async function runRailsGenerator(mode: GeneratorMode, rubocop: RuboCopProvider):
     return
   }
 
+  // Most recently used generator first, so the common repeat (model, model, model…) is one Enter.
+  const lastKind = projectState?.get<string>('lastGenerator', '')
+  const ordered = [...GENERATORS].sort((a, b) => Number(b.id === lastKind) - Number(a.id === lastKind))
   const kind = await vscode.window.showQuickPick(
-    GENERATORS.map(g => ({ label: g.label, description: g.description, generator: g })),
+    ordered.map(g => ({ label: g.label, description: g.id === lastKind ? `${g.description} · last used` : g.description, generator: g })),
     { placeHolder: mode === 'generate' ? 'Rails generator to run' : 'Generator to destroy (removes the files it created)' },
   )
   if (!kind) {return}
+  void projectState?.set('lastGenerator', kind.generator.id)
 
   const name = await vscode.window.showInputBox({ prompt: kind.generator.namePrompt, validateInput: validateGeneratorName })
   if (!name) {return}

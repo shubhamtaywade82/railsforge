@@ -126,4 +126,25 @@ describe('RailsForge in a real Extension Host', function () {
     assert.ok(text.includes('alphas'), `unexpected tool output: ${text.slice(0, 200)}`)
     assert.ok(!text.includes('betas'), 'rails_b schema leaked into the rails_a tool call')
   })
+
+  it('serves read-only virtual project documents per root', async () => {
+    const folders = vscode.workspace.workspaceFolders ?? []
+    const a = folders.find(f => f.uri.fsPath.endsWith('rails_a'))!.uri.fsPath
+    const open = async (kind: string, root: string): Promise<string> =>
+      (await vscode.workspace.openTextDocument(vscode.Uri.from({ scheme: 'railsforge', path: `/${kind}.md`, query: new URLSearchParams({ root }).toString() }))).getText()
+    const schema = await open('schema', a)
+    assert.ok(schema.includes('## alphas'), schema)
+    assert.ok(!schema.includes('## betas'))
+    assert.ok((await open('toolchain', a)).includes('Project:'))
+    assert.ok((await open('runtime', a)).includes('No snapshot yet'))
+  })
+
+  it('contributes the editor submenu, welcome views and virtual doc command', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', '..', '..', 'package.json'), 'utf8')) as {
+      contributes: { submenus: Array<{ id: string }>; viewsWelcome: unknown[]; menus: Record<string, Array<{ submenu?: string }>> }
+    }
+    assert.ok(manifest.contributes.submenus.some(s => s.id === 'railsforge.editorSubmenu'))
+    assert.ok(manifest.contributes.viewsWelcome.length >= 3)
+    assert.ok(manifest.contributes.menus['editor/context'].some(m => m.submenu === 'railsforge.editorSubmenu'))
+  })
 })
