@@ -17,6 +17,7 @@ import { loadProjectGuidelines } from '../../config/ProjectGuidelines'
 import { loadEffectiveServiceObjectGuidelines } from '../../config/EffectiveGuidelines'
 import { formatSnapshotMarkdown, RuntimeSnapshot } from '../../rails/RuntimeIntrospector'
 import { ToolContext } from './ToolContext'
+import { buildSemanticContext } from '../../semantic/RailsContextBuilder'
 
 export interface ToolDefinition {
   /** MCP tool name (snake_case); the VS Code tool name is `railsforge_<name>`. */
@@ -264,6 +265,22 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
       } catch {
         return `Found ${best.name} at ${best.filePath} but could not read the file.`
       }
+    },
+  }),
+  defineTool({
+    name: 'get_semantic_context',
+    title: 'Get Rails application context (semantic graph)',
+    description: 'Returns how the parts of THIS Rails app connect for a file or topic: controller actions with their routes and views, models with table/columns/indexes/foreign keys, associations, validations, callbacks, scopes, related services/policies/specs/migrations and who calls whom. Call this FIRST when asked to change or debug a controller, model, service or query, so the change fits the real structure (e.g. before fixing an N+1 in OrdersController#index). Pass a file path and/or class names/controller#action in query.',
+    inputSchema: {
+      file: z.string().optional().describe('Project-relative or absolute path of the file being worked on'),
+      query: z.string().optional().describe('Free text naming classes/tables/actions, e.g. "N+1 in OrdersController#index"'),
+      max_chars: z.number().int().min(500).max(20000).optional(),
+    },
+    invocationMessage: 'Reading the Rails semantic graph',
+    async handler(ctx, { file, query, max_chars }) {
+      if (!file && !query) {return 'Provide `file` and/or `query` (class names, tables or controller#action) so RailsForge knows which part of the app to describe.'}
+      const text = buildSemanticContext(ctx.getSemanticGraph(), { filePath: file, prompt: query, maxChars: max_chars ?? 6000, maxSeeds: 6 })
+      return text || 'No known Rails entities matched. Check the class names, or pass the file path of the code you are changing.'
     },
   }),
   defineTool({

@@ -36,6 +36,8 @@ import { isInside, resolveWorkspaceRoot } from './workspace/WorkspaceRoots'
 import { RubyAnalyzersProvider, AnalyzerRunResult } from './lint/RubyAnalyzersProvider'
 import { ANALYZER_IDS, AnalyzerId } from './lint/AnalyzerParsers'
 import { LmApiLike, registerRailsLanguageModelTools } from './ai/RailsLanguageModelTools'
+import { ToolContext } from './mcp/tools/ToolContext'
+import { buildSemanticContext } from './semantic/RailsContextBuilder'
 import { ProjectState } from './util/ProjectState'
 import { VIRTUAL_DOC_KINDS, VIRTUAL_DOC_SCHEME, VirtualDocKind } from './views/VirtualDocs'
 import { VirtualDocsProvider, virtualDocUri } from './views/VirtualDocsProvider'
@@ -273,6 +275,11 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     ollamaMinP: cfg.ollamaMinP,
     getApiKey: async () => context.secrets.get(aiApiKeySecretKey(readConfig().aiProvider)),
     vscodeLmFamily: cfg.aiVscodeLmFamily,
+    semanticContext: ({ prompt, fileName, workspaceRoot: root }) => {
+      const projectRoot = root ?? (fileName ? workspaceRootFor(vscode.Uri.file(fileName)) : undefined)
+      if (!projectRoot) {return ''}
+      return buildSemanticContext(semanticContexts.get(projectRoot).getSemanticGraph(), { filePath: fileName, prompt, maxChars: 3500 })
+    },
     vscodeLmRequest: (system, prompt) => requestViaVsCodeLm(system, prompt, readConfig().aiVscodeLmFamily, readConfig().aiTimeoutMs),
     vscodeLmStatus: () => vscodeLmStatus(readConfig().aiVscodeLmFamily),
     log: (level: 'debug' | 'trace' | 'warn', message: string) => {
@@ -383,7 +390,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     }, 2000)
 
     // File watchers are cheap to register, do immediately.
-    watchProjectFiles(context, () => activeProject.root, schemaIndexer, routesIndexer, migrationDiagnostics, (root, kind) => virtualDocs.refresh(root, [kind]))
+    watchProjectFiles(context, () => activeProject.root, schemaIndexer, routesIndexer, migrationDiagnostics, (root, kind) => { semanticContexts.get(root).invalidateSemanticGraph(); virtualDocs.refresh(root, [kind, 'graph']) })
     watchPatternFiles(context, projectPatternIndexer, patternCodeLensProvider, dependencyGraph, dependencyDiagnostics, relatedCodeLensProvider, semanticSearchIndex)
     watchSpecFiles(context, relatedFilesIndex, relatedCodeLensProvider)
     watchStimulusControllers(context, stimulusIndexer, () => activeProject.root)
@@ -654,7 +661,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   registerAgentIntegrations(context)
 
   // Read-only project overview documents (railsforge:/routes.md?root=…) and the empty-state view.
-  const virtualDocs = new VirtualDocsProvider()
+  const virtualDocs = new VirtualDocsProvider(semanticContexts)
   context.subscriptions.push(
     virtualDocs,
     vscode.workspace.registerTextDocumentContentProvider(VIRTUAL_DOC_SCHEME, virtualDocs),
@@ -2705,6 +2712,9 @@ function registerAgentIntegrations(context: vscode.ExtensionContext): void {
     Logger.debug('MCP server definition provider API unavailable (older host) or server bundle missing; the .cursor/mcp.json writer remains.')
   }
 }
+
+/** One tool context (and cached semantic graph) per workspace root; shared by the agent and virtual docs. */
+const semanticContexts = new PerRootRegistry<ToolContext>(root => new ToolContext(root))
 
 /** Per-workspace UI memory (last analyzers / generator), initialised in activate(). */
 let projectState: ProjectState | undefined

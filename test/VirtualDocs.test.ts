@@ -31,7 +31,7 @@ describe('VirtualDocs', () => {
   })
 
   it('round-trips document kinds through the URI path', () => {
-    for (const kind of ['routes', 'schema', 'runtime', 'toolchain'] as const) {
+    for (const kind of ['routes', 'schema', 'runtime', 'toolchain', 'graph'] as const) {
       expect(parseVirtualDocKind(virtualDocPath(kind))).toBe(kind)
     }
     expect(parseVirtualDocKind('/other.md')).toBeUndefined()

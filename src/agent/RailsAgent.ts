@@ -90,6 +90,11 @@ export interface RailsAgentConfig {
   vscodeLmStatus?: () => Promise<ProviderStatus>
   vscodeLmFamily?: string
   /**
+   * Returns Rails application facts (semantic graph) relevant to this request, rendered as markdown
+   * ('' = nothing relevant). Injected so this class stays free of fs/vscode.
+   */
+  semanticContext?: (request: { prompt: string; fileName?: string; workspaceRoot?: string }) => string | Promise<string>
+  /**
    * Host-provided logging callback (wired in extension.ts to the RailsForge
    * logger) so this class stays vscode-free. 'debug' carries AI request/response
    * summaries and diff-parse results, 'trace' carries raw provider payloads,
@@ -103,6 +108,8 @@ export interface RailsAgentContext {
   fileName?: string
   selection?: string
   workspaceRoot?: string
+  /** Filled by RailsAgent.run() from config.semanticContext. */
+  semanticContext?: string
   diagnosticMessage?: string
   isFix?: boolean
 }
@@ -133,6 +140,13 @@ export class RailsAgent {
 
   async run(prompt: string, context: RailsAgentContext): Promise<RailsAgentResult> {
     const startedAt = Date.now()
+    if (context.semanticContext === undefined && this.config.semanticContext) {
+      try {
+        context = { ...context, semanticContext: await this.config.semanticContext({ prompt: `${prompt}\n${context.diagnosticMessage ?? ''}`, fileName: context.fileName, workspaceRoot: context.workspaceRoot }) }
+      } catch (err) {
+        this.log('warn', `[AI] semantic context unavailable: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
     const systemPrompt = context.isFix
       ? this.buildFixSystemPrompt(context.diagnosticMessage ?? '', context)
       : this.buildSystemPrompt(context)
@@ -696,6 +710,10 @@ private buildFixRetryInstruction(code: string, diagnosticMessage: string, previo
       parts.push(this.legalSkillsPrompt())
     }
 
+    if (context.semanticContext) {
+      parts.push(context.semanticContext)
+    }
+
     if (patternSummary) {
       parts.push(`Existing Project Patterns (reuse before generating new code):\n${patternSummary}`)
     }
@@ -751,6 +769,10 @@ private buildFixRetryInstruction(code: string, diagnosticMessage: string, previo
 
     if (this.config.legalMode) {
       parts.push(this.legalSkillsPrompt())
+    }
+
+    if (context.semanticContext) {
+      parts.push(context.semanticContext)
     }
 
     // Only include schema tables relevant to the diagnostic (heuristic: class name in message)

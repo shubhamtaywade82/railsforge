@@ -1502,6 +1502,38 @@
         }
       },
       {
+        "name": "railsforge_get_semantic_context",
+        "displayName": "Get Rails application context (semantic graph)",
+        "toolReferenceName": "get_semantic_context",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Returns how the parts of THIS Rails app connect for a file or topic: controller actions with their routes and views, models with table/columns/indexes/foreign keys, associations, validations, callbacks, scopes, related services/policies/specs/migrations and who calls whom. Call this FIRST when asked to change or debug a controller, model, service or query, so the change fits the real structure (e.g. before fixing an N+1 in OrdersController#index). Pass a file path and/or class names/controller#action in query.",
+        "userDescription": "Get Rails application context (semantic graph)",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "file": {
+              "description": "Project-relative or absolute path of the file being worked on",
+              "type": "string"
+            },
+            "query": {
+              "description": "Free text naming classes/tables/actions, e.g. \"N+1 in OrdersController#index\"",
+              "type": "string"
+            },
+            "max_chars": {
+              "type": "integer",
+              "minimum": 500,
+              "maximum": 20000
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
         "name": "railsforge_get_runtime_introspection",
         "displayName": "Get Rails runtime introspection",
         "toolReferenceName": "get_runtime_introspection",

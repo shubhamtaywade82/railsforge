@@ -21,10 +21,16 @@ export function virtualDocUri(kind: VirtualDocKind, root: string): vscode.Uri {
   return vscode.Uri.from({ scheme: VIRTUAL_DOC_SCHEME, path: virtualDocPath(kind), query: new URLSearchParams({ root }).toString() })
 }
 
+import { ToolContext } from '../mcp/tools/ToolContext'
+import { PerRootRegistry } from '../workspace/PerRootRegistry'
+import { renderGraphOverview } from '../semantic/RailsContextBuilder'
+
 export class VirtualDocsProvider implements vscode.TextDocumentContentProvider, vscode.Disposable {
   private readonly emitter = new vscode.EventEmitter<vscode.Uri>()
   readonly onDidChange = this.emitter.event
   private readonly detector = new EnvironmentDetector()
+
+  constructor(private readonly contexts: PerRootRegistry<ToolContext>) {}
 
   provideTextDocumentContent(uri: vscode.Uri): string {
     const kind = parseVirtualDocKind(uri.path)
@@ -46,6 +52,8 @@ export class VirtualDocsProvider implements vscode.TextDocumentContentProvider, 
       }
       case 'runtime':
         return renderRuntimeDoc(readCachedSnapshot(root))
+      case 'graph':
+        return renderGraphOverview(this.contexts.get(root).getSemanticGraph(0))
       case 'toolchain': {
         const env = this.detector.detectEnvironment(root)
         return renderToolchainDoc({

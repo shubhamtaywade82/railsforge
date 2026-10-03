@@ -430,3 +430,25 @@ describe('RailsAgent vscode-lm provider', () => {
     expect((await buildAgent({ provider: 'vscode-lm' }).getProviderStatus()).state).toBe('error')
   })
 })
+
+describe('RailsAgent semantic context', () => {
+  it('injects the graph facts into the system prompt (chat and fix) and tolerates failures', async () => {
+    const seen: string[] = []
+    const agent = buildAgent({
+      provider: 'vscode-lm',
+      vscodeLmRequest: async (system) => { seen.push(system); return 'ok' },
+      semanticContext: ({ prompt }) => (prompt.includes('Order') ? '## Rails application facts\n### Order — model' : ''),
+    })
+    await agent.run('speed up Order', { fileName: 'app/models/order.rb' })
+    expect(seen[0]).toContain('### Order — model')
+
+    await agent.run('unrelated', {})
+    expect(seen[1]).not.toContain('Rails application facts')
+
+    await agent.run('fix Order', { isFix: true, diagnosticMessage: 'Style/X in Order', fileContent: 'class Order; end' })
+    expect(seen[2]).toContain('### Order — model')
+
+    const throwing = buildAgent({ provider: 'vscode-lm', vscodeLmRequest: async () => 'fine', semanticContext: () => { throw new Error('graph exploded') } })
+    expect(await throwing.run('x', {})).toMatchObject({ success: true, response: 'fine' })
+  })
+})

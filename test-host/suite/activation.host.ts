@@ -147,4 +147,18 @@ describe('RailsForge in a real Extension Host', function () {
     assert.ok(manifest.contributes.viewsWelcome.length >= 3)
     assert.ok(manifest.contributes.menus['editor/context'].some(m => m.submenu === 'railsforge.editorSubmenu'))
   })
+
+  it('semantic context tool describes the active project only; graph virtual doc renders', async function () {
+    const lm = (vscode as unknown as { lm?: { invokeTool(name: string, options: { input: object; toolInvocationToken: undefined }): Thenable<{ content: Array<{ value?: string }> }> } }).lm
+    if (!lm?.invokeTool) {return this.skip()}
+    const folders = vscode.workspace.workspaceFolders ?? []
+    const a = folders.find(f => f.uri.fsPath.endsWith('rails_a'))!.uri.fsPath
+    await openFile('rails_a', 'app/models/alphas.rb')
+    const result = await lm.invokeTool('railsforge_get_semantic_context', { input: { file: 'app/models/alphas.rb', query: 'Alphas' }, toolInvocationToken: undefined })
+    const text = result.content.map(part => part.value ?? '').join('')
+    assert.ok(text.includes('Alphas'), text.slice(0, 300))
+    assert.ok(!text.includes('Betas'), 'rails_b facts leaked into rails_a context')
+    const doc = await vscode.workspace.openTextDocument(vscode.Uri.from({ scheme: 'railsforge', path: '/graph.md', query: new URLSearchParams({ root: a }).toString() }))
+    assert.ok(doc.getText().includes('# Rails Semantic Graph'))
+  })
 })

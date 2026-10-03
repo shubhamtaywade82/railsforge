@@ -17,6 +17,9 @@ import { RubyDocProvider } from '../../docs/RubyDocProvider'
 import { parseGemfileLock } from '../../gems/GemfileLockParser'
 import { DevDocsOfflineIndex } from '../../docs/DevDocsOfflineIndex'
 import { RBSIndex } from '../../types/RBSIndex'
+import { RailsSemanticGraph } from '../../semantic/RailsSemanticGraph'
+import { buildSemanticGraph } from '../../semantic/GraphBuilder'
+import { DependencyRow } from '../../semantic/facts'
 
 const DEFAULT_EXCLUDED_DIR_NAMES = ['node_modules', 'vendor', 'tmp', 'log', '.git', 'coverage']
 
@@ -55,6 +58,7 @@ export class ToolContext {
   readonly rubyDocProvider = new RubyDocProvider()
   private devDocsIndex: DevDocsOfflineIndex | null = null
   private rbsIndex: RBSIndex | null = null
+  private graph: { builtAt: number; value: RailsSemanticGraph } | null = null
 
   constructor(readonly workspaceRoot: string) {
     this.excludedDirNames = loadExcludedDirNames(workspaceRoot)
@@ -109,6 +113,30 @@ export class ToolContext {
     } catch {
       return null
     }
+  }
+
+  /**
+   * The project's semantic graph, rebuilt at most every `ttlMs` (builds scan app/, spec/, db/;
+   * cheap enough per request but not per keystroke). Uses AST dependency edges when that index exists.
+   */
+  getSemanticGraph(ttlMs = 15_000): RailsSemanticGraph {
+    const now = Date.now()
+    if (this.graph && now - this.graph.builtAt < ttlMs) {return this.graph.value}
+    let dependencyRows: DependencyRow[] | undefined
+    const db = this.openPersistentDbReadonly()
+    if (db) {
+      try {
+        dependencyRows = db.prepare('SELECT from_name, to_name, kind, line, file_path FROM dependencies').all() as DependencyRow[]
+      } catch { /* index not migrated yet */ }
+      try { db.close() } catch { /* ignore */ }
+    }
+    const value = buildSemanticGraph(this.workspaceRoot, { excludedDirNames: this.excludedDirNames, dependencyRows })
+    this.graph = { builtAt: now, value }
+    return value
+  }
+
+  invalidateSemanticGraph(): void {
+    this.graph = null
   }
 
   loadLockedGemVersions(): Map<string, string> {

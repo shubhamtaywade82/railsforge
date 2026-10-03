@@ -7,8 +7,8 @@ import { RailsRoute } from '../rails/RoutesIndexer'
 import { SchemaTable } from '../rails/SchemaIndexer'
 import { RuntimeSnapshot, formatSnapshotMarkdown } from '../rails/RuntimeIntrospector'
 
-export type VirtualDocKind = 'routes' | 'schema' | 'runtime' | 'toolchain'
-export const VIRTUAL_DOC_KINDS: readonly VirtualDocKind[] = ['routes', 'schema', 'runtime', 'toolchain']
+export type VirtualDocKind = 'routes' | 'schema' | 'runtime' | 'toolchain' | 'graph'
+export const VIRTUAL_DOC_KINDS: readonly VirtualDocKind[] = ['routes', 'schema', 'runtime', 'toolchain', 'graph']
 export const VIRTUAL_DOC_SCHEME = 'railsforge'
 
 export function renderRoutesDoc(routes: readonly RailsRoute[]): string {
@@ -65,6 +65,6 @@ export function virtualDocPath(kind: VirtualDocKind): string {
 }
 
 export function parseVirtualDocKind(uriPath: string): VirtualDocKind | undefined {
-  const m = /^\/(routes|schema|runtime|toolchain)\.md$/.exec(uriPath)
+  const m = /^\/(routes|schema|runtime|toolchain|graph)\.md$/.exec(uriPath)
   return m ? (m[1] as VirtualDocKind) : undefined
 }
