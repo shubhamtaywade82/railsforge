@@ -5,6 +5,7 @@
  */
 
 import * as vscode from 'vscode'
+import { activeWorkspaceRoot } from '../workspace/activeRoot'
 import { ViewPartialResolver, extractRenderPathAtPosition } from './ViewPartialResolver'
 
 export class ViewPartialDefinitionProvider implements vscode.DefinitionProvider {
@@ -14,7 +15,7 @@ export class ViewPartialDefinitionProvider implements vscode.DefinitionProvider 
     document: vscode.TextDocument,
     position: vscode.Position,
   ): vscode.ProviderResult<vscode.Definition> {
-    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+    const workspaceRoot = activeWorkspaceRoot()
     if (!workspaceRoot) {return null}
 
     const line = document.lineAt(position.line).text

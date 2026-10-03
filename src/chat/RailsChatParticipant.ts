@@ -8,6 +8,7 @@
  */
 
 import * as vscode from 'vscode'
+import { activeWorkspaceRoot } from '../workspace/activeRoot'
 import { RailsAgent } from '../agent/RailsAgent'
 import { SchemaIndexer } from '../rails/SchemaIndexer'
 import { RoutesIndexer } from '../rails/RoutesIndexer'
@@ -76,7 +77,7 @@ export class RailsChatParticipant {
       fileContent: fullText,
       selection,
       fileName: editor?.document.fileName,
-      workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+      workspaceRoot: activeWorkspaceRoot(),
     })
 
     if (result.success) {

@@ -31,6 +31,8 @@ import { ViewPartialResolver } from './rails/ViewPartialResolver'
 import { ViewPartialDefinitionProvider } from './rails/ViewPartialDefinitionProvider'
 import { TestExplorerController } from './testing/TestExplorerController'
 import { TestCodeLensProvider } from './testing/TestCodeLensProvider'
+import { activeWorkspaceRoot, workspaceRoots, workspaceRootFor } from './workspace/activeRoot'
+import { isInside, resolveWorkspaceRoot } from './workspace/WorkspaceRoots'
 import { patchFileMatches } from './patch/PatchPaths'
 import { EnvironmentDetector, ProjectEnvironment, isKnownVersion } from './environment/EnvironmentDetector'
 import { RailsDeprecationLinter } from './lint/RailsDeprecationLinter'
@@ -160,7 +162,9 @@ export function activate(context: vscode.ExtensionContext): void {
   )
   const envDetector = new EnvironmentDetector()
 
-  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? ''
+  const workspaceRoot = activeWorkspaceRoot() ?? ''
+  // Root the shared (root-bound) indexers currently reflect; swapped by switchActiveProject().
+  const activeProject = { root: workspaceRoot }
   const env: ProjectEnvironment = envDetector.detectEnvironment(workspaceRoot)
   if (config.projectTypeOverride !== 'auto') {
     env.projectType = config.projectTypeOverride
@@ -328,10 +332,10 @@ export function activate(context: vscode.ExtensionContext): void {
     }, 2000)
 
     // File watchers are cheap to register, do immediately.
-    watchProjectFiles(context, workspaceRoot, schemaIndexer, routesIndexer, migrationDiagnostics)
+    watchProjectFiles(context, () => activeProject.root, schemaIndexer, routesIndexer, migrationDiagnostics)
     watchPatternFiles(context, projectPatternIndexer, patternCodeLensProvider, dependencyGraph, dependencyDiagnostics, relatedCodeLensProvider, semanticSearchIndex)
     watchSpecFiles(context, relatedFilesIndex, relatedCodeLensProvider)
-    watchStimulusControllers(context, stimulusIndexer)
+    watchStimulusControllers(context, stimulusIndexer, () => activeProject.root)
     watchTurboFrameTemplates(context, turboFrameNavigator)
   }
 
@@ -351,6 +355,49 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerTreeDataProvider('railsforge.rakeTasksView', rakeTaskTreeProvider),
   )
   void vscode.commands.executeCommand('setContext', 'railsforge.hasRakefile', workspaceRoot && fs.existsSync(path.join(workspaceRoot, 'Rakefile')))
+
+  // Multi-root: schema/routes/env/stimulus/factories/rake are per-project. They are
+  // shared singletons injected into many providers, so rather than rewiring each one we
+  // re-point them (in place) at whichever workspace folder owns the active editor.
+  const switchActiveProject = (newRoot: string): void => {
+    if (!newRoot || newRoot === activeProject.root) {return}
+    Logger.info(`[workspace] Active project: ${activeProject.root} -> ${newRoot}`)
+    activeProject.root = newRoot
+
+    const fresh = envDetector.detectEnvironment(newRoot)
+    const override = readConfig().projectTypeOverride
+    if (override !== 'auto') {fresh.projectType = override}
+    Object.assign(env, fresh)
+    void vscode.commands.executeCommand('setContext', 'railsforge.projectType', env.projectType)
+    void vscode.commands.executeCommand('setContext', 'railsforge.isRailsApp', env.projectType === 'monolith' || env.projectType === 'api_only')
+    void vscode.commands.executeCommand('setContext', 'railsforge.hasViews', env.projectType === 'monolith')
+    void vscode.commands.executeCommand('setContext', 'railsforge.hasHotwire', env.hasHotwire)
+    void vscode.commands.executeCommand('setContext', 'railsforge.hasPundit', env.hasPundit)
+    void vscode.commands.executeCommand('setContext', 'railsforge.hasViewComponent', env.hasViewComponent)
+    void vscode.commands.executeCommand('setContext', 'railsforge.hasRakefile', fs.existsSync(path.join(newRoot, 'Rakefile')))
+
+    void loadSchema(newRoot, schemaIndexer)
+    void loadRoutes(newRoot, routesIndexer)
+    stimulusIndexer.clear()
+    loadStimulusControllers(newRoot, stimulusIndexer)
+    factoryBotResolver.indexFactories(newRoot)
+    rakeTaskTreeProvider.setRoot(newRoot)
+    architectureTreeProvider.refresh(env)
+  }
+  const syncActiveProject = (uri: vscode.Uri | undefined): void => {
+    const root = resolveWorkspaceRoot(uri?.fsPath, workspaceRoots())
+    if (root) {switchActiveProject(root)}
+  }
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(editor => syncActiveProject(editor?.document.uri)),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      // Active project's folder was removed: fall back to whatever now owns the editor / first folder.
+      if (!workspaceRoots().includes(activeProject.root)) {
+        const next = activeWorkspaceRoot()
+        if (next) {switchActiveProject(next)}
+      }
+    }),
+  )
 
 
   // 3. Register Providers
@@ -465,7 +512,8 @@ export function activate(context: vscode.ExtensionContext): void {
       const now = Date.now()
       if (now - lastBrakemanScanOnSave >= 30_000) {
         lastBrakemanScanOnSave = now
-        void brakemanProvider.runScan(workspaceRoot).then(report => {
+        const scanRoot = workspaceRootFor(doc.uri) ?? workspaceRoot
+        void brakemanProvider.runScan(scanRoot).then(report => {
           if (report.warnings.length === 0) {return}
           void vscode.window
             .showWarningMessage(`RailsForge: Brakeman found ${report.warnings.length} security warning(s).`, 'Show Report')
@@ -484,7 +532,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const now = Date.now()
       if (now - lastSteepScanOnSave >= 30_000) {
         lastSteepScanOnSave = now
-        void updateSteepDiagnostics(steepProvider, steepDiagnostics, workspaceRoot)
+        void updateSteepDiagnostics(steepProvider, steepDiagnostics, workspaceRootFor(doc.uri) ?? workspaceRoot)
       }
     }
   }, null, context.subscriptions)
@@ -588,10 +636,10 @@ function loadStimulusControllers(root: string, indexer: StimulusIndexer): void {
   walk(controllersDir)
 }
 
-function watchStimulusControllers(context: vscode.ExtensionContext, indexer: StimulusIndexer): void {
+function watchStimulusControllers(context: vscode.ExtensionContext, indexer: StimulusIndexer, getRoot: () => string): void {
   const watcher = vscode.workspace.createFileSystemWatcher('**/app/javascript/controllers/**/*_controller.{js,ts}')
   const reindex = async (uri: vscode.Uri): Promise<void> => {
-    if (isExcludedByConfig(uri.fsPath)) {return}
+    if (isExcludedByConfig(uri.fsPath) || !isInside(getRoot(), uri.fsPath)) {return}
     try {
       if (fs.existsSync(uri.fsPath)) {
         const code = await fs.promises.readFile(uri.fsPath, 'utf8')
@@ -934,7 +982,8 @@ async function loadSchema(root: string, indexer: SchemaIndexer): Promise<void> {
     const content = await fs.promises.readFile(schemaPath, 'utf8')
     indexer.parseSchema(content)
   } catch {
-    // db/schema.rb does not exist — not a Rails project with schema
+    // db/schema.rb does not exist — drop any state from a previously active project
+    indexer.parseSchema('')
   }
 }
 
@@ -944,7 +993,8 @@ async function loadRoutes(root: string, indexer: RoutesIndexer): Promise<void> {
     const content = await fs.promises.readFile(routesPath, 'utf8')
     indexer.parseRoutesDsl(content)
   } catch {
-    // config/routes.rb does not exist
+    // config/routes.rb does not exist — drop any state from a previously active project
+    indexer.parseRoutesDsl('')
   }
 }
 
@@ -1169,23 +1219,20 @@ async function verifyOffenseResolved(
 
 function watchProjectFiles(
   context: vscode.ExtensionContext,
-  root: string,
+  getRoot: () => string,
   schemaIndexer: SchemaIndexer,
   routesIndexer: RoutesIndexer,
   migrationDiagnostics: MigrationDiagnostics,
 ): void {
   // Only react to files inside the workspace root this indexer set was built for
   // (a multi-root window delivers events for every folder).
-  const inRoot = (uri: vscode.Uri): boolean => {
-    const rel = path.relative(root, uri.fsPath)
-    return !rel.startsWith('..') && !path.isAbsolute(rel)
-  }
+  const inRoot = (uri: vscode.Uri): boolean => isInside(getRoot(), uri.fsPath)
 
   if (readConfig().schemaAutoIndex) {
     const schemaWatcher = vscode.workspace.createFileSystemWatcher('**/db/schema.rb')
     const refresh = (uri: vscode.Uri): void => {
       if (!inRoot(uri) || isExcludedByConfig(uri.fsPath)) {return}
-      void loadSchema(root, schemaIndexer)
+      void loadSchema(getRoot(), schemaIndexer)
     }
     schemaWatcher.onDidChange(refresh)
     schemaWatcher.onDidCreate(refresh)
@@ -1200,7 +1247,7 @@ function watchProjectFiles(
     const routesWatcher = vscode.workspace.createFileSystemWatcher('**/config/routes.rb')
     const refresh = (uri: vscode.Uri): void => {
       if (!inRoot(uri) || isExcludedByConfig(uri.fsPath)) {return}
-      void loadRoutes(root, routesIndexer)
+      void loadRoutes(getRoot(), routesIndexer)
     }
     routesWatcher.onDidChange(refresh)
     routesWatcher.onDidCreate(refresh)
@@ -1340,7 +1387,7 @@ function registerCommands(
       vscode.window.showInformationMessage(`RailsForge: ${providerLabel} API key saved securely.`)
     }),
     vscode.commands.registerCommand('railsforge.generateApiDocs', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {
         vscode.window.showWarningMessage('RailsForge: No workspace folder open.')
         return
@@ -1364,7 +1411,7 @@ function registerCommands(
       )
     }),
     vscode.commands.registerCommand('railsforge.bumpGemVersion', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {
         vscode.window.showWarningMessage('RailsForge: No workspace folder open.')
         return
@@ -1410,7 +1457,7 @@ function registerCommands(
       vscode.window.showInformationMessage(`RailsForge: Bumped version to ${newVersion} in ${vscode.workspace.asRelativePath(targetUri)}.`)
     }),
     vscode.commands.registerCommand('railsforge.releaseGem', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {
         vscode.window.showWarningMessage('RailsForge: No workspace folder open.')
         return
@@ -1431,7 +1478,7 @@ function registerCommands(
       Logger.show()
     }),
     vscode.commands.registerCommand('railsforge.exportCursorRules', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {
         vscode.window.showWarningMessage('RailsForge: No workspace folder open.')
         return
@@ -1714,7 +1761,7 @@ function registerCommands(
               fileName: document.fileName,
               fileContent: document.getText(),
               selection: code,
-              workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+              workspaceRoot: activeWorkspaceRoot(),
             }, feedback)
 
             if (!proposal) {
@@ -1975,7 +2022,7 @@ function registerCommands(
       }
     }),
     vscode.commands.registerCommand('railsforge.runBrakeman', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {return}
       const report = await brakeman.runScan(root)
       const formatted = brakeman.formatMarkdownReport(report)
@@ -1983,7 +2030,7 @@ function registerCommands(
       await vscode.window.showTextDocument(doc)
     }),
     vscode.commands.registerCommand('railsforge.runBundleAudit', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {return}
       const report = await bundlerAuditScanner.runAudit(root)
       const formatted = bundlerAuditScanner.formatReport(report)
@@ -2013,7 +2060,7 @@ function registerCommands(
       }
       const name = await vscode.window.showInputBox({ prompt: 'Enter Service Object Name (e.g. ProcessOrder)' })
       if (!name) {return}
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? ''
+      const root = activeWorkspaceRoot() ?? ''
       const freeVars = serviceExtractor.detectFreeVariables(selection)
       const guidelines = loadEffectiveServiceObjectGuidelines(root, projectPatternIndexer)
       const res = serviceExtractor.extractService(name, selection, freeVars, root, guidelines)
@@ -2046,7 +2093,7 @@ function registerCommands(
     vscode.commands.registerCommand('railsforge.generateServiceObject', async () => {
       const name = await vscode.window.showInputBox({ prompt: 'Enter Service Object Name (e.g. ProcessOrder)' })
       if (!name) {return}
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? ''
+      const root = activeWorkspaceRoot() ?? ''
       const guidelines = loadEffectiveServiceObjectGuidelines(root, projectPatternIndexer)
       const res = serviceExtractor.extractService(name, '# TODO: implement', [], root, guidelines)
 
@@ -2070,7 +2117,7 @@ function registerCommands(
       if (!name) {return}
       const model = await vscode.window.showInputBox({ prompt: 'Enter Base Model Name (e.g. User)' })
       if (!model) {return}
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? ''
+      const root = activeWorkspaceRoot() ?? ''
       const res = queryExtractor.extractQuery(name, model, selection, [], root)
 
       if (fs.existsSync(res.queryFilePath)) {
@@ -2096,7 +2143,7 @@ function registerCommands(
     }),
     vscode.commands.registerCommand('railsforge.goToPolicy', () => {
       const editor = vscode.window.activeTextEditor
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!editor || !root) {return}
       const model = path.basename(editor.document.fileName, '.rb').replace(/(_controller|_spec)$/, '')
       const policyPath = policyNavigator.resolvePolicyPath(model, root)
@@ -2107,7 +2154,7 @@ function registerCommands(
       }
     }),
     vscode.commands.registerCommand('railsforge.goToComponent', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {return}
       const name = await vscode.window.showInputBox({ prompt: 'Enter Component Name (e.g. UserCardComponent)' })
       if (!name) {return}
@@ -2147,7 +2194,7 @@ function registerCommands(
         return
       }
 
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {
         vscode.window.showWarningMessage('RailsForge: Open a workspace folder to look up gem documentation.')
         return
@@ -2231,7 +2278,7 @@ function registerCommands(
       term.sendText(code, true)
     }),
     vscode.commands.registerCommand('railsforge.applyRubocopStyleGuide', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {
         vscode.window.showWarningMessage('RailsForge: Open a workspace folder first.')
         return
@@ -2259,7 +2306,7 @@ function registerCommands(
       )
     }),
     vscode.commands.registerCommand('railsforge.runSteepCheck', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {return}
 
       await vscode.window.withProgress(
@@ -2276,7 +2323,7 @@ function registerCommands(
     }),
     vscode.commands.registerCommand('railsforge.generateRBS', async () => {
       const editor = vscode.window.activeTextEditor
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!editor || !root) {
         vscode.window.showWarningMessage('RailsForge: Open a Ruby file to generate RBS signatures for it.')
         return
@@ -2320,9 +2367,9 @@ function registerCommands(
     vscode.commands.registerCommand(
       'railsforge.applyChatResponse',
       async (responseText: string, uriString: string, command: string, selection: string) => {
-        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
-        if (!workspaceRoot) { return }
         const targetUri = vscode.Uri.parse(uriString)
+        const workspaceRoot = workspaceRootFor(targetUri)
+        if (!workspaceRoot) { return }
         const result = await smartApplyResponse(responseText, {
           workspaceRoot,
           activeFileUri: targetUri,
@@ -2419,7 +2466,7 @@ function buildSingleTestCommand(uri: vscode.Uri, line: number, env: ProjectEnvir
 
 function navigateCompanion(mvc: MVCNavigator, targetType: string): void {
   const editor = vscode.window.activeTextEditor
-  const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+  const root = activeWorkspaceRoot()
   if (!editor || !root) {return}
 
   const paths = mvc.getCompanionPaths(editor.document.fileName, root)
@@ -2440,7 +2487,7 @@ function navigateCompanion(mvc: MVCNavigator, targetType: string): void {
  */
 async function navigateToView(mvc: MVCNavigator): Promise<void> {
   const editor = vscode.window.activeTextEditor
-  const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+  const root = activeWorkspaceRoot()
   if (!editor || !root) {return}
 
   const viewDir = mvc.getCompanionPaths(editor.document.fileName, root).viewDir

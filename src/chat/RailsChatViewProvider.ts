@@ -9,6 +9,7 @@
  */
 
 import * as vscode from 'vscode'
+import { activeWorkspaceRoot } from '../workspace/activeRoot'
 import { RailsAgent } from '../agent/RailsAgent'
 import { SchemaIndexer } from '../rails/SchemaIndexer'
 import { RoutesIndexer } from '../rails/RoutesIndexer'
@@ -122,7 +123,7 @@ export class RailsChatViewProvider implements vscode.WebviewViewProvider {
 
     const result = await this.agent.run(cleanPrompt, {
       fileContent: groundedContent, fileName, selection,
-      workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+      workspaceRoot: activeWorkspaceRoot(),
     })
 
     if (!result.success) { Logger.warn(`[Chat] error: ${result.response}`) }
@@ -139,7 +140,7 @@ export class RailsChatViewProvider implements vscode.WebviewViewProvider {
    * - replaceFile: preview full-file replacement, apply to active file
    */
   private async applyCode(code: string, mode: WebviewMessage['mode'], fileName?: string): Promise<void> {
-    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+    const root = activeWorkspaceRoot()
 
     // Create mode: write a new file
     if (mode === 'create') {

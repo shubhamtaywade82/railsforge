@@ -41,6 +41,11 @@ export class RakeTaskTreeProvider implements vscode.TreeDataProvider<RakeTaskIte
 
   constructor(private indexer: RakeTaskIndexer, private workspaceRoot: string) {}
 
+  setRoot(root: string): void {
+    this.workspaceRoot = root
+    this.refresh()
+  }
+
   refresh(): void {
     this.loaded = false
     this._onDidChangeTreeData.fire()

@@ -3,6 +3,7 @@
  */
 
 import * as vscode from 'vscode'
+import { activeWorkspaceRoot } from '../workspace/activeRoot'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 
@@ -76,7 +77,7 @@ export class TestExplorerController {
       // arbitrary characters in an untrusted workspace — is never interpreted by a shell.
       const [command, args] = this.buildTestCommand(test)
       try {
-        await execFileAsync(command, args, { cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath })
+        await execFileAsync(command, args, { cwd: activeWorkspaceRoot() })
         run.passed(test)
       } catch (err: unknown) {
         const execErr = err as { stdout?: string; stderr?: string; message?: string }
