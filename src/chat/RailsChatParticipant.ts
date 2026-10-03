@@ -8,11 +8,12 @@
  */
 
 import * as vscode from 'vscode'
-import { activeWorkspaceRoot } from '../workspace/activeRoot'
+import { activeWorkspaceRoot, workspaceRootFor } from '../workspace/activeRoot'
 import { RailsAgent } from '../agent/RailsAgent'
 import { SchemaIndexer } from '../rails/SchemaIndexer'
 import { RoutesIndexer } from '../rails/RoutesIndexer'
 import { Logger } from '../util/Logger'
+import { planChatCommand, composePrompt } from './ChatCommandPlanner'
 import { extractCodeBlocks, looksLikeDiff } from './ChatDiffApplier'
 
 export class RailsChatParticipant {
@@ -27,7 +28,9 @@ export class RailsChatParticipant {
     context: vscode.ExtensionContext,
     agent: RailsAgent,
     schemaIndexer: SchemaIndexer,
-    routesIndexer: RoutesIndexer,
+    _routesIndexer: RoutesIndexer,
+    getTestFramework: () => 'rspec' | 'minitest',
+    getPatterns: () => string[],
   ): void {
     if (typeof vscode.chat?.createChatParticipant !== 'function') {
       Logger.debug('vscode.chat.createChatParticipant is unavailable in this host environment.')
@@ -39,7 +42,7 @@ export class RailsChatParticipant {
         'railsforge.agent',
         async (request, _chatContext, stream) => {
           Logger.info(`[@rails] Chat prompt received: "${request.prompt}" (command: /${request.command ?? 'default'})`)
-          await this.handleRequest(request, stream, agent, schemaIndexer, routesIndexer)
+          await this.handleRequest(request, stream, agent, schemaIndexer, getTestFramework, getPatterns)
         },
       )
       context.subscriptions.push(this.participant)
@@ -54,7 +57,8 @@ export class RailsChatParticipant {
     stream: vscode.ChatResponseStream,
     agent: RailsAgent,
     schemaIndexer: SchemaIndexer,
-    _routesIndexer: RoutesIndexer,
+    getTestFramework: () => 'rspec' | 'minitest',
+    getPatterns: () => string[],
   ): Promise<void> {
     const command = request.command
     const prompt = request.prompt.trim()
@@ -64,20 +68,26 @@ export class RailsChatParticipant {
 
     stream.progress('RailsForge AI is analyzing...')
 
-    if (command === 'optimize') {
-      stream.markdown('### Analyzing Query Performance & N+1 Risks...\n')
-      const tables = schemaIndexer.getAllTables()
-      stream.markdown(`- Active Tables Indexed: **${tables.length}**\n`)
-      stream.markdown('- Best practice: Use `.includes(:association)` to prevent N+1 queries.\n')
-    } else if (command === 'migrate') {
-      stream.markdown('### Generating Safe ActiveRecord Migration...\n')
-    }
+    const diagnostics = editor
+      ? vscode.languages.getDiagnostics(editor.document.uri).map(d => ({ line: d.range.start.line + 1, message: d.message }))
+      : []
+    const plan = planChatCommand(command, {
+      prompt,
+      fileName: editor?.document.fileName,
+      fileContent: fullText,
+      selection,
+      tables: schemaIndexer.getAllTables().map(t => ({ name: t.name, columns: t.columns.keys() })),
+      testFramework: getTestFramework(),
+      diagnostics,
+      patterns: getPatterns(),
+    })
+    if (plan.preface) {stream.markdown(plan.preface)}
 
-    const result = await agent.run(prompt, {
+    const result = await agent.run(composePrompt(plan, prompt), {
       fileContent: fullText,
       selection,
       fileName: editor?.document.fileName,
-      workspaceRoot: activeWorkspaceRoot(),
+      workspaceRoot: editor ? workspaceRootFor(editor.document.uri) : activeWorkspaceRoot(),
     })
 
     if (result.success) {

@@ -577,7 +577,14 @@ export function activate(context: vscode.ExtensionContext): void {
   )
 
   // 5. Register Chat Participant
-  RailsChatParticipant.getInstance().register(context, agent, schemaIndexer, routesIndexer)
+  RailsChatParticipant.getInstance().register(
+    context,
+    agent,
+    schemaIndexer,
+    routesIndexer,
+    () => env.testFramework,
+    () => projectPatternIndexer.getAllPatterns().map(p => `${p.type}/${p.name}`),
+  )
 
   // 6. Suggest the ruby-lsp add-on when ruby-lsp is present but the gem isn't
   if (workspaceRoot) {
