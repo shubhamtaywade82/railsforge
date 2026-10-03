@@ -33,6 +33,7 @@ import { TestExplorerController, debugRubyCommand } from './testing/TestExplorer
 import { TestCodeLensProvider } from './testing/TestCodeLensProvider'
 import { activeWorkspaceRoot, workspaceRoots, workspaceRootFor } from './workspace/activeRoot'
 import { isInside, resolveWorkspaceRoot } from './workspace/WorkspaceRoots'
+import { showRuntimeSnapshot } from './rails/RuntimeIntrospectionService'
 import { RAILSFORGE_TASK_TYPE, RailsTaskProvider } from './tasks/RailsTaskProvider'
 import { GENERATORS, GeneratorMode, buildGeneratorArgs, parseAttributes, parseGeneratorOutput, validateGeneratorName } from './rails/RailsGenerators'
 import { firstCandidate, projectVersionManager, rubyCandidates, rubyTerminalCommand } from './util/RubyCommand'
@@ -2360,6 +2361,14 @@ function registerCommands(
           }
         },
       )
+    }),
+    vscode.commands.registerCommand('railsforge.showRuntimeIntrospection', async () => {
+      const root = activeWorkspaceRoot()
+      if (root) {await showRuntimeSnapshot(root, false)}
+    }),
+    vscode.commands.registerCommand('railsforge.refreshRuntimeIntrospection', async () => {
+      const root = activeWorkspaceRoot()
+      if (root) {await showRuntimeSnapshot(root, true)}
     }),
     vscode.commands.registerCommand('railsforge.generate', () => runRailsGenerator('generate', rubocop)),
     vscode.commands.registerCommand('railsforge.destroyGenerated', () => runRailsGenerator('destroy', rubocop)),

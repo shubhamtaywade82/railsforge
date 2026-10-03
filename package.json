@@ -452,6 +452,11 @@
           "default": false,
           "description": "Automatically re-run Steep in the background on Ruby file save when railsForge.types.steepEnabled is true. Debounced (like brakeman.scanOnSave) since Steep checks the whole configured target, not just the saved file."
         },
+        "railsForge.runtime.introspection.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Allow RailsForge to run `rails runner` to read the application's real models, associations, validations, callbacks, routes and middleware. **This boots your app and executes its initializers.** When off, RailsForge asks before each run. Never runs in untrusted workspaces."
+        },
         "railsForge.ruby.versionManager": {
           "type": "string",
           "enum": [
@@ -695,6 +700,16 @@
         "category": "RailsForge"
       },
       {
+        "command": "railsforge.showRuntimeIntrospection",
+        "title": "RailsForge: Show Rails Runtime Introspection",
+        "category": "RailsForge"
+      },
+      {
+        "command": "railsforge.refreshRuntimeIntrospection",
+        "title": "RailsForge: Refresh Rails Runtime Introspection (boots the app)",
+        "category": "RailsForge"
+      },
+      {
         "command": "railsforge.generate",
         "title": "RailsForge: Rails Generate…",
         "category": "RailsForge"
@@ -814,6 +829,14 @@
         },
         {
           "command": "railsforge.generateServiceObject",
+          "when": "railsforge.isRailsApp"
+        },
+        {
+          "command": "railsforge.showRuntimeIntrospection",
+          "when": "railsforge.isRailsApp"
+        },
+        {
+          "command": "railsforge.refreshRuntimeIntrospection",
           "when": "railsforge.isRailsApp"
         },
         {
