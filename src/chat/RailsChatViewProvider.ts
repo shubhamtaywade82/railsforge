@@ -66,11 +66,12 @@ export class RailsChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async postStatus(): Promise<void> {
-    const isOnline = await this.agent.healthCheck()
+    const status = await this.agent.getProviderStatus()
+    const isOnline = status.state === 'reachable' || status.state === 'authenticated'
     const editor = vscode.window.activeTextEditor
     const currentFile = editor ? vscode.workspace.asRelativePath(editor.document.uri) : 'No file open'
     void this.view?.webview.postMessage({
-      type: 'statusUpdate', isOnline, currentFile,
+      type: 'statusUpdate', isOnline, providerState: status.state, providerDetail: status.detail ?? '', currentFile,
       tablesCount: this.schemaIndexer.getAllTables().length,
       routesCount: this.routesIndexer.getAllRoutes().length,
     })
@@ -444,7 +445,9 @@ export class RailsChatViewProvider implements vscode.WebviewViewProvider {
       const msg = event.data;
       if (msg.type==='statusUpdate') {
         statusPill.className = 'status-pill ' + (msg.isOnline ? '' : 'offline');
-        statusText.textContent = msg.isOnline ? 'Ollama Online' : 'Offline';
+        var labels = { reachable: 'Ollama Online', authenticated: 'Provider Ready', unconfigured: 'No API key', error: 'Provider Error', offline: 'Offline' };
+        statusText.textContent = labels[msg.providerState] || (msg.isOnline ? 'Online' : 'Offline');
+        statusPill.title = msg.providerDetail || '';
         activeFileLbl.textContent = msg.currentFile;
       } else if (msg.type==='appendMessage') {
         appendMessage(msg.sender, msg.text);

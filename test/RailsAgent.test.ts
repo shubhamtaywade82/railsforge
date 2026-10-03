@@ -174,18 +174,38 @@ describe('RailsAgent provider dispatch', () => {
     expect(systemPrompt).toContain('do not present them as legal advice')
   })
 
-  it('healthCheck reports true for a cloud provider only when a key is configured, without calling fetch', async () => {
-    // No response-shape to validate here (healthCheck only checks res.ok for Ollama,
-    // and doesn't call fetch at all for cloud providers), so a plain spy is enough.
-    const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
+  describe('getProviderStatus (cloud)', () => {
+    const jsonRes = (status: number, body: unknown): Response =>
+      new Response(JSON.stringify(body), { status, statusText: status === 200 ? 'OK' : 'ERR' })
 
-    const withKey = buildAgent({ provider: 'anthropic', getApiKey: async () => 'key' })
-    const withoutKey = buildAgent({ provider: 'anthropic', getApiKey: async () => undefined })
+    it('is unconfigured without a key and never calls fetch', async () => {
+      const fetchMock = vi.fn()
+      vi.stubGlobal('fetch', fetchMock)
+      const status = await buildAgent({ provider: 'anthropic', getApiKey: async () => undefined }).getProviderStatus()
+      expect(status.state).toBe('unconfigured')
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
 
-    expect(await withKey.healthCheck()).toBe(true)
-    expect(await withoutKey.healthCheck()).toBe(false)
-    expect(fetchMock).not.toHaveBeenCalled()
+    it('is authenticated only when the endpoint accepts the key and lists the model', async () => {
+      vi.stubGlobal('fetch', vi.fn(async () => jsonRes(200, { data: [{ id: 'claude-sonnet-4-5' }] })))
+      const agent = buildAgent({ provider: 'anthropic', getApiKey: async () => 'k' })
+      expect((await agent.getProviderStatus()).state).toBe('authenticated')
+      expect(await agent.healthCheck()).toBe(true)
+    })
+
+    it('reports a rejected key, a missing model, and an unreachable endpoint distinctly', async () => {
+      const agent = buildAgent({ provider: 'openai', openaiModel: 'gpt-x', getApiKey: async () => 'k' })
+
+      vi.stubGlobal('fetch', vi.fn(async () => jsonRes(401, {})))
+      expect(await agent.getProviderStatus()).toMatchObject({ state: 'error', detail: expect.stringContaining('rejected') })
+
+      vi.stubGlobal('fetch', vi.fn(async () => jsonRes(200, { data: [{ id: 'gpt-4o' }] })))
+      expect(await agent.getProviderStatus()).toMatchObject({ state: 'error', detail: expect.stringContaining('gpt-x') })
+
+      vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ENOTFOUND') }))
+      expect((await agent.getProviderStatus()).state).toBe('offline')
+      expect(await agent.healthCheck()).toBe(false)
+    })
   })
 
   it(

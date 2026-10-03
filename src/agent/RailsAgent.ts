@@ -37,6 +37,19 @@ function safeJson(value: unknown): string {
 }
 
 /** Duplicated (not imported) from config/RailsForgeConfig on purpose — this class stays vscode-free. */
+/**
+ * - offline: endpoint unreachable
+ * - unconfigured: cloud provider without an API key
+ * - reachable: Ollama server answered (no auth involved)
+ * - authenticated: cloud endpoint reachable and the key (and model, when listed) accepted
+ * - error: reachable/configured but unusable (bad key, missing model, HTTP error)
+ */
+export type ProviderState = 'offline' | 'unconfigured' | 'reachable' | 'authenticated' | 'error'
+export interface ProviderStatus {
+  state: ProviderState
+  detail?: string
+}
+
 export type AiAgentProvider = 'ollama' | 'openai' | 'anthropic'
 
 export interface RailsAgentConfig {
@@ -544,22 +557,71 @@ private buildFixRetryInstruction(code: string, diagnosticMessage: string, previo
   }
 
   /**
-   * For Ollama, actually pings the local server. Cloud providers aren't pinged (no free,
-   * side-effect-free health endpoint) — "healthy" just means a key is configured.
+   * Real provider status. Cloud providers are probed with their side-effect-free, token-free
+   * `GET /models` endpoint, which distinguishes "key present" from "key accepted" and
+   * "endpoint reachable"; Ollama is pinged directly.
    */
-  async healthCheck(): Promise<boolean> {
+  async getProviderStatus(): Promise<ProviderStatus> {
     const provider = this.config.provider ?? 'ollama'
-    if (provider !== 'ollama') {
-      return Boolean(await this.config.getApiKey?.())
+
+    if (provider === 'ollama') {
+      try {
+        const client = new OllamaClient({ baseUrl: this.config.ollamaHost })
+        const checks = await client.healthCheck()
+        return checks.some(c => c.reachable)
+          ? { state: 'reachable' }
+          : { state: 'offline', detail: 'Ollama server not reachable' }
+      } catch (err) {
+        return { state: 'offline', detail: err instanceof Error ? err.message : String(err) }
+      }
+    }
+
+    const apiKey = await this.config.getApiKey?.()
+    if (!apiKey) {return { state: 'unconfigured', detail: 'No API key configured' }}
+
+    const label = provider === 'anthropic' ? 'Anthropic' : 'OpenAI'
+    let url: string
+    let headers: Record<string, string>
+    let model: string
+    if (provider === 'anthropic') {
+      url = 'https://api.anthropic.com/v1/models?limit=1000'
+      headers = { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }
+      model = this.config.anthropicModel ?? 'claude-sonnet-4-5'
+    } else {
+      const baseUrl = (this.config.openaiBaseUrl ?? 'https://api.openai.com').replace(/\/$/, '')
+      if (!/^https:\/\//i.test(baseUrl) && !/^http:\/\/(localhost|127\.0\.0\.1)/i.test(baseUrl)) {
+        return { state: 'error', detail: `Invalid openaiBaseUrl "${baseUrl}" (HTTPS required)` }
+      }
+      url = `${baseUrl}/v1/models`
+      headers = { Authorization: `Bearer ${apiKey}` }
+      model = this.config.openaiModel ?? 'gpt-4o-mini'
     }
 
     try {
-      const client = new OllamaClient({ baseUrl: this.config.ollamaHost })
-      const checks = await client.healthCheck()
-      return checks.some(c => c.reachable)
-    } catch {
-      return false
+      const res = await fetch(url, { headers, signal: AbortSignal.timeout(5000) })
+      if (res.status === 401 || res.status === 403) {
+        return { state: 'error', detail: `${label} rejected the API key (${res.status})` }
+      }
+      if (!res.ok) {
+        return { state: 'error', detail: `${label} returned ${res.status} ${res.statusText}` }
+      }
+      const json = (await res.json().catch(() => ({}))) as { data?: Array<{ id?: string }> }
+      const ids = json.data?.map(m => m.id).filter((id): id is string => typeof id === 'string') ?? []
+      // Only assert the model is missing when the endpoint returned a model list at all
+      // (OpenAI-compatible proxies often don't).
+      if (ids.length > 0 && !ids.includes(model)) {
+        return { state: 'error', detail: `${label} is reachable but model "${model}" was not found` }
+      }
+      return { state: 'authenticated' }
+    } catch (err) {
+      return { state: 'offline', detail: `${label} unreachable: ${err instanceof Error ? err.message : String(err)}` }
     }
+  }
+
+  /** Back-compat boolean: true only when the provider is actually reachable (and authenticated for cloud). */
+  async healthCheck(): Promise<boolean> {
+    const { state } = await this.getProviderStatus()
+    return state === 'reachable' || state === 'authenticated'
   }
 
   /** Version grounding: only assert versions the project actually declares. */
