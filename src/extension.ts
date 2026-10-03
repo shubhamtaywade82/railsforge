@@ -59,6 +59,7 @@ import { RailsChatParticipant } from './chat/RailsChatParticipant'
 import { RailsChatViewProvider } from './chat/RailsChatViewProvider'
 import { smartApplyResponse } from './chat/ChatDiffApplier'
 import { PersistentIndexManager } from './indexer/PersistentIndexManager'
+import { PersistentIndexRegistry, IndexState } from './indexer/PersistentIndexRegistry'
 import { findDuplicateCallSites } from './refactor/DuplicateCallSiteFinder'
 import { specFilePathFor, buildRspecSkeleton } from './refactor/SpecFileGenerator'
 import { buildCursorRulesContent, buildSystemPromptMarkdown } from './mcp/CursorRulesGenerator'
@@ -106,6 +107,8 @@ function applyLogSettings(config: RailsForgeConfig, workspaceRoot: string): void
 export interface RailsForgeTestApi {
   getActiveProjectRoot(): string
   getSchemaTableNames(): string[]
+  /** AST index status keyed by workspace root (only roots that were activated). */
+  getAstIndexStatuses(): Record<string, string>
 }
 
 export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
@@ -288,17 +291,26 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
 
   // Phase 12: persistent AST/SQLite index (tree-sitter + better-sqlite3, off-thread).
   // Powers Phase 8 (cross-file duplicate methods) and Phase 11 (dependency cycles) below.
-  // Fails soft: commands check persistentIndex.manager and report "still indexing /
-  // unavailable" rather than the extension crashing if native modules can't load.
-  // Deferred 5s: heaviest startup cost (tree-sitter + SQLite + full scan); core features
-  // (hovers, navigation, linting) work fine without it.
-  const persistentIndex: { manager: PersistentIndexManager | null } = { manager: null }
+  // One index per workspace root (multi-root), started lazily when a root becomes the active
+  // project. Fails soft: commands report the precise state (starting / unsupported + reason /
+  // failed) rather than the extension crashing if native modules can't load, and an
+  // unsupported runtime is surfaced to the user once instead of silently disabling the feature.
+  // Initial root deferred 5s: heaviest startup cost (tree-sitter + SQLite + full scan); core
+  // features (hovers, navigation, linting) work fine without it.
+  const persistentIndexes = new PersistentIndexRegistry<PersistentIndexManager>(
+    root => PersistentIndexManager.activate(context, root),
+    (root, state) => {
+      architectureTreeProvider.refresh(env)
+      if (state.status === 'unsupported') {
+        void notifyAstIndexUnavailable(context, state.reason, true)
+      } else if (state.status === 'failed') {
+        void notifyAstIndexUnavailable(context, `${path.basename(root)}: ${state.reason}`, false)
+      }
+    },
+  )
+  context.subscriptions.push(persistentIndexes)
   if (workspaceRoot) {
-    setTimeout(() => {
-      void PersistentIndexManager.activate(context, workspaceRoot).then(manager => {
-        persistentIndex.manager = manager
-      })
-    }, 5000)
+    setTimeout(() => void persistentIndexes.ensure(workspaceRoot), 5000)
   }
 
   // Offline DevDocs: downloads (or reuses an already-cached) docset in the background,
@@ -352,6 +364,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     schemaIndexer,
     routesIndexer,
     stimulusIndexer,
+    () => describeAstIndex(persistentIndexes.state(activeProject.root)),
   )
   const rakeTaskIndexer = new RakeTaskIndexer()
   const rakeTaskTreeProvider = new RakeTaskTreeProvider(rakeTaskIndexer, workspaceRoot)
@@ -389,6 +402,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     loadStimulusControllers(newRoot, stimulusIndexer)
     factoryBotResolver.indexFactories(newRoot)
     rakeTaskTreeProvider.setRoot(newRoot)
+    void persistentIndexes.ensure(newRoot)
     architectureTreeProvider.refresh(env)
   }
   const syncActiveProject = (uri: vscode.Uri | undefined): void => {
@@ -398,6 +412,11 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor(editor => syncActiveProject(editor?.document.uri)),
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      // Tear down the AST index (worker + watchers) of any folder that was removed.
+      const open = new Set(workspaceRoots())
+      for (const root of persistentIndexes.roots()) {
+        if (!open.has(root)) {persistentIndexes.release(root)}
+      }
       // Active project's folder was removed: fall back to whatever now owns the editor / first folder.
       if (!workspaceRoots().includes(activeProject.root)) {
         const next = activeWorkspaceRoot()
@@ -565,7 +584,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     principleLinter,
     relatedFilesIndex,
     dependencyGraph,
-    persistentIndex,
+    persistentIndexes,
     schemaIndexer,
     env,
     semanticSearchIndex,
@@ -607,6 +626,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   return {
     getActiveProjectRoot: () => activeProject.root,
     getSchemaTableNames: () => schemaIndexer.getAllTables().map(t => t.name),
+    getAstIndexStatuses: () => Object.fromEntries(persistentIndexes.roots().map(r => [r, persistentIndexes.state(r).status])),
   }
 }
 
@@ -632,6 +652,65 @@ async function suggestRubyLspAddon(context: vscode.ExtensionContext, root: strin
   }
   if (choice) {
     void context.globalState.update(dismissedKey, true)
+  }
+}
+
+function describeAstIndex(state: IndexState<PersistentIndexManager>): string {
+  switch (state.status) {
+    case 'ready': return 'Ready ✓'
+    case 'starting': return 'Indexing…'
+    case 'unsupported': return `Unavailable — ${state.reason}`
+    case 'failed': return `Failed — ${state.reason}`
+    case 'idle': return 'Not started'
+  }
+}
+
+let astNoticeShownThisSession = false
+
+/**
+ * Tells the user the AST features are off and why (the native SQLite module can't load on
+ * this VS Code runtime), instead of failing silently. The runtime-wide "unsupported" case is
+ * shown once per session and can be dismissed permanently; per-root failures always show.
+ */
+async function notifyAstIndexUnavailable(context: vscode.ExtensionContext, reason: string, runtimeWide: boolean): Promise<void> {
+  const dismissedKey = 'railsforge.dismissedAstUnavailableNotice'
+  if (runtimeWide) {
+    if (astNoticeShownThisSession || context.globalState.get<boolean>(dismissedKey)) {return}
+    astNoticeShownThisSession = true
+  }
+  const message = runtimeWide
+    ? `RailsForge: the AST index is unavailable — ${reason} "Find Duplicate Methods" and "Show Dependency Cycles" are disabled; all other RailsForge features work normally.`
+    : `RailsForge: the AST index failed to start (${reason}). "Find Duplicate Methods" and "Show Dependency Cycles" are disabled for this project.`
+  const choice = await vscode.window.showWarningMessage(message, 'Show Log', ...(runtimeWide ? ["Don't show again"] : []))
+  if (choice === 'Show Log') {Logger.show(false)}
+  if (choice === "Don't show again") {await context.globalState.update(dismissedKey, true)}
+}
+
+/** Ready AST index for the active project, or null after telling the user exactly why not. */
+function requireAstIndex(registry: PersistentIndexRegistry<PersistentIndexManager>): PersistentIndexManager | null {
+  const root = activeWorkspaceRoot()
+  if (!root) {
+    vscode.window.showWarningMessage('RailsForge: Open a Ruby project to use the AST index.')
+    return null
+  }
+  const state = registry.state(root)
+  switch (state.status) {
+    case 'ready':
+      return state.manager
+    case 'starting':
+      vscode.window.showInformationMessage('RailsForge: The AST index is still indexing this project — try again shortly.')
+      return null
+    case 'unsupported':
+      vscode.window.showWarningMessage(`RailsForge: AST features are unavailable — ${state.reason}`)
+      return null
+    case 'failed':
+      vscode.window.showWarningMessage(`RailsForge: The AST index failed to start (${state.reason}). See the RailsForge output log.`, 'Retry')
+        .then(choice => { if (choice === 'Retry') {void registry.ensure(root)} })
+      return null
+    case 'idle':
+      void registry.ensure(root)
+      vscode.window.showInformationMessage('RailsForge: Starting the AST index for this project — try again shortly.')
+      return null
   }
 }
 
@@ -1308,7 +1387,7 @@ function registerCommands(
   principleLinter: DesignPrincipleLinter,
   relatedFilesIndex: RelatedFilesIndex,
   dependencyGraph: MinimalDependencyGraph,
-  persistentIndex: { manager: PersistentIndexManager | null },
+  persistentIndexes: PersistentIndexRegistry<PersistentIndexManager>,
   schemaIndexer: SchemaIndexer,
   env: ProjectEnvironment,
   semanticSearchIndex: SemanticSearchIndex,
@@ -1330,11 +1409,8 @@ function registerCommands(
       void vscode.window.showInformationMessage('RailsForge: Workspace performance settings (file watcher and search exclusions) applied successfully.')
     }),
     vscode.commands.registerCommand('railsforge.showDependencyCycles', async () => {
-      const manager = persistentIndex.manager
-      if (!manager) {
-        vscode.window.showWarningMessage('RailsForge: The AST index is still starting up (or unavailable on this platform) — try again shortly.')
-        return
-      }
+      const manager = requireAstIndex(persistentIndexes)
+      if (!manager) {return}
       const cycles = manager.dependencyGraph.findCycles()
       if (cycles.length === 0) {
         vscode.window.showInformationMessage('RailsForge: No circular dependencies found among indexed services/queries/policies.')
@@ -1348,11 +1424,8 @@ function registerCommands(
       await vscode.window.showTextDocument(doc)
     }),
     vscode.commands.registerCommand('railsforge.findDuplicateMethods', async () => {
-      const manager = persistentIndex.manager
-      if (!manager) {
-        vscode.window.showWarningMessage('RailsForge: The AST index is still starting up (or unavailable on this platform) — try again shortly.')
-        return
-      }
+      const manager = requireAstIndex(persistentIndexes)
+      if (!manager) {return}
       const duplicates = manager.duplicateDetector.findDuplicates()
       if (duplicates.length === 0) {
         vscode.window.showInformationMessage('RailsForge: No near-duplicate methods found.')

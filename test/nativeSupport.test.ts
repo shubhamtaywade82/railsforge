@@ -8,7 +8,7 @@ const nativeSupportMocks = vi.hoisted(() => ({
 vi.mock('child_process', () => ({ execSync: nativeSupportMocks.execSync }))
 vi.mock('fs', () => ({ readFileSync: nativeSupportMocks.readFileSync }))
 
-import { isPersistentIndexSupported } from '../src/indexer/nativeSupport'
+import { isPersistentIndexSupported, getPersistentIndexSupport } from '../src/indexer/nativeSupport'
 
 describe('isPersistentIndexSupported', () => {
   const originalNapi = process.versions.napi
@@ -92,5 +92,25 @@ describe('isPersistentIndexSupported on Linux with a mocked process.report', () 
       configurable: true,
     })
     expect(isPersistentIndexSupported()).toBe(false)
+  })
+})
+
+describe('getPersistentIndexSupport reasons', () => {
+  const originalNapi = process.versions.napi
+  afterEach(() => {
+    Object.defineProperty(process.versions, 'napi', { value: originalNapi, configurable: true })
+  })
+
+  it('explains an N-API shortfall with the runtime versions and the fix', () => {
+    Object.defineProperty(process.versions, 'napi', { value: '9', configurable: true })
+    const s = getPersistentIndexSupport()
+    expect(s.supported).toBe(false)
+    expect(s.reason).toContain('N-API 9')
+    expect(s.reason).toContain('22.14')
+  })
+
+  it('explains a missing N-API version', () => {
+    Object.defineProperty(process.versions, 'napi', { value: undefined, configurable: true })
+    expect(getPersistentIndexSupport().reason).toContain('unknown')
   })
 })

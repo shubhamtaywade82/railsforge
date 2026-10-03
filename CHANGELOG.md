@@ -11,6 +11,8 @@
 - Test/rake/console terminal commands are quoted for the detected shell (POSIX, PowerShell, cmd).
 - Chat sidebar status distinguishes unconfigured / authenticated / error / offline using a real provider probe instead of "API key exists".
 
+- Persistent AST index is per workspace root (own SQLite file, worker and watchers, started lazily, disposed with its folder). When the native module can't load, RailsForge now says why (one-time notice with log link + permanent dismiss, status in the Architecture view, precise command messages) instead of silently disabling the feature.
+
 ### Changed
 - `@rails` slash commands now run distinct workflows: `/optimize` performs schema-aware N+1 static analysis, `/migrate` runs the strong_migrations checks, `/fix` includes active diagnostics, `/service` `/scaffold` `/spec` ground the prompt in existing patterns, tables and the detected test framework.
 

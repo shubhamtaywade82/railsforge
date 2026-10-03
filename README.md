@@ -310,8 +310,13 @@ soft: if the native modules can't load on some platform *or Node/Electron
 version* — `better-sqlite3` specifically requires Node >= 22.14 (checked via
 `process.versions.napi` before ever touching the module, since an
 unsupported version aborts the process rather than throwing) — these
-features silently disable themselves and nothing else in RailsForge is
-affected.
+features disable themselves and nothing else in RailsForge is affected. You
+are told when that happens: a one-time warning explains why (e.g. "runtime
+provides N-API 9; needs >= 10"), the *Architecture & Health* view shows an
+**AST index** status line, and the AST commands report the reason instead of a
+generic "try again". In a multi-root workspace each project gets its own
+`.railsforge/index.sqlite3`, started when you first open a file from it and
+disposed when its folder is removed.
 
 - **`RailsForge: Find Near-Duplicate Methods (DRY)`** — near-duplicate method
   *bodies* across the whole codebase (not just line-count heuristics), ranked

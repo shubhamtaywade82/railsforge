@@ -6,6 +6,7 @@ import * as vscode from 'vscode'
 interface RailsForgeTestApi {
   getActiveProjectRoot(): string
   getSchemaTableNames(): string[]
+  getAstIndexStatuses(): Record<string, string>
 }
 
 const EXTENSION_ID = 'ShubhamTaywade.railsforge'
@@ -57,5 +58,20 @@ describe('RailsForge in a real Extension Host', function () {
     await until(() => api.getSchemaTableNames().includes('betas'))
     assert.ok(api.getActiveProjectRoot().endsWith('rails_b'))
     assert.ok(!api.getSchemaTableNames().includes('alphas'), 'rails_a schema leaked into rails_b context')
+  })
+
+  it('multi-root: each visited root gets its own AST index entry that settles (ready or explicitly unsupported)', async () => {
+    await openFile('rails_a', 'app/models/alphas.rb')
+    await openFile('rails_b', 'app/models/betas.rb')
+    const settled = (): boolean => {
+      const statuses = api.getAstIndexStatuses()
+      const roots = Object.keys(statuses)
+      return roots.some(r => r.endsWith('rails_a')) && roots.some(r => r.endsWith('rails_b'))
+        && Object.values(statuses).every(s => s !== 'starting' && s !== 'idle')
+    }
+    await until(settled, 45_000)
+    for (const status of Object.values(api.getAstIndexStatuses())) {
+      assert.ok(['ready', 'unsupported'].includes(status), `unexpected AST index status: ${status}`)
+    }
   })
 })

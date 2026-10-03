@@ -28,6 +28,7 @@ export class RailsArchitectureTreeProvider implements vscode.TreeDataProvider<Ar
     private schemaIndexer: SchemaIndexer,
     private routesIndexer: RoutesIndexer,
     private stimulusIndexer: StimulusIndexer,
+    private getAstIndexStatus: () => string = () => 'Not started',
   ) {}
 
   refresh(env: ProjectEnvironment): void {
@@ -76,6 +77,12 @@ export class RailsArchitectureTreeProvider implements vscode.TreeDataProvider<Ar
         vscode.TreeItemCollapsibleState.Collapsed,
         `${this.schemaIndexer.getAllTables().length} Tables Indexed`,
         new vscode.ThemeIcon('database'),
+      ),
+      new ArchitectureItem(
+        'Code Analysis (AST index)',
+        vscode.TreeItemCollapsibleState.None,
+        this.getAstIndexStatus(),
+        new vscode.ThemeIcon('symbol-structure'),
       ),
       new ArchitectureItem(
         'Routes & Hotwire',
