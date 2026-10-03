@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'ruby_lsp/addon'
+require_relative 'version'
 require_relative 'schema_index'
 require_relative 'hover_listener'
 
@@ -28,7 +29,7 @@ module RubyLsp
       end
 
       def version
-        '0.1.0'
+        VERSION
       end
 
       # Hook name matches ruby-lsp's listener-registration API
