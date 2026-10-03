@@ -194,6 +194,10 @@ Powered by local Ollama (`qwen2.5-coder:14b` / `7b`):
 - **Native MCP server provider** — the bundled MCP server is registered per workspace root through VS Code's MCP API (the `.cursor/mcp.json` writer remains for Cursor).
 - **`railsForge.ai.provider = "vscode-lm"`** — use VS Code's model picker (Copilot or any Language Model provider) with no API key stored by RailsForge.
 
+### 🧠 19. Rails Semantic Graph & Engineering Skills
+
+RailsForge builds a graph of how *your* app fits together — route → controller action → view, model → table / columns / indexes / foreign keys, associations, validations, callbacks, related services, policies, specs and migrations — and gives it to the AI on every request (and to agent mode as `get_semantic_context`). On top of it, each request is routed to the most relevant [ruby-agent-skills](https://github.com/shubhamtaywade82/ruby-agent-skills) (a pinned, hash-verified release is bundled), whose rules are injected within a strict budget. Your project's `.agents/skills` extend or override them. Details: [docs/skills-integration.md](docs/skills-integration.md).
+
 ## Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
 
 | Command | Identifier |

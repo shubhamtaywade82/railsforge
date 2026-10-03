@@ -17,7 +17,9 @@ import { loadProjectGuidelines } from '../../config/ProjectGuidelines'
 import { loadEffectiveServiceObjectGuidelines } from '../../config/EffectiveGuidelines'
 import { formatSnapshotMarkdown, RuntimeSnapshot } from '../../rails/RuntimeIntrospector'
 import { ToolContext } from './ToolContext'
-import { buildSemanticContext } from '../../semantic/RailsContextBuilder'
+import { buildSemanticContext, selectSeeds } from '../../semantic/RailsContextBuilder'
+import { routeSkills, suggestPatterns } from '../../skills/SkillRouter'
+import { buildSkillContext } from '../../skills/SkillContextBuilder'
 
 export interface ToolDefinition {
   /** MCP tool name (snake_case); the VS Code tool name is `railsforge_<name>`. */
@@ -281,6 +283,65 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
       if (!file && !query) {return 'Provide `file` and/or `query` (class names, tables or controller#action) so RailsForge knows which part of the app to describe.'}
       const text = buildSemanticContext(ctx.getSemanticGraph(), { filePath: file, prompt: query, maxChars: max_chars ?? 6000, maxSeeds: 6 })
       return text || 'No known Rails entities matched. Check the class names, or pass the file path of the code you are changing.'
+    },
+  }),
+  defineTool({
+    name: 'list_skills',
+    title: 'List engineering skills (ruby-agent-skills)',
+    description: 'Lists the Ruby/Rails engineering skills available (id, family, one-line description) from the pinned ruby-agent-skills pack plus any project skills in .agents/skills. Use route_skills to pick for a task rather than reading the whole list.',
+    inputSchema: { family: z.string().optional().describe('Only skills of this family, e.g. "rails", "ruby", "design", "security"') },
+    invocationMessage: 'Listing engineering skills',
+    async handler(ctx, { family }) {
+      const registry = ctx.getSkillRegistry()
+      if (!registry.available) {return 'No skills are available in this install (the ruby-agent-skills pack was not bundled and the project has no .agents/skills).'}
+      const skills = registry.list().filter(s => !family || s.family === family)
+      return json({ source: registry.source ?? null, count: skills.length, skills: skills.map(s => ({ id: s.id, family: s.family, origin: s.origin, description: s.description.slice(0, 220) })) })
+    },
+  }),
+  defineTool({
+    name: 'route_skills',
+    title: 'Pick the engineering skills for a task',
+    description: 'Given a task description (and optionally the file you are working on), returns the smallest set of ruby-agent-skills that apply — primary, secondary and always-on cross-cutting skills — with the reasons, plus relevant pattern names. Call this at the START of a Ruby/Rails change, then read the skills with get_skill. Uses the semantic graph of this project so a task touching a controller or migration routes accordingly.',
+    inputSchema: {
+      task: z.string().describe('What the user wants, in their words, e.g. "fix an N+1 in OrdersController#index"'),
+      file: z.string().optional().describe('Active file path, if any'),
+      max_skills: z.number().int().min(1).max(8).optional(),
+    },
+    invocationMessage: 'Routing to engineering skills',
+    async handler(ctx, { task, file, max_skills }) {
+      const registry = ctx.getSkillRegistry()
+      if (!registry.catalog) {return 'The ruby-agent-skills pack is not bundled in this install, so skills cannot be routed.'}
+      const kinds = [...new Set(selectSeeds(ctx.getSemanticGraph(), { prompt: task, filePath: file, maxSeeds: 8 }).map(e => e.kind))]
+      const input = { prompt: task, entityKinds: kinds, context: file }
+      const routed = routeSkills(registry.catalog, input, { maxSkills: max_skills ?? 4 })
+      return json({ routed, patterns: suggestPatterns(registry.catalog, input), touches: kinds })
+    },
+  }),
+  defineTool({
+    name: 'get_skill',
+    title: 'Read an engineering skill',
+    description: 'Returns a ruby-agent-skills skill: by default its description plus the decision rules, invariants, failure modes and verification steps (compact); with `full` the whole SKILL.md; with `reference` one of its reference files; with `pattern` an implementation pattern (e.g. "service-object"). Retired skill ids are resolved automatically.',
+    inputSchema: {
+      id: z.string().optional().describe('Skill id, e.g. "rails-active-record"'),
+      full: z.boolean().optional(),
+      reference: z.string().optional().describe('Reference file name from the skill, e.g. "loading-and-performance.md"'),
+      pattern: z.string().optional().describe('Pattern id, e.g. "service-object"'),
+    },
+    invocationMessage: 'Reading an engineering skill',
+    async handler(ctx, { id, full, reference, pattern }) {
+      const registry = ctx.getSkillRegistry()
+      if (!registry.available) {return 'No skills are available in this install.'}
+      if (pattern) {return registry.readPattern(pattern) ?? `No pattern named "${pattern}".`}
+      if (!id) {return 'Provide `id` (see list_skills / route_skills) or `pattern`.'}
+      const entry = registry.get(id)
+      if (!entry) {return `No skill named "${id}". Use list_skills to see the available ids.`}
+      if (reference) {return registry.readReference(id, reference) ?? `Skill ${entry.id} has no reference "${reference}". References: ${entry.references.map(r => r.file).join(', ') || 'none'}.`}
+      if (full) {return (registry.readSkill(id) ?? '').slice(0, 40_000) || `Skill ${entry.id} could not be read.`}
+      const routed = [{ id: entry.id, score: 1, role: 'primary' as const, reasons: ['requested'] }]
+      return buildSkillContext(registry, routed, { prompt: '' }, { maxChars: 9000, includeReference: false })
+        + (entry.references.length ? `
+
+References (read with the \`reference\` argument): ${entry.references.map(r => r.file).join(', ')}` : '')
     },
   }),
   defineTool({

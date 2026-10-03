@@ -91,6 +91,10 @@ export interface RailsForgeConfig {
   /** Version manager used to run project tools ('auto' detects from .tool-versions/.ruby-version). */
   /** Allow `rails runner` introspection without asking each time (it executes application code). */
   runtimeIntrospectionEnabled: boolean
+  /** Route and inject ruby-agent-skills guidance into AI requests. */
+  skillsEnabled: boolean
+  skillsMaxPerRequest: number
+  skillsExtraPaths: string[]
   analyzersEnabled: string[]
   analyzersFlogThreshold: number
   analyzersPaths: string[]
@@ -152,6 +156,9 @@ export function readConfig(scope?: vscode.ConfigurationScope): RailsForgeConfig 
     typesSteepScanOnSave: cfg.get<boolean>('types.steepScanOnSave', false),
     typesRbsSigDir: cfg.get<string>('types.rbsSigDir', 'sig'),
     runtimeIntrospectionEnabled: cfg.get<boolean>('runtime.introspection.enabled', false),
+    skillsEnabled: cfg.get<boolean>('skills.enabled', true),
+    skillsMaxPerRequest: cfg.get<number>('skills.maxPerRequest', 4),
+    skillsExtraPaths: cfg.get<string[]>('skills.extraPaths', []),
     analyzersEnabled: cfg.get<string[]>('analyzers.enabled', []),
     analyzersFlogThreshold: cfg.get<number>('analyzers.flogThreshold', 20),
     analyzersPaths: cfg.get<string[]>('analyzers.paths', ['app', 'lib']),

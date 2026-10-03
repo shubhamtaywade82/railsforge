@@ -161,4 +161,22 @@ describe('RailsForge in a real Extension Host', function () {
     const doc = await vscode.workspace.openTextDocument(vscode.Uri.from({ scheme: 'railsforge', path: '/graph.md', query: new URLSearchParams({ root: a }).toString() }))
     assert.ok(doc.getText().includes('# Rails Semantic Graph'))
   })
+
+  it('skills: route_skills runs in the editor and every contributed chatSkill file shipped in dist/skills', async function () {
+    const lm = (vscode as unknown as { lm?: { invokeTool(name: string, options: { input: object; toolInvocationToken: undefined }): Thenable<{ content: Array<{ value?: string }> }> } }).lm
+    const root = path.resolve(__dirname, '..', '..', '..')
+    if (!fs.existsSync(path.join(root, 'dist', 'skills', 'catalog.json'))) {return this.skip()}
+
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')) as { contributes: { chatSkills: Array<{ path: string }> } }
+    for (const skill of manifest.contributes.chatSkills) {
+      assert.ok(fs.existsSync(path.join(root, skill.path)), `chatSkill file missing: ${skill.path}`)
+    }
+
+    if (!lm?.invokeTool) {return this.skip()}
+    await openFile('rails_a', 'app/models/alphas.rb')
+    const result = await lm.invokeTool('railsforge_route_skills', { input: { task: 'add a validation and an association to Alphas', file: 'app/models/alphas.rb' }, toolInvocationToken: undefined })
+    const text = result.content.map(part => part.value ?? '').join('')
+    const routed = JSON.parse(text) as { routed: Array<{ id: string }> }
+    assert.ok(routed.routed.some(r => r.id === 'rails-active-record'), text.slice(0, 400))
+  })
 })

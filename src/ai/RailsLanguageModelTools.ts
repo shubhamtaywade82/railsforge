@@ -23,6 +23,8 @@ export interface LmToolRuntime {
   lm: LmApiLike
   /** Project root the tool should run against (the active editor's), if any. */
   getRoot(): string | undefined
+  /** Supplies the per-root tool context (shared with the agent so graph/skills caches are reused). */
+  createContext?(root: string): ToolContext
   /** Wraps text into a LanguageModelToolResult. */
   toResult(text: string): unknown
   log?(message: string): void
@@ -42,7 +44,7 @@ export async function runTool(tool: ToolDefinition, ctx: ToolContext, input: Rec
 }
 
 export function registerRailsLanguageModelTools(runtime: LmToolRuntime, tools: readonly ToolDefinition[] = RAILSFORGE_TOOLS): Array<{ dispose(): void }> {
-  const contexts = new PerRootRegistry<ToolContext>(root => new ToolContext(root))
+  const contexts = new PerRootRegistry<ToolContext>(root => runtime.createContext?.(root) ?? new ToolContext(root))
   const disposables = tools.map(tool => runtime.lm.registerTool(lmToolName(tool), {
     prepareInvocation: () => ({ invocationMessage: tool.invocationMessage }),
     async invoke(options) {

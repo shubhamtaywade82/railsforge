@@ -20,6 +20,7 @@ import { RBSIndex } from '../../types/RBSIndex'
 import { RailsSemanticGraph } from '../../semantic/RailsSemanticGraph'
 import { buildSemanticGraph } from '../../semantic/GraphBuilder'
 import { DependencyRow } from '../../semantic/facts'
+import { SkillRegistry } from '../../skills/SkillRegistry'
 
 const DEFAULT_EXCLUDED_DIR_NAMES = ['node_modules', 'vendor', 'tmp', 'log', '.git', 'coverage']
 
@@ -60,8 +61,27 @@ export class ToolContext {
   private rbsIndex: RBSIndex | null = null
   private graph: { builtAt: number; value: RailsSemanticGraph } | null = null
 
-  constructor(readonly workspaceRoot: string) {
+  private skills: SkillRegistry | null = null
+
+  /**
+   * @param skillsPackDir `<extension>/dist/skills` (the pinned ruby-agent-skills build); `RAILSFORGE_SKILLS_DIR` overrides it.
+   * @param skillsExtraDirs additional skill directories merged with the pack.
+   */
+  constructor(
+    readonly workspaceRoot: string,
+    private readonly skillsPackDir?: string,
+    private readonly skillsExtraDirs: readonly string[] = [],
+  ) {
     this.excludedDirNames = loadExcludedDirNames(workspaceRoot)
+  }
+
+  getSkillRegistry(): SkillRegistry {
+    this.skills ??= new SkillRegistry({
+      packDir: process.env.RAILSFORGE_SKILLS_DIR || this.skillsPackDir,
+      workspaceRoot: this.workspaceRoot,
+      extraDirs: this.skillsExtraDirs,
+    })
+    return this.skills
   }
 
   loadSchemaIndexer(): SchemaIndexer {

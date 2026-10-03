@@ -88,6 +88,7 @@ export class RailsChatParticipant {
       selection,
       fileName: editor?.document.fileName,
       workspaceRoot: editor ? workspaceRootFor(editor.document.uri) : activeWorkspaceRoot(),
+      command,
     })
 
     if (result.success) {

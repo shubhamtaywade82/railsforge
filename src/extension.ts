@@ -37,7 +37,9 @@ import { RubyAnalyzersProvider, AnalyzerRunResult } from './lint/RubyAnalyzersPr
 import { ANALYZER_IDS, AnalyzerId } from './lint/AnalyzerParsers'
 import { LmApiLike, registerRailsLanguageModelTools } from './ai/RailsLanguageModelTools'
 import { ToolContext } from './mcp/tools/ToolContext'
-import { buildSemanticContext } from './semantic/RailsContextBuilder'
+import { buildSemanticContext, selectSeeds } from './semantic/RailsContextBuilder'
+import { routeSkills } from './skills/SkillRouter'
+import { buildSkillContext } from './skills/SkillContextBuilder'
 import { ProjectState } from './util/ProjectState'
 import { VIRTUAL_DOC_KINDS, VIRTUAL_DOC_SCHEME, VirtualDocKind } from './views/VirtualDocs'
 import { VirtualDocsProvider, virtualDocUri } from './views/VirtualDocsProvider'
@@ -133,6 +135,7 @@ export interface RailsForgeTestApi {
 
 export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   projectState = new ProjectState(context.workspaceState)
+  skillsPackDir = path.join(context.extensionPath, 'dist', 'skills')
   setVersionManagerSettingProvider(() => readConfig().rubyVersionManager)
   Logger.init(context)
   const config = readConfig()
@@ -275,6 +278,20 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     ollamaMinP: cfg.ollamaMinP,
     getApiKey: async () => context.secrets.get(aiApiKeySecretKey(readConfig().aiProvider)),
     vscodeLmFamily: cfg.aiVscodeLmFamily,
+    skillContext: ({ prompt, command, fileName, workspaceRoot: root, diagnosticMessage }) => {
+      const settings = readConfig()
+      if (!settings.skillsEnabled) {return ''}
+      const projectRoot = root ?? (fileName ? workspaceRootFor(vscode.Uri.file(fileName)) : undefined)
+      if (!projectRoot) {return ''}
+      const toolContext = semanticContexts.get(projectRoot)
+      const registry = toolContext.getSkillRegistry()
+      if (!registry.catalog) {return ''}
+      const kinds = [...new Set(selectSeeds(toolContext.getSemanticGraph(), { prompt: `${prompt}\n${diagnosticMessage ?? ''}`, filePath: fileName, maxSeeds: 8 }).map(e => e.kind))]
+      const input = { prompt, command, entityKinds: kinds, context: diagnosticMessage }
+      const routed = routeSkills(registry.catalog, input, { maxSkills: settings.skillsMaxPerRequest })
+      Logger.debug(`[skills] ${routed.map(r => `${r.id}(${r.role})`).join(', ') || 'none'}`)
+      return buildSkillContext(registry, routed, input, { maxChars: 5000 })
+    },
     semanticContext: ({ prompt, fileName, workspaceRoot: root }) => {
       const projectRoot = root ?? (fileName ? workspaceRootFor(vscode.Uri.file(fileName)) : undefined)
       if (!projectRoot) {return ''}
@@ -2675,6 +2692,7 @@ function registerAgentIntegrations(context: vscode.ExtensionContext): void {
   if (typeof lm?.registerTool === 'function') {
     const toolDisposables = registerRailsLanguageModelTools({
       lm: vscode.lm as unknown as LmApiLike,
+      createContext: root => semanticContexts.get(root),
       getRoot: () => activeWorkspaceRoot(),
       toResult: text => new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(text)]),
       log: message => Logger.debug(message),
@@ -2714,7 +2732,8 @@ function registerAgentIntegrations(context: vscode.ExtensionContext): void {
 }
 
 /** One tool context (and cached semantic graph) per workspace root; shared by the agent and virtual docs. */
-const semanticContexts = new PerRootRegistry<ToolContext>(root => new ToolContext(root))
+let skillsPackDir: string | undefined
+const semanticContexts = new PerRootRegistry<ToolContext>(root => new ToolContext(root, skillsPackDir, readConfig().skillsExtraPaths))
 
 /** Per-workspace UI memory (last analyzers / generator), initialised in activate(). */
 let projectState: ProjectState | undefined

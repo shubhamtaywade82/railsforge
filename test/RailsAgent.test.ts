@@ -452,3 +452,24 @@ describe('RailsAgent semantic context', () => {
     expect(await throwing.run('x', {})).toMatchObject({ success: true, response: 'fine' })
   })
 })
+
+describe('RailsAgent skill context', () => {
+  it('passes the chat command through and injects skill guidance into chat and fix prompts', async () => {
+    const seen: string[] = []
+    const requests: Array<{ command?: string; prompt: string }> = []
+    const agent = buildAgent({
+      provider: 'vscode-lm',
+      vscodeLmRequest: async system => { seen.push(system); return 'ok' },
+      skillContext: req => { requests.push({ command: req.command, prompt: req.prompt }); return '## Engineering skills\n### rails-active-record — primary' },
+    })
+    await agent.run('speed this up', { command: 'optimize' })
+    expect(requests[0]).toEqual({ command: 'optimize', prompt: 'speed this up' })
+    expect(seen[0]).toContain('### rails-active-record — primary')
+
+    await agent.run('fix', { isFix: true, diagnosticMessage: 'Style/X', fileContent: 'class A; end' })
+    expect(seen[1]).toContain('### rails-active-record — primary')
+
+    const failing = buildAgent({ provider: 'vscode-lm', vscodeLmRequest: async () => 'fine', skillContext: () => { throw new Error('pack unreadable') } })
+    expect(await failing.run('x', {})).toMatchObject({ success: true })
+  })
+})

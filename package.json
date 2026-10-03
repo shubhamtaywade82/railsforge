@@ -460,6 +460,26 @@
           "default": false,
           "description": "Automatically re-run Steep in the background on Ruby file save when railsForge.types.steepEnabled is true. Debounced (like brakeman.scanOnSave) since Steep checks the whole configured target, not just the saved file."
         },
+        "railsForge.skills.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Route each AI request to the most relevant ruby-agent-skills (bundled, pinned release) and inject their rules into the prompt. The same skills are available to agent mode via the railsforge_get_skill / railsforge_route_skills tools."
+        },
+        "railsForge.skills.maxPerRequest": {
+          "type": "number",
+          "default": 4,
+          "minimum": 1,
+          "maximum": 8,
+          "description": "Maximum domain skills injected per request (cross-cutting skills such as ruby-clean-code are added on top)."
+        },
+        "railsForge.skills.extraPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Extra directories of skills (`<dir>/<skill-id>/SKILL.md`) merged with the bundled pack. The project's own `.agents/skills` is always read, and overrides a bundled skill with the same id."
+        },
         "railsForge.analyzers.enabled": {
           "type": "array",
           "items": {
@@ -1535,6 +1555,98 @@
         }
       },
       {
+        "name": "railsforge_list_skills",
+        "displayName": "List engineering skills (ruby-agent-skills)",
+        "toolReferenceName": "list_skills",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Lists the Ruby/Rails engineering skills available (id, family, one-line description) from the pinned ruby-agent-skills pack plus any project skills in .agents/skills. Use route_skills to pick for a task rather than reading the whole list.",
+        "userDescription": "List engineering skills (ruby-agent-skills)",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "family": {
+              "description": "Only skills of this family, e.g. \"rails\", \"ruby\", \"design\", \"security\"",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_route_skills",
+        "displayName": "Pick the engineering skills for a task",
+        "toolReferenceName": "route_skills",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Given a task description (and optionally the file you are working on), returns the smallest set of ruby-agent-skills that apply — primary, secondary and always-on cross-cutting skills — with the reasons, plus relevant pattern names. Call this at the START of a Ruby/Rails change, then read the skills with get_skill. Uses the semantic graph of this project so a task touching a controller or migration routes accordingly.",
+        "userDescription": "Pick the engineering skills for a task",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "task": {
+              "type": "string",
+              "description": "What the user wants, in their words, e.g. \"fix an N+1 in OrdersController#index\""
+            },
+            "file": {
+              "description": "Active file path, if any",
+              "type": "string"
+            },
+            "max_skills": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            }
+          },
+          "required": [
+            "task"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_get_skill",
+        "displayName": "Read an engineering skill",
+        "toolReferenceName": "get_skill",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Returns a ruby-agent-skills skill: by default its description plus the decision rules, invariants, failure modes and verification steps (compact); with `full` the whole SKILL.md; with `reference` one of its reference files; with `pattern` an implementation pattern (e.g. \"service-object\"). Retired skill ids are resolved automatically.",
+        "userDescription": "Read an engineering skill",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "description": "Skill id, e.g. \"rails-active-record\"",
+              "type": "string"
+            },
+            "full": {
+              "type": "boolean"
+            },
+            "reference": {
+              "description": "Reference file name from the skill, e.g. \"loading-and-performance.md\"",
+              "type": "string"
+            },
+            "pattern": {
+              "description": "Pattern id, e.g. \"service-object\"",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
         "name": "railsforge_get_runtime_introspection",
         "displayName": "Get Rails runtime introspection",
         "toolReferenceName": "get_runtime_introspection",
@@ -1591,6 +1703,83 @@
       {
         "id": "railsforge.editorSubmenu",
         "label": "RailsForge"
+      }
+    ],
+    "chatSkills": [
+      {
+        "path": "./dist/skills/skills/rails-active-record/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-action-controller/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-routing/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-associations/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-validations/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-test-engineering/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-database-engineering/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-data-modeling/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-performance/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-security-engineering/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-authorization/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-authentication/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-active-job/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-hotwire/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-architecture/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/ruby-clean-code/SKILL.md"
+      },
+      {
+        "path": "./dist/skills/skills/ruby-tdd-refactoring/SKILL.md"
+      },
+      {
+        "path": "./dist/skills/skills/ruby-service-objects/SKILL.md"
+      },
+      {
+        "path": "./dist/skills/skills/ruby-debugging/SKILL.md"
+      },
+      {
+        "path": "./dist/skills/skills/stack-minimality/SKILL.md"
       }
     ]
   },

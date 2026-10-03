@@ -95,6 +95,11 @@ export interface RailsAgentConfig {
    */
   semanticContext?: (request: { prompt: string; fileName?: string; workspaceRoot?: string }) => string | Promise<string>
   /**
+   * Returns engineering-skill guidance (ruby-agent-skills routed for this request), '' = none.
+   * Receives the chat command so e.g. /optimize routes to performance skills.
+   */
+  skillContext?: (request: { prompt: string; command?: string; fileName?: string; workspaceRoot?: string; diagnosticMessage?: string }) => string | Promise<string>
+  /**
    * Host-provided logging callback (wired in extension.ts to the RailsForge
    * logger) so this class stays vscode-free. 'debug' carries AI request/response
    * summaries and diff-parse results, 'trace' carries raw provider payloads,
@@ -108,8 +113,12 @@ export interface RailsAgentContext {
   fileName?: string
   selection?: string
   workspaceRoot?: string
+  /** Chat slash command (`optimize`, `fix`, ...) that produced this request, if any. */
+  command?: string
   /** Filled by RailsAgent.run() from config.semanticContext. */
   semanticContext?: string
+  /** Filled by RailsAgent.run() from config.skillContext. */
+  skillContext?: string
   diagnosticMessage?: string
   isFix?: boolean
 }
@@ -145,6 +154,13 @@ export class RailsAgent {
         context = { ...context, semanticContext: await this.config.semanticContext({ prompt: `${prompt}\n${context.diagnosticMessage ?? ''}`, fileName: context.fileName, workspaceRoot: context.workspaceRoot }) }
       } catch (err) {
         this.log('warn', `[AI] semantic context unavailable: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
+    if (context.skillContext === undefined && this.config.skillContext) {
+      try {
+        context = { ...context, skillContext: await this.config.skillContext({ prompt, command: context.command, fileName: context.fileName, workspaceRoot: context.workspaceRoot, diagnosticMessage: context.diagnosticMessage }) }
+      } catch (err) {
+        this.log('warn', `[AI] skill context unavailable: ${err instanceof Error ? err.message : String(err)}`)
       }
     }
     const systemPrompt = context.isFix
@@ -713,6 +729,9 @@ private buildFixRetryInstruction(code: string, diagnosticMessage: string, previo
     if (context.semanticContext) {
       parts.push(context.semanticContext)
     }
+    if (context.skillContext) {
+      parts.push(context.skillContext)
+    }
 
     if (patternSummary) {
       parts.push(`Existing Project Patterns (reuse before generating new code):\n${patternSummary}`)
@@ -773,6 +792,9 @@ private buildFixRetryInstruction(code: string, diagnosticMessage: string, previo
 
     if (context.semanticContext) {
       parts.push(context.semanticContext)
+    }
+    if (context.skillContext) {
+      parts.push(context.skillContext)
     }
 
     // Only include schema tables relevant to the diagnostic (heuristic: class name in message)
