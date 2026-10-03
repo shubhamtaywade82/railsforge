@@ -44,8 +44,12 @@ jobs:
       - name: Run TypeScript Type Check
         run: pnpm run type-check
 
+      # Fetches the pinned ruby-agent-skills commit and verifies its content hash (skills-pin.json);
+      # REQUIRE makes a network/hash failure fail CI instead of silently shipping without skills.
       - name: Compile Extension (Webpack)
         run: pnpm run compile
+        env:
+          RAILSFORGE_REQUIRE_SKILLS: '1'
 
       # The standalone MCP server runs outside VS Code; a stray `import 'vscode'` anywhere in
       # its import graph would crash it at startup, so guard the built bundle.

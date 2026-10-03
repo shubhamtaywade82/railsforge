@@ -44,7 +44,7 @@
   "main": "./dist/extension.js",
   "scripts": {
     "vscode:prepublish": "pnpm run compile",
-    "compile": "webpack --mode production",
+    "compile": "node scripts/fetch-skills.mjs && webpack --mode production",
     "watch": "webpack --watch --mode development",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
@@ -54,7 +54,8 @@
     "vsce-package": "vsce package --no-dependencies --allow-missing-repository -o railsforge.vsix",
     "package": "pnpm run lint && pnpm run type-check && pnpm run compile && pnpm test && pnpm run vsce-package",
     "build:all": "pnpm run package",
-    "test:host": "tsc -p tsconfig.host.json && node out/test-host/runTest.js"
+    "test:host": "tsc -p tsconfig.host.json && node out/test-host/runTest.js",
+    "skills:fetch": "node scripts/fetch-skills.mjs"
   },
   "contributes": {
     "languages": [

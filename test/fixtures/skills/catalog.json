@@ -1,0 +1,5513 @@
+{
+ "schema": 1,
+ "source": {
+  "repo": "shubhamtaywade82/ruby-agent-skills",
+  "ref": "dd22f25b435c40e38b28bd5226ef810adf1f4edc"
+ },
+ "defaults": {
+  "alwaysConsider": [
+   "ruby-clean-code",
+   "ruby-tdd-refactoring",
+   "stack-minimality"
+  ]
+ },
+ "retired": {
+  "rails-activerecord": "rails-active-record",
+  "rails-controllers": "rails-action-controller",
+  "rails-views": "rails-action-view",
+  "rails-testing": "rails-test-engineering",
+  "rails-best-practices": "rails-architecture",
+  "rails-deployment": "rails-release-engineering"
+ },
+ "skills": {
+  "rails-react-integration": {
+   "family": "react-typescript",
+   "description": "Use when React/TypeScript code talks to a Rails backend — choosing the integration mode (Inertia, JSON API, or islands), typing and validating Rails JSON on the client, sending CSRF and session credentials from fetch, mapping Rails 422 validation errors into forms, and paginating Rails collections.",
+   "triggers": [
+    "Rails React integration",
+    "Inertia",
+    "Rails JSON API client",
+    "CSRF token in fetch",
+    "Rails validation errors in React forms",
+    "Rails pagination in React"
+   ],
+   "references": []
+  },
+  "rails-test-engineering": {
+   "family": "rails-quality",
+   "description": "Use when designing, reviewing, debugging, optimizing, or scaling a Rails test suite across unit, model, request, integration, system, job, mailer, Action Cable, parallel, and CI boundaries. Also covers deciding where model, request, system, and service tests belong for a routine change.",
+   "triggers": [
+    "test engineering",
+    "Rails test suite",
+    "flaky test",
+    "flaky tests",
+    "parallel tests",
+    "parallelize",
+    "test isolation",
+    "test performance",
+    "slow tests",
+    "system tests",
+    "integration tests",
+    "request tests",
+    "job tests",
+    "test database",
+    "transactional tests",
+    "test helpers",
+    "fixtures",
+    "factories",
+    "deterministic tests",
+    "CI tests",
+    "config/ci.rb",
+    "bin/ci",
+    "local CI",
+    "request test",
+    "model test",
+    "system test",
+    "integration test",
+    "Rails test"
+   ],
+   "references": [
+    {
+     "file": "assertions-data-and-doubles.md",
+     "title": "Assertions, test data, database isolation, and doubles",
+     "when": "writing assertions, fixtures, factories, or builders, isolating database state, or introducing test doubles. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "determinism-and-flakiness.md",
+     "title": "Determinism, flaky tests, order, and time",
+     "when": "a test is flaky or order-dependent, or depends on time, time zones, randomness, or external state. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "parallelism-performance-ci.md",
+     "title": "Parallel tests, test performance, CI, and eager loading",
+     "when": "a change enables or debugs parallel tests, speeds up the suite, changes CI test strategy, or adds an eager-loading test. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "request-system-job-mail-tests.md",
+     "title": "Request, integration, system, job, and mail tests",
+     "when": "testing requests, browser flows, Active Job enqueue/perform, or mailers and external side effects. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "routine-test-placement.md",
+     "title": "Test placement for routine changes",
+     "when": "deciding where a test belongs for a routine model, controller, job, or mailer change. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "rspec.md",
+     "title": "RSpec",
+     "when": "the repository uses RSpec. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "rails-production-runtime": {
+   "family": "rails",
+   "description": "Use when designing, reviewing, debugging, or validating Rails production process architecture, Puma sizing, worker/thread concurrency, graceful shutdown, release ordering, health/readiness, runtime configuration, secrets, or container/process lifecycle.",
+   "triggers": [
+    "production runtime",
+    "Puma",
+    "puma.rb",
+    "WEB_CONCURRENCY",
+    "RAILS_MAX_THREADS",
+    "workers",
+    "threads",
+    "graceful shutdown",
+    "zero downtime deploy",
+    "rolling deploy",
+    "phased restart",
+    "hot restart",
+    "Solid Queue process",
+    "bin/jobs",
+    "container lifecycle",
+    "PID 1",
+    "readiness",
+    "release process",
+    "runtime configuration",
+    "RAILS_MASTER_KEY",
+    "production boot"
+   ],
+   "references": []
+  },
+  "rails-data-modeling": {
+   "family": "rails",
+   "description": "Use when deciding what a Rails application's relational schema should represent before writing models or migrations, including entities versus values, keys, normalization, nullability, integrity constraints, type hierarchies, JSON columns, history, soft deletion, and deliberate denormalization.",
+   "triggers": [
+    "data modeling",
+    "schema design",
+    "normalization",
+    "normal form",
+    "functional dependency",
+    "denormalization",
+    "single-table inheritance",
+    "delegated_type",
+    "JSONB boundary",
+    "UUID primary key",
+    "composite primary key",
+    "soft delete",
+    "historical snapshot",
+    "legacy schema mapping"
+   ],
+   "references": [
+    {
+     "file": "aggregates-access-and-evolution.md",
+     "title": "Aggregates, access paths, and evolution",
+     "when": "deciding aggregate ownership, the Rails representation of a relational decision, indexes, write paths, counters and aggregates, or how the model evolves. Migration mechanics belong to `rails-database-engineering`; association options belong to `rails-associations`."
+    },
+    {
+     "file": "history-and-denormalization.md",
+     "title": "History, soft deletion, and denormalization",
+     "when": "modeling history, snapshots, soft deletion, derived values, or deliberate denormalization. The rule \"denormalize only with an owner\" stays in the skill's `SKILL.md`."
+    },
+    {
+     "file": "legacy-schemas-and-api-drift.md",
+     "title": "Legacy schemas and Rails API drift",
+     "when": "mapping a schema that does not follow Rails conventions, or when modernizing guidance or code written for older Rails versions (for example, examples from 2007-era Active Record books). Resolve the application's Rails version from `Gemfile.lock` before applying anything here."
+    },
+    {
+     "file": "normalization-and-keys.md",
+     "title": "Normalization and keys",
+     "when": "identifying facts and dependencies, checking normal forms, or choosing keys. The decision rules and invariants stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "relationships-and-integrity.md",
+     "title": "Relationships and integrity",
+     "when": "relating tables, deciding nullability, or choosing constraints. Association options and dependent behavior belong to `rails-associations`; constraint rollout on existing data belongs to `rails-database-engineering`."
+    },
+    {
+     "file": "types-hierarchies-and-flexible-data.md",
+     "title": "Types, hierarchies, and flexible data",
+     "when": "choosing single-table inheritance, delegated types, polymorphic associations, enums, JSON columns, or a value-object mapping. Check every API below against the application's Rails version."
+    },
+    {
+     "file": "worked-examples.md",
+     "title": "Worked examples",
+     "when": "one of these situations is closer to the task than the rules. Each example states the facts, the decisions, and the Rails 8.1 code. Check the application's Rails version before copying any API."
+    }
+   ]
+  },
+  "rails-database-engineering": {
+   "family": "rails",
+   "description": "Use when changing Rails database schemas, migrations, indexes, constraints, transactions, locking, query strategy, connection pools, backfills, or production database operations.",
+   "triggers": [
+    "database migration",
+    "Active Record migration",
+    "schema change",
+    "index",
+    "unique constraint",
+    "foreign key",
+    "check constraint",
+    "database constraint",
+    "backfill",
+    "transaction",
+    "isolation",
+    "row lock",
+    "pessimistic locking",
+    "deadlock",
+    "connection pool",
+    "pool exhaustion",
+    "query plan",
+    "EXPLAIN",
+    "zero downtime migration",
+    "expand contract",
+    "PostgreSQL"
+   ],
+   "references": []
+  },
+  "rails-observability": {
+   "family": "rails",
+   "description": "Use when implementing or reviewing Rails request lifecycle, API error handling, request IDs, logging, Rails.error, ActiveSupport::Notifications, health checks, or production diagnostics.",
+   "triggers": [
+    "observability",
+    "Rails.error",
+    "error reporting",
+    "ActiveSupport::Notifications",
+    "instrumentation",
+    "request ID",
+    "correlation ID",
+    "logging",
+    "log tags",
+    "health check",
+    "readiness",
+    "liveness",
+    "API error handling",
+    "rescue_from",
+    "Rails.event",
+    "Event Reporter",
+    "structured event reporting"
+   ],
+   "references": []
+  },
+  "rails-active-job": {
+   "family": "rails",
+   "description": "Use when creating, changing, reviewing, debugging, testing, or operating Rails Active Job and queue-backed background processing.",
+   "triggers": [
+    "Active Job",
+    "ApplicationJob",
+    "background job",
+    "perform_later",
+    "perform_now",
+    "perform_all_later",
+    "retry_on",
+    "discard_on",
+    "job retry",
+    "job queue",
+    "Solid Queue",
+    "concurrency controls",
+    "recurring jobs",
+    "scheduled jobs",
+    "idempotency",
+    "transactional enqueue",
+    "ActiveJob::Continuable",
+    "job continuation"
+   ],
+   "references": [
+    {
+     "file": "arguments-idempotency-enqueue.md",
+     "title": "Arguments, serialization, idempotency, and enqueue timing",
+     "when": "a change alters job arguments or serializers, duplicate-execution safety, or enqueueing from a transaction. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "concurrency-queues-scheduling.md",
+     "title": "Concurrency controls, queues, priorities, scheduling, and bulk enqueue",
+     "when": "a change adds concurrency limits, queues or priorities, recurring/scheduled jobs, or bulk enqueue. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "operations-and-testing.md",
+     "title": "Callbacks, shutdown, observability, security, and testing",
+     "when": "a change adds job callbacks, affects worker shutdown, job telemetry, or job security, or needs job tests. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "retries-and-failures.md",
+     "title": "Retry, discard, retry storms, and error reporting",
+     "when": "a change alters retry_on/discard_on, backoff, failure classification, or error reporting. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "rails-zeitwerk": {
+   "family": "rails",
+   "description": "Use when creating, moving, renaming, loading, reloading, eager-loading, namespacing, inflecting, or debugging Ruby/Rails constants and file paths under Zeitwerk.",
+   "triggers": [
+    "Zeitwerk",
+    "autoloading",
+    "eager loading",
+    "reloading",
+    "autoload paths",
+    "constant loading",
+    "Zeitwerk::NameError",
+    "zeitwerk:check",
+    "Rails autoloader",
+    "inflections",
+    "namespaces"
+   ],
+   "references": []
+  },
+  "ruby-performance": {
+   "family": "performance",
+   "description": "Use when diagnosing or changing Ruby/Rails performance, latency, throughput, allocations, memory usage, database/query cost, caching, profiling, benchmarking, or runtime optimization.",
+   "triggers": [
+    "performance",
+    "profiling",
+    "benchmark",
+    "benchmarking",
+    "latency",
+    "throughput",
+    "allocations",
+    "memory",
+    "GC",
+    "YJIT",
+    "slow query",
+    "N+1",
+    "caching",
+    "performance regression"
+   ],
+   "references": []
+  },
+  "rails-api-integration": {
+   "family": "rails",
+   "description": "Use when designing, implementing, reviewing, or debugging Rails API contracts and external integrations across inbound HTTP, outbound HTTP clients, webhooks, versioning, idempotency, retries, rate limits, serialization, and failure boundaries.",
+   "triggers": [
+    "API contract",
+    "API versioning",
+    "API compatibility",
+    "JSON API",
+    "content negotiation",
+    "serialization contract",
+    "external API integration",
+    "HTTP integration",
+    "outbound HTTP client",
+    "retry policy",
+    "HTTP timeout",
+    "rate limit",
+    "webhook",
+    "webhook signature",
+    "webhook replay",
+    "idempotency key",
+    "idempotent request",
+    "provider adapter",
+    "integration testing"
+   ],
+   "references": []
+  },
+  "rails-reliability-engineering": {
+   "family": "reliability",
+   "description": "Use when Rails/Ruby systems need explicit reliability objectives, failure containment, graceful degradation, dependency isolation, load shedding, recovery planning, or resilience testing.",
+   "triggers": [
+    "reliability engineering",
+    "resilience",
+    "SRE",
+    "SLI",
+    "SLO",
+    "error budget",
+    "availability target",
+    "latency target",
+    "dependency failure",
+    "circuit breaker",
+    "bulkhead",
+    "load shedding",
+    "overload protection",
+    "graceful degradation",
+    "fallback",
+    "stale data",
+    "retry storm",
+    "cascading failure",
+    "RTO",
+    "RPO",
+    "disaster recovery",
+    "failover",
+    "restore test",
+    "resilience testing",
+    "fault injection",
+    "game day"
+   ],
+   "references": [
+    {
+     "file": "failure-isolation.md",
+     "title": "Circuit breakers, bulkheads, load shedding, degradation, retries, and cascading failure",
+     "when": "a change adds or alters circuit breakers, bulkheads, admission control, degraded modes, retries, or timeouts. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "objectives-and-budgets.md",
+     "title": "Reliability objectives, error budgets, and dependency criticality",
+     "when": "a change defines or alters SLIs/SLOs, error budget policy, or dependency criticality. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "recovery.md",
+     "title": "Recovery objectives, disaster recovery, and reconciliation",
+     "when": "a change alters RTO/RPO, backups and restore, failover, or post-incident reconciliation. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "testing-observability-rollout.md",
+     "title": "Resilience testing, observability, and rollout safety",
+     "when": "adding resilience tests or fault injection, reliability telemetry, or rollout guards. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "rails-incident-engineering": {
+   "family": "operations",
+   "description": "Use when operating, diagnosing, or reviewing production Rails systems through incident response: alert triage, diagnostic context, incident timelines, runbooks, safe production debugging, mitigation, recovery verification, and post-incident learning.",
+   "triggers": [
+    "incident engineering",
+    "incident response",
+    "production incident",
+    "incident triage",
+    "operational runbook",
+    "runbook",
+    "alert actionability",
+    "alert fatigue",
+    "diagnostic context",
+    "incident timeline",
+    "safe production debugging",
+    "mitigation",
+    "recovery verification",
+    "post-incident review",
+    "operational debugging"
+   ],
+   "references": []
+  },
+  "rails-release-engineering": {
+   "family": "operations",
+   "description": "Use when designing, reviewing, validating, or operating Rails releases across CI/CD, artifact promotion, deployment gates, progressive delivery, environment compatibility, rollback or roll-forward, and release verification. Also covers deployment preparation, hosting, production configuration, builds, and Kamal-style release readiness.",
+   "triggers": [
+    "release engineering",
+    "release management",
+    "release readiness",
+    "CI/CD release",
+    "artifact promotion",
+    "artifact provenance",
+    "deployment gate",
+    "release gate",
+    "progressive delivery",
+    "canary release",
+    "staged rollout",
+    "environment parity",
+    "rollback",
+    "roll-forward",
+    "release health",
+    "release evidence",
+    "deployment verification",
+    "deployment",
+    "hosting",
+    "production",
+    "environment",
+    "release",
+    "Kamal",
+    "Kamal 2",
+    "registry-free deploy",
+    "Thruster"
+   ],
+   "references": []
+  },
+  "rails-event-driven-messaging": {
+   "family": "rails",
+   "description": "Use when Rails/Ruby applications publish, consume, route, replay, evolve, or operate asynchronous events, commands, queues, brokers, or streams.",
+   "triggers": [
+    "event-driven architecture",
+    "event-driven messaging",
+    "events",
+    "domain events",
+    "integration events",
+    "commands",
+    "message broker",
+    "message queue",
+    "stream processing",
+    "topic",
+    "queue",
+    "routing key",
+    "partition",
+    "consumer group",
+    "message schema",
+    "event schema",
+    "schema evolution",
+    "dead-letter queue",
+    "dead letter",
+    "poison message",
+    "replay",
+    "message tracing",
+    "consumer lag",
+    "broker capacity",
+    "message acknowledgement",
+    "ack semantics"
+   ],
+   "references": [
+    {
+     "file": "failure-and-replay.md",
+     "title": "Retry policy, dead-letter queues, poison messages, and replay",
+     "when": "a change alters consumer retries, the dead-letter queue, poison-message handling, replay, or backfill. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "message-contracts.md",
+     "title": "Message taxonomy, envelope contract, and schema evolution",
+     "when": "a change defines a message type, alters the envelope, or evolves a message schema. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "operations-and-testing.md",
+     "title": "Observability, capacity, security, rolling deployments, and testing",
+     "when": "a change affects message telemetry, broker capacity, consumer authorization, deployment ordering, or messaging tests. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "topology-and-consumers.md",
+     "title": "Topology, partitioning, consumer groups, handlers, and acknowledgement",
+     "when": "a change alters topics/queues/routing keys/partitions, consumer groups, handler boundaries, or acknowledgement. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "rails-distributed-systems": {
+   "family": "rails",
+   "description": "Use when Rails/Ruby systems cross process, service, host, queue, or datastore boundaries and correctness depends on delivery semantics, consistency, coordination, or failure recovery.",
+   "triggers": [
+    "distributed systems",
+    "distributed architecture",
+    "service boundary",
+    "service ownership",
+    "service decomposition",
+    "event-driven architecture",
+    "asynchronous integration",
+    "message delivery",
+    "at-least-once",
+    "exactly-once",
+    "outbox",
+    "inbox",
+    "message deduplication",
+    "eventual consistency",
+    "saga",
+    "compensation",
+    "distributed transaction",
+    "distributed lock",
+    "lease",
+    "fencing token",
+    "cross-service consistency",
+    "replay",
+    "reconciliation"
+   ],
+   "references": [
+    {
+     "file": "coordination.md",
+     "title": "Sagas, distributed locks, and multi-region deployments",
+     "when": "a change coordinates multi-step workflows, introduces a distributed lock or lease, or spans regions. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "ordering-rollout-testing.md",
+     "title": "Ordering, replay, observability, rollout, and testing",
+     "when": "a change depends on ordering or replay, or affects distributed telemetry, rollout compatibility, or tests. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "ownership-and-delivery.md",
+     "title": "Ownership, delivery semantics, outbox, inbox, retries, and consistency",
+     "when": "a change crosses a service or process boundary with messages, retries, or eventual consistency. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "rails-performance": {
+   "family": "performance",
+   "description": "Use when diagnosing, designing, reviewing, or changing Rails performance across Active Record queries, N+1 behavior, caching, request rendering, Puma capacity, connection pools, background jobs, allocations, memory, and production throughput.",
+   "triggers": [
+    "Rails performance",
+    "Rails performance regression",
+    "N+1",
+    "query plan",
+    "EXPLAIN",
+    "slow Rails endpoint",
+    "slow Active Record query",
+    "Active Record performance",
+    "cache stampede",
+    "cache key",
+    "connection pool",
+    "pool exhaustion",
+    "Puma capacity",
+    "web concurrency",
+    "job throughput",
+    "Rails allocations",
+    "Rails memory"
+   ],
+   "references": [
+    {
+     "file": "caching.md",
+     "title": "Caching and cache stampedes",
+     "when": "a change adds, alters, or invalidates a cache or must control stampedes. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "jobs-batching-memory.md",
+     "title": "Background-job performance, batching, memory, and regression testing",
+     "when": "the bottleneck is job throughput, batch size, memory or allocations, or a change needs performance regression tests. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "query-performance.md",
+     "title": "Active Record query performance, N+1, read paths, pagination, and query plans",
+     "when": "the bottleneck is query count, N+1 access, read-path design, data volume, or indexes and query plans. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "request-and-capacity.md",
+     "title": "Request performance, Puma concurrency, and connection-pool capacity",
+     "when": "the bottleneck is request latency, Puma threads/workers, or database connection pool capacity. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "rails-caching": {
+   "family": "performance",
+   "description": "Use when designing, reviewing, debugging, or changing Rails caching across low-level values, fragments, HTTP responses, cache stores, keys, freshness, invalidation, stampede control, warming, capacity, and failure behavior.",
+   "triggers": [
+    "Rails caching",
+    "cache engineering",
+    "cache key",
+    "cache key isolation",
+    "cache invalidation",
+    "cache freshness",
+    "cache store",
+    "cache stampede",
+    "cache warming",
+    "cache failure",
+    "cache eviction",
+    "cache capacity",
+    "fragment cache",
+    "low-level cache",
+    "response cache",
+    "stale cache",
+    "Solid Cache",
+    "database-backed cache"
+   ],
+   "references": []
+  },
+  "rails-active-support": {
+   "family": "rails",
+   "description": "Use when designing, implementing, reviewing, testing, or optimizing Rails Active Support primitives, including core extensions/loading, ActiveSupport::Concern, class_attribute, CurrentAttributes, callbacks, Notifications instrumentation, time/date semantics, inflection, and reusable Active Support utilities.",
+   "triggers": [
+    "Active Support",
+    "ActiveSupport",
+    "ActiveSupport::Concern",
+    "ActiveSupport::CurrentAttributes",
+    "ActiveSupport::Notifications",
+    "ActiveSupport::Callbacks",
+    "class_attribute",
+    "Active Support instrumentation",
+    "Active Support core extensions",
+    "Active Support loading",
+    "CurrentAttributes",
+    "Time.zone",
+    "Active Support inflection",
+    "safe_constantize",
+    "Active Support concern"
+   ],
+   "references": []
+  },
+  "rails-active-model": {
+   "family": "rails",
+   "description": "Use when designing, implementing, reviewing, testing, or integrating Rails Active Model classes that need model-like behavior without Active Record persistence, including attributes, validations, conversions, naming, dirty tracking, callbacks, serialization, translation, and form/view integration.",
+   "triggers": [
+    "Active Model",
+    "ActiveModel",
+    "ActiveModel::Model",
+    "ActiveModel::API",
+    "ActiveModel::Attributes",
+    "ActiveModel::Validations",
+    "ActiveModel::Dirty",
+    "ActiveModel::Callbacks",
+    "ActiveModel::Serialization",
+    "ActiveModel::Translation",
+    "Active Model lint",
+    "ActiveModel::Lint",
+    "model-like object",
+    "non-persisted model",
+    "form model"
+   ],
+   "references": []
+  },
+  "rails-action-view": {
+   "family": "rails",
+   "description": "Use when designing, implementing, reviewing, testing, or optimizing Rails Action View rendering, templates, partials, layouts, helpers, strict locals, output safety, localized views, and rendering performance. Also covers routine ERB templates, partials, helpers, and forms.",
+   "triggers": [
+    "Action View",
+    "ActionView",
+    "view rendering",
+    "Action View rendering",
+    "partial contract",
+    "partials",
+    "strict locals",
+    "locals signature",
+    "layout contract",
+    "view helpers",
+    "helper boundary",
+    "output safety",
+    "html_safe",
+    "raw HTML",
+    "sanitize",
+    "localized views",
+    "collection rendering",
+    "view rendering performance",
+    "markdown rendering",
+    "render markdown",
+    "ERB",
+    "view",
+    "partial",
+    "helper",
+    "form",
+    "presentation"
+   ],
+   "references": [
+    {
+     "file": "helpers-forms-safety.md",
+     "title": "Helpers, forms, tag helpers, output safety, and localization",
+     "when": "a change adds or alters helpers, forms or tag helpers, html_safe/raw/sanitize, or localized templates. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "performance-caching-security-testing.md",
+     "title": "Rendering performance, caching, security, and testing",
+     "when": "a change has rendering-performance, fragment-caching, security/privacy, or view-test impact. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "rendering-and-templates.md",
+     "title": "Rendering boundary, template lookup, partials, strict locals, and layouts",
+     "when": "a change alters what a view renders, template lookup, partial contracts, strict locals, or layouts. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "routine-changes.md",
+     "title": "Routine view, partial, helper, and form changes",
+     "when": "the change is a routine template, partial, helper, or form edit. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "rails-action-mailbox": {
+   "family": "rails",
+   "description": "Use when designing, implementing, reviewing, testing, or operating Rails Action Mailbox inbound email processing, ingress authentication, mailbox routing, message lifecycle, domain association, failure handling, retention, observability, and security.",
+   "triggers": [
+    "Action Mailbox",
+    "ActionMailbox",
+    "inbound email",
+    "inbound emails",
+    "InboundEmail",
+    "ApplicationMailbox",
+    "mailbox routing",
+    "mailbox",
+    "inbound mail",
+    "email ingress",
+    "ingress",
+    "inbound email ingress",
+    "receive email",
+    "incoming email",
+    "Action Mailbox testing",
+    "bounce_with",
+    "inbound email replay",
+    "email quarantine"
+   ],
+   "references": [
+    {
+     "file": "attachments-retention-operations.md",
+     "title": "Attachments, retention, operations, capacity, and provider compatibility",
+     "when": "a change stores attachments, alters retention or incineration, or affects operations, capacity, or provider/MTA behavior. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "ingress-and-routing.md",
+     "title": "Ingress boundary and mailbox routing",
+     "when": "a change configures ingress, ingress authentication, or ApplicationMailbox routing. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "processing-lifecycle.md",
+     "title": "Processing boundary, lifecycle states, callbacks, failures, and transactions",
+     "when": "a change alters mailbox processing, processing states, bounce/failure handling, or transactional and asynchronous work. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "security-and-idempotency.md",
+     "title": "Authenticity, idempotency, and tenant association",
+     "when": "a change trusts sender identity, deduplicates deliveries, or associates email with tenants or resources. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "testing.md",
+     "title": "Local development and testing",
+     "when": "exercising mailboxes locally or choosing and writing Action Mailbox tests. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "rails-action-mailer": {
+   "family": "rails",
+   "description": "Use when designing, implementing, reviewing, testing, or operating Rails Action Mailer delivery, templates, attachments, asynchronous delivery, provider configuration, email security, previews, observability, and failure/retry behavior.",
+   "triggers": [
+    "Action Mailer",
+    "Rails mailer",
+    "ApplicationMailer",
+    "mailer",
+    "email delivery",
+    "deliver_later",
+    "deliver_now",
+    "mailer preview",
+    "mailer testing",
+    "mailer provider",
+    "SMTP",
+    "email security",
+    "email observability"
+   ],
+   "references": []
+  },
+  "rails-action-cable": {
+   "family": "rails",
+   "description": "Use when designing, implementing, reviewing, testing, or operating Rails Action Cable/WebSocket connections, channels, subscriptions, streams, broadcasting, authorization, reconnect behavior, pub/sub adapters, realtime capacity, or cable security.",
+   "triggers": [
+    "Action Cable",
+    "ActionCable",
+    "WebSocket",
+    "WebSockets",
+    "realtime Rails",
+    "realtime",
+    "ApplicationCable::Connection",
+    "ApplicationCable::Channel",
+    "cable connection",
+    "cable channel",
+    "channel authorization",
+    "subscription",
+    "stream_from",
+    "stream_for",
+    "broadcast_to",
+    "broadcasting",
+    "pub/sub realtime",
+    "Redis pubsub",
+    "Action Cable testing",
+    "reconnect",
+    "resubscribe",
+    "realtime capacity",
+    "Solid Cable",
+    "database-backed pubsub"
+   ],
+   "references": [
+    {
+     "file": "capacity-and-failure.md",
+     "title": "Fan-out, backpressure, capacity, adapters, and failure behavior",
+     "when": "a change alters broadcast fan-out, connection counts, adapter topology, or failure handling. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "channels-and-authorization.md",
+     "title": "Channels, subscription authorization, parameters, and client actions",
+     "when": "a change adds or alters a channel, subscription authorization, channel parameters, or client actions. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "connections.md",
+     "title": "Connection authentication and lifecycle",
+     "when": "a change alters connection identification, authentication, or connection lifecycle. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "delivery-and-reconnect.md",
+     "title": "Delivery semantics and reconnect",
+     "when": "a change depends on delivery guarantees, missed messages, or client reconnect/resubscribe. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "security-operations-testing.md",
+     "title": "Security, operations, observability, and testing",
+     "when": "a change has realtime security/privacy, deployment, observability, or test-strategy impact. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "streams-and-broadcasts.md",
+     "title": "Stream naming and broadcast contracts",
+     "when": "a change names streams, shapes broadcast payloads, or broadcasts after state changes. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "rails-i18n": {
+   "family": "rails",
+   "description": "Use when designing, implementing, reviewing, testing, or operating Rails internationalization/localization across locale selection, translation keys, pluralization, interpolation, dates/numbers, localized views/routes, model errors, mailers, APIs, jobs, caching, and translation backends.",
+   "triggers": [
+    "I18n",
+    "i18n",
+    "internationalization",
+    "localization",
+    "locale",
+    "locales",
+    "translation",
+    "translations",
+    "I18n.t",
+    "I18n.translate",
+    "I18n.l",
+    "I18n.localize",
+    "available_locales",
+    "default_locale",
+    "enforce_available_locales",
+    "translation keys",
+    "pluralization",
+    "interpolation",
+    "localized routes",
+    "localized views",
+    "locale negotiation",
+    "translation backend",
+    "missing translation",
+    "locale fallback"
+   ],
+   "references": [
+    {
+     "file": "locale-propagation.md",
+     "title": "Locale isolation and propagation",
+     "when": "locale state crosses requests, threads, fibers, or background jobs. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "locale-resolution.md",
+     "title": "Locale contract, resolution, and negotiation",
+     "when": "a change alters supported locales, how a locale is chosen, or Accept-Language negotiation. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "localized-surfaces.md",
+     "title": "Localized formatting, views, routes, models, APIs, and mail",
+     "when": "a change localizes dates/numbers/currency, templates, routes, model/validation messages, API responses, or mail. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "performance-security-testing.md",
+     "title": "I18n performance, security, and testing",
+     "when": "a change has I18n performance, security/privacy, or test-strategy impact. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "translation-keys.md",
+     "title": "Translation keys, interpolation, pluralization, and safe HTML",
+     "when": "a change adds or alters translation keys, interpolation, pluralization, or _html translations. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "translation-storage-and-fallbacks.md",
+     "title": "Caching, translation files, missing translations, fallbacks, and backends",
+     "when": "a change alters localized caching, translation file layout, missing-translation handling, fallbacks, backends, or translation administration. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "rails-action-text": {
+   "family": "rails",
+   "description": "Use when designing, implementing, reviewing, testing, or operating Rails Action Text rich-text content, Trix editors, RichText associations, sanitization, embedded attachments, Signed Global IDs, rendering, API boundaries, localization, or rich-text performance.",
+   "triggers": [
+    "Action Text",
+    "ActionText",
+    "has_rich_text",
+    "RichText",
+    "rich text",
+    "rich-text content",
+    "Trix",
+    "rich_textarea",
+    "rich text editor",
+    "sanitized rich text",
+    "action-text-attachment",
+    "Signed Global ID attachable",
+    "attachable",
+    "rich text attachment",
+    "rich text rendering",
+    "rich text API",
+    "Action Text N+1"
+   ],
+   "references": [
+    {
+     "file": "attachments-and-attachables.md",
+     "title": "Attachments, Signed Global ID attachables, and rendering attachables",
+     "when": "a change embeds attachments or custom attachables, resolves signed identifiers, or handles missing attachables. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "content-and-editing.md",
+     "title": "Ownership, content contract, editing authorization, and the editor boundary",
+     "when": "a change alters rich-text ownership, the stored content contract, who may edit, or the Trix/editor boundary. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "lifecycle-and-background-work.md",
+     "title": "Persistence lifecycle, background work, and search indexing",
+     "when": "a change alters rich-text persistence, background processing, or search/indexing. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "performance-security-testing.md",
+     "title": "Performance, caching, resource limits, security, and testing",
+     "when": "a change has N+1, caching, content-size, security/privacy, or test-strategy impact. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "rendering-and-apis.md",
+     "title": "Rendering, API, localization, and forms",
+     "when": "a change renders rich text, exposes it through an API, localizes it, or accepts it through forms. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "sanitization-and-links.md",
+     "title": "Sanitization and links",
+     "when": "a change alters allowed tags/attributes, sanitization, or link and URL handling. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "rails-active-storage": {
+   "family": "rails",
+   "description": "Use when designing, implementing, reviewing, testing, or operating Rails Active Storage attachments, uploads, direct uploads, storage services, file serving, variants, previews, analysis, purge lifecycle, mirrors, or file-access security.",
+   "triggers": [
+    "Active Storage",
+    "ActiveStorage",
+    "has_one_attached",
+    "has_many_attached",
+    "file upload",
+    "file uploads",
+    "direct upload",
+    "Active Storage direct upload",
+    "storage service",
+    "S3 upload",
+    "GCS upload",
+    "blob",
+    "attachment",
+    "file serving",
+    "signed blob URL",
+    "authenticated file access",
+    "file variant",
+    "image variant",
+    "preview file",
+    "file analysis",
+    "purge attachment",
+    "purge blob",
+    "unattached blobs",
+    "storage mirror",
+    "storage migration"
+   ],
+   "references": [
+    {
+     "file": "attachments-and-file-contract.md",
+     "title": "Attachment boundary, schema ownership, and file contract",
+     "when": "a change declares or alters attachments, cardinality, Active Storage tables, or the accepted file contract. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "authorization-and-tenancy.md",
+     "title": "Upload authorization and tenant isolation",
+     "when": "a change decides who may upload, attach, or read a blob, or crosses tenants. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "observability-and-testing.md",
+     "title": "Observability and testing",
+     "when": "adding storage instrumentation or choosing and writing Active Storage tests. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "processing.md",
+     "title": "Analysis, variants, previews, and background processing",
+     "when": "a change alters analysis, variants, previews, processing dependencies, or processing jobs. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "replacement-and-purge.md",
+     "title": "Replacement, deletion, purge, and orphaned uploads",
+     "when": "a change replaces, detaches, deletes, or purges attachments or cleans up unattached blobs. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "serving-and-downloads.md",
+     "title": "Serving files and downloads",
+     "when": "a change serves private or public files, adds file controllers, or downloads blobs into memory. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "storage-services.md",
+     "title": "Storage services, providers, failures, migration, and CDN",
+     "when": "a change alters storage services, environments, provider credentials, failure handling, mirrors, or CDN/proxy delivery. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "uploads-and-validation.md",
+     "title": "Direct uploads, CORS, and file validation",
+     "when": "a change adds or alters direct uploads, CORS, file validation, filenames, or metadata. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "rails-security-engineering": {
+   "family": "security",
+   "description": "Use when security work requires architecture-level threat modeling, trust-boundary analysis, abuse-case prioritization, tenant isolation, secret governance, supply-chain review, or security regression strategy across a Rails system.",
+   "triggers": [
+    "security engineering",
+    "threat model",
+    "threat modeling",
+    "security architecture",
+    "trust boundary",
+    "authorization matrix",
+    "tenant isolation",
+    "secret management",
+    "secret rotation",
+    "SSRF architecture",
+    "outbound network security",
+    "dependency supply chain",
+    "CI security",
+    "build security",
+    "abuse case",
+    "security regression",
+    "defense in depth",
+    "residual risk"
+   ],
+   "references": []
+  },
+  "rails-security": {
+   "family": "security",
+   "description": "Use when implementing, reviewing, testing, or debugging security-sensitive Ruby/Rails code involving authentication, authorization, sessions, CSRF, XSS, injection, redirects, file access, SSRF, secrets, headers, dependency vulnerabilities, multi-tenancy, webhooks, or security tooling.",
+   "triggers": [
+    "security",
+    "Rails security",
+    "Brakeman",
+    "bundler-audit",
+    "authentication security",
+    "authorization security",
+    "CSRF",
+    "XSS",
+    "SQL injection",
+    "SSRF",
+    "command injection",
+    "security review"
+   ],
+   "references": []
+  },
+  "ruby-concurrency": {
+   "family": "concurrency",
+   "description": "Use when Ruby/Rails code performs concurrent work, shares mutable state across threads, uses queues or executors, uses Fibers, or has race conditions, deadlocks, thread-safety, or ordering hazards.",
+   "triggers": [
+    "concurrency",
+    "threads",
+    "Thread",
+    "Mutex",
+    "Monitor",
+    "Queue",
+    "thread pool",
+    "race condition",
+    "deadlock",
+    "thread safety",
+    "Fibers",
+    "scheduler",
+    "parallel I/O"
+   ],
+   "references": []
+  },
+  "ruby-runtime-compatibility": {
+   "family": "runtime",
+   "description": "Use when determining or enforcing Ruby, Rails, Bundler, and runtime-version compatibility before implementing, upgrading, linting, debugging, or reviewing Ruby/Rails code.",
+   "triggers": [
+    "Ruby version",
+    "Rails version",
+    "Bundler version",
+    "runtime compatibility",
+    "version compatibility",
+    "Ruby upgrade",
+    "Rails upgrade",
+    "deprecation compatibility"
+   ],
+   "references": []
+  },
+  "ruby-toolchain": {
+   "family": "runtime",
+   "description": "Use when installing, selecting, inspecting, or troubleshooting the Ruby runtime, RubyGems, Bundler, gem executables, PATH, native extensions, and local Ruby development tooling before application work.",
+   "triggers": [
+    "Ruby installation",
+    "Ruby toolchain",
+    "ruby --version",
+    "RubyGems",
+    "gem install",
+    "gem env",
+    "Bundler setup",
+    "bundle install",
+    "bundle check",
+    "bundle exec",
+    "bundle config",
+    "PATH",
+    "GEM_HOME",
+    "GEM_PATH",
+    "native extension",
+    "native gem build"
+   ],
+   "references": []
+  },
+  "rails-application-bootstrap": {
+   "family": "rails",
+   "description": "Use when creating, initializing, or intentionally reshaping a Rails application with rails new, including standard monoliths, API-only applications, database choices, frontend/build choices, templates, skip options, and reproducible project bootstrap.",
+   "triggers": [
+    "rails new",
+    "create Rails app",
+    "new Rails application",
+    "Rails application bootstrap",
+    "Rails monolith",
+    "Rails API-only",
+    "rails new --api",
+    "Rails database option",
+    "Rails template",
+    "Rails skip options"
+   ],
+   "references": []
+  },
+  "ruby-gem-development": {
+   "family": "ruby-gem",
+   "description": "Use when creating, developing, packaging, releasing, or maintaining a reusable Ruby gem or gem repository.",
+   "triggers": [
+    "Ruby gem development",
+    "bundle gem",
+    "gemspec",
+    "gem build",
+    "gem specification",
+    "gem contents",
+    "gem package",
+    "gem release",
+    "gem executable",
+    "RubyGems packaging",
+    "gem development"
+   ],
+   "references": []
+  },
+  "rubocop": {
+   "family": "quality",
+   "description": "Use when linting, reviewing, refactoring, or implementing Ruby/Rails code where RuboCop or a RuboCop extension can provide static-analysis, style, architecture, framework, testing, performance, security-adjacent, or domain-specific feedback.",
+   "triggers": [
+    "RuboCop",
+    "RuboCop plugin",
+    "linting",
+    "Ruby lint",
+    "static analysis",
+    "rubocop.yml",
+    "cop"
+   ],
+   "references": []
+  },
+  "agent-workflow": {
+   "family": "meta",
+   "description": "Use for any non-trivial change in this repository when an agent must discover applicable skills, manage context, select patterns, implement incrementally, test, review, simplify, and verify the result.",
+   "triggers": [
+    "agent workflow",
+    "skill selection",
+    "repository agent process",
+    "context management",
+    "implementation workflow"
+   ],
+   "references": []
+  },
+  "change-review": {
+   "family": "meta",
+   "description": "Use when reviewing a branch, pull request, or work-in-progress diff since a fixed point for conformance to the repository's standards and fidelity to the originating spec or issue, reported as two separate axes.",
+   "triggers": [
+    "change review",
+    "review diff",
+    "review branch",
+    "review pull request",
+    "PR review",
+    "review since",
+    "spec fidelity",
+    "standards review"
+   ],
+   "references": [
+    {
+     "file": "smell-baseline.md",
+     "title": "Code-smell baseline for the Standards axis",
+     "when": "running the Standards axis on a diff that contains Ruby or Rails code. The review procedure and invariants stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "planning-tracker": {
+   "family": "planning",
+   "description": "Use when a planning skill must read, create, link, label, or close planning items (maps, decisions, specs, tickets) and the tracker backend must be resolved as local Markdown files or GitHub Issues.",
+   "triggers": [
+    "planning tracker",
+    "tracker backend",
+    "local planning items",
+    "planning frontier",
+    "blocking edges",
+    "GitHub issues backend"
+   ],
+   "references": [
+    {
+     "file": "github.md",
+     "title": "GitHub Issues tracker",
+     "when": "the resolved backend is GitHub Issues. The item model, backend resolution, and invariants stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "local-markdown.md",
+     "title": "Local Markdown tracker",
+     "when": "the resolved backend is local Markdown. The item model, backend resolution, and invariants stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "planning-interview": {
+   "family": "planning",
+   "description": "Use when a plan, design, or decision must be stress-tested with the user before any spec or code, by interviewing in rounds over a design tree until every branch is settled and the domain language is written down.",
+   "triggers": [
+    "grill me",
+    "grill this plan",
+    "stress-test a plan",
+    "design interview",
+    "design tree",
+    "interview me"
+   ],
+   "references": []
+  },
+  "planning-spec": {
+   "family": "planning",
+   "description": "Use when a discussed feature or change must be written up as a spec, with agreed test seams, Rails boundaries, and out-of-scope items, and published through the planning tracker, without re-interviewing the user.",
+   "triggers": [
+    "write a spec",
+    "feature spec",
+    "PRD",
+    "specification",
+    "spec from conversation",
+    "test seams"
+   ],
+   "references": []
+  },
+  "planning-tickets": {
+   "family": "planning",
+   "description": "Use when a spec, plan, or conversation must be broken into tracer-bullet tickets, each a vertical slice that fits one agent session, with explicit blocking edges, published through the planning tracker.",
+   "triggers": [
+    "break into tickets",
+    "tracer bullet tickets",
+    "vertical slices",
+    "work breakdown",
+    "ticket breakdown",
+    "expand-contract refactor"
+   ],
+   "references": []
+  },
+  "planning-wayfinder": {
+   "family": "planning",
+   "description": "Use when an effort is too large or too unclear for one agent session and must be charted as a map of decision items, then resolved one decision per session until the way to a named destination is clear.",
+   "triggers": [
+    "wayfinder",
+    "decision map",
+    "multi-session plan",
+    "too big for one session",
+    "chart the work",
+    "decision tickets"
+   ],
+   "references": []
+  },
+  "stack-minimality": {
+   "family": "architecture-quality",
+   "description": "Apply a Ponytail-inspired minimality discipline to Ruby, Rails, React, TypeScript, and PostgreSQL projects without sacrificing correctness, security, accessibility, data integrity, observability, or explicit requirements.",
+   "triggers": [
+    "minimal solution",
+    "simplest solution",
+    "less code",
+    "minimality",
+    "YAGNI",
+    "over-engineering",
+    "unnecessary abstraction",
+    "unnecessary dependency",
+    "simplify",
+    "reduce indirection",
+    "Ruby Rails React PostgreSQL minimality"
+   ],
+   "references": []
+  },
+  "stack-minimality-review": {
+   "family": "architecture-quality",
+   "description": "Review a Ruby, Rails, React, TypeScript, and PostgreSQL diff for unnecessary complexity, indirection, dependencies, and speculative flexibility without changing the code.",
+   "triggers": [
+    "minimality review",
+    "over-engineering review",
+    "simplify diff",
+    "delete list",
+    "unnecessary complexity"
+   ],
+   "references": []
+  },
+  "stack-minimality-audit": {
+   "family": "architecture-quality",
+   "description": "Audit an entire Ruby, Rails, React, TypeScript, and PostgreSQL repository for unnecessary complexity, dependencies, wrappers, and speculative abstractions without applying changes.",
+   "triggers": [
+    "repo bloat audit",
+    "over-engineering audit",
+    "simplify repository",
+    "what can we delete"
+   ],
+   "references": []
+  },
+  "stack-minimality-debt": {
+   "family": "architecture-quality",
+   "description": "Collect deliberate stack-minimality shortcuts into a debt ledger with explicit ceilings and revisit triggers.",
+   "triggers": [
+    "minimality debt",
+    "deferred simplification",
+    "stack-minimality markers",
+    "shortcuts ledger"
+   ],
+   "references": []
+  },
+  "stack-minimality-evidence": {
+   "family": "architecture-quality",
+   "description": "Measure observable complexity, dependency, test, build, and database effects of changes in Ruby, Rails, React, TypeScript, and PostgreSQL without fabricating savings.",
+   "triggers": [
+    "minimality evidence",
+    "measure diff",
+    "actual savings",
+    "dependency delta",
+    "change size",
+    "performance evidence"
+   ],
+   "references": []
+  },
+  "stack-minimality-help": {
+   "family": "architecture-quality",
+   "description": "Provide a quick reference for stack-minimality skills and scope without changing repository behavior.",
+   "triggers": [
+    "minimality help",
+    "minimality skills",
+    "simplification commands"
+   ],
+   "references": []
+  },
+  "ruby-core": {
+   "family": "ruby",
+   "description": "Use when implementing, reviewing, or debugging Ruby language behavior, syntax, object semantics, truthiness, method dispatch, runtime behavior, or version-sensitive Ruby code.",
+   "triggers": [
+    "Ruby syntax",
+    "Ruby semantics",
+    "object model",
+    "truthiness",
+    "method dispatch"
+   ],
+   "references": []
+  },
+  "ruby-data-types": {
+   "family": "ruby",
+   "description": "Use when choosing, parsing, validating, or reviewing Ruby values such as strings, numbers, symbols, ranges, nil, arrays, hashes, or domain value representations.",
+   "triggers": [
+    "strings",
+    "symbols",
+    "numbers",
+    "nil",
+    "ranges",
+    "hashes",
+    "data representation"
+   ],
+   "references": []
+  },
+  "ruby-control-flow": {
+   "family": "ruby",
+   "description": "Use when implementing or refactoring Ruby conditionals, case expressions, loops, boolean branches, guards, or repetitive program flow.",
+   "triggers": [
+    "if",
+    "unless",
+    "case",
+    "loops",
+    "boolean logic",
+    "branching"
+   ],
+   "references": []
+  },
+  "ruby-collections": {
+   "family": "ruby",
+   "description": "Use for Ruby Array/Hash data structures and collection algorithms, especially when representation, mutation, indexing, ordering, or algorithmic complexity is the primary concern. Use `ruby-enumerables` when the primary concern is selecting or composing Enumerable transformations.",
+   "triggers": [
+    "arrays",
+    "hashes",
+    "Enumerable",
+    "map",
+    "select",
+    "grouping",
+    "deduplication",
+    "sorting"
+   ],
+   "references": []
+  },
+  "ruby-blocks-procs-lambdas": {
+   "family": "ruby",
+   "description": "Use when Ruby behavior is passed as blocks, stored as Proc or lambda objects, yielded to callers, or converted with the ampersand operator.",
+   "triggers": [
+    "blocks",
+    "yield",
+    "Proc",
+    "lambda",
+    "callbacks",
+    "ampersand operator"
+   ],
+   "references": []
+  },
+  "ruby-enumerables": {
+   "family": "ruby",
+   "description": "Use when choosing or reviewing Ruby Enumerable traversal and transformation semantics after the underlying collection representation is understood.",
+   "triggers": [
+    "Enumerable pipeline",
+    "each_with_object",
+    "reduce",
+    "group_by",
+    "tally",
+    "lazy"
+   ],
+   "references": []
+  },
+  "ruby-api-design": {
+   "family": "design",
+   "description": "Use when designing Ruby methods, classes, services, or library boundaries whose public inputs, outputs, errors, visibility, or compatibility contract matter.",
+   "triggers": [
+    "public API",
+    "return contract",
+    "keyword arguments",
+    "compatibility",
+    "library boundary"
+   ],
+   "references": [
+    {
+     "file": "deep-modules.md",
+     "title": "Deep modules, seams, and dependency strategy",
+     "when": "deciding what a module should hide, where its seam goes, how to test it through its dependencies, or when comparing alternative interfaces. The compatibility procedure and review checklist stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "ruby-poro": {
+   "family": "design",
+   "description": "Use when behavior can be represented by a plain Ruby object independent of persistence, controllers, or framework lifecycle.",
+   "triggers": [
+    "PORO",
+    "plain Ruby object",
+    "domain object",
+    "object extraction",
+    "framework-independent behavior"
+   ],
+   "references": []
+  },
+  "ruby-service-objects": {
+   "family": "design",
+   "description": "Use when an application workflow coordinates several steps and does not belong naturally to one model or controller.",
+   "triggers": [
+    "service object",
+    "application service",
+    "application workflow",
+    "action object",
+    "command service"
+   ],
+   "references": []
+  },
+  "ruby-domain-modeling": {
+   "family": "design",
+   "description": "Use when business concepts, invariants, or policies are becoming implicit in procedural code and need explicit domain boundaries.",
+   "triggers": [
+    "domain modeling",
+    "business rule",
+    "invariant ownership",
+    "domain concept",
+    "rich domain object"
+   ],
+   "references": [
+    {
+     "file": "context-and-adrs.md",
+     "title": "Glossary and decision records",
+     "when": "reading, creating, or updating a domain glossary or decision record. When to write each one stays in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "ruby-dependency-injection": {
+   "family": "design",
+   "description": "Use when an object depends on I/O, external services, time, randomness, persistence collaborators, or interchangeable implementations that should be isolated or replaced in tests.",
+   "triggers": [
+    "dependency injection",
+    "injected collaborator",
+    "dependency boundary",
+    "test double",
+    "replaceable collaborator"
+   ],
+   "references": []
+  },
+  "ruby-object-composition": {
+   "family": "design",
+   "description": "Use when behavior can be assembled from collaborating objects and inheritance is creating coupling, branching, or fragile extension points.",
+   "triggers": [
+    "composition",
+    "composition over inheritance",
+    "collaborator",
+    "replace inheritance",
+    "delegation"
+   ],
+   "references": []
+  },
+  "ruby-boolean-logic": {
+   "family": "design",
+   "description": "Use when implementing or refactoring complex Ruby predicates, conditional expressions, guard clauses, truthiness, or boolean combinations.",
+   "triggers": [
+    "boolean expression",
+    "predicate",
+    "guard clause",
+    "truthiness",
+    "conditional refactor"
+   ],
+   "references": []
+  },
+  "ruby-method-design": {
+   "family": "design",
+   "description": "Use when creating, reviewing, or refactoring Ruby methods with meaningful parameters, return contracts, branching, nesting, comments, or responsibilities.",
+   "triggers": [
+    "new method",
+    "method refactor",
+    "parameters",
+    "return contract",
+    "guard clause"
+   ],
+   "references": []
+  },
+  "ruby-oop": {
+   "family": "design",
+   "description": "Use when designing Ruby classes, state ownership, encapsulation, inheritance, polymorphism, composition, or domain object boundaries.",
+   "triggers": [
+    "class design",
+    "encapsulation",
+    "inheritance",
+    "polymorphism",
+    "composition"
+   ],
+   "references": []
+  },
+  "ruby-modules-mixins": {
+   "family": "design",
+   "description": "Use for Ruby modules, namespaces, shared behavior, include, extend, prepend, callbacks, and method lookup design.",
+   "triggers": [
+    "module",
+    "mixin",
+    "include",
+    "extend",
+    "prepend",
+    "namespace"
+   ],
+   "references": []
+  },
+  "ruby-metaprogramming": {
+   "family": "ruby",
+   "description": "Use when reflection, dynamic dispatch, runtime method creation, open classes, monkey patches, method_missing, define_method, or controlled metaprogramming are explicitly relevant.",
+   "triggers": [
+    "reflection",
+    "define_method",
+    "method_missing",
+    "runtime method creation"
+   ],
+   "references": []
+  },
+  "ruby-gems-io-services": {
+   "family": "integration",
+   "description": "Use for RubyGems/dependency decisions, filesystem and CSV I/O, HTTP integrations, external boundaries, and focused service objects.",
+   "triggers": [
+    "gem",
+    "dependency",
+    "file I/O",
+    "CSV",
+    "HTTP client",
+    "service object"
+   ],
+   "references": []
+  },
+  "ruby-debugging": {
+   "family": "debugging",
+   "description": "Use when diagnosing Ruby/Rails exceptions, incorrect behavior, production failures, logging problems, unexpected state, or intermittent defects.",
+   "triggers": [
+    "bug",
+    "exception",
+    "stack trace",
+    "logging",
+    "debugging",
+    "production issue"
+   ],
+   "references": [
+    {
+     "file": "feedback-loops.md",
+     "title": "Feedback loops for Ruby and Rails bugs",
+     "when": "building or tightening the Phase 1 loop, or when the bug is intermittent. The completion criterion for Phase 1 stays in the skill's `SKILL.md`."
+    },
+    {
+     "file": "reproduce-hypothesise-instrument.md",
+     "title": "Reproduce, hypothesise, and instrument",
+     "when": "reproducing, minimising, hypothesising, or instrumenting after the Phase 1 loop exists. The fix, cleanup, and verification rules stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "ruby-clean-code": {
+   "family": "quality",
+   "description": "Use globally for Ruby/Rails implementation and review when readability, simplicity, changeability, naming, responsibility, boolean logic, or maintainability matter.",
+   "triggers": [
+    "code review",
+    "refactor",
+    "readability",
+    "naming",
+    "simplicity",
+    "maintainability"
+   ],
+   "references": []
+  },
+  "ruby-tdd-refactoring": {
+   "family": "quality",
+   "description": "Use when changing Ruby/Rails behavior, fixing bugs, adding coverage, refactoring, or working under a regression-risk constraint.",
+   "triggers": [
+    "test",
+    "TDD",
+    "regression",
+    "refactor",
+    "behavior change"
+   ],
+   "references": [
+    {
+     "file": "test-quality.md",
+     "title": "Test quality: assertions, seams, and doubles",
+     "when": "writing or reviewing test assertions, doubles, or mocks. The loop and completion contract stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "rails-architecture": {
+   "family": "rails",
+   "description": "Use when implementing or reviewing Rails application structure, MVC boundaries, resource flows, REST behavior, or cross-layer feature changes. Also covers maintainability review of REST design, MVC responsibilities, indexing, callbacks, and migrations.",
+   "triggers": [
+    "Rails feature",
+    "MVC",
+    "resource",
+    "REST",
+    "application structure",
+    "Rails best practices",
+    "Rails code quality",
+    "rails_best_practices",
+    "Rails review",
+    "Rails maintainability"
+   ],
+   "references": []
+  },
+  "rails-routing": {
+   "family": "rails",
+   "description": "Use when designing, changing, debugging, reviewing, or testing Rails routes, resource hierarchies, route helpers, scopes, constraints, routing concerns, direct routes, mounted endpoints, or URL generation.",
+   "triggers": [
+    "routes",
+    "route",
+    "resources",
+    "HTTP verb",
+    "URL helper",
+    "dispatch",
+    "nested routes",
+    "shallow routes",
+    "namespace",
+    "scope",
+    "route constraints",
+    "subdomain",
+    "host constraint",
+    "format routing",
+    "polymorphic route",
+    "direct route",
+    "resolve route",
+    "routing concern",
+    "catch-all route",
+    "mounted endpoint",
+    "mounted Rack",
+    "localized routes",
+    "route precedence"
+   ],
+   "references": []
+  },
+  "rails-action-controller": {
+   "family": "rails",
+   "description": "Use when implementing or reviewing Rails Action Controller HTTP boundaries including parameters, request and response semantics, sessions, cookies, callbacks, negotiation, conditional responses, streaming, and controller-level exception handling. Also covers routine controller actions, parameters, rendering, and redirects.",
+   "triggers": [
+    "Action Controller",
+    "ActionController",
+    "ActionController::Base",
+    "strong parameters",
+    "params.expect",
+    "params.permit",
+    "params.require",
+    "request object",
+    "response object",
+    "session",
+    "cookies",
+    "flash",
+    "controller callbacks",
+    "before_action",
+    "after_action",
+    "around_action",
+    "content negotiation",
+    "respond_to",
+    "ETag",
+    "Last-Modified",
+    "conditional GET",
+    "304 Not Modified",
+    "streaming",
+    "send_data",
+    "send_file",
+    "ActionController::Live",
+    "render markdown",
+    "Markdown rendering",
+    "rescue_from",
+    "controller exception handling",
+    "controller action",
+    "params",
+    "render",
+    "redirect",
+    "response"
+   ],
+   "references": [
+    {
+     "file": "performance-and-testing.md",
+     "title": "Controller performance and testing",
+     "when": "a change has request-path performance impact or needs controller/request tests. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "request-and-parameters.md",
+     "title": "Request boundary, strong parameters, and request object semantics",
+     "when": "a change reads request input, alters strong parameters or params.expect, or depends on request object semantics. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "responses.md",
+     "title": "Response contract, render/redirect, content negotiation, conditional GET, and streaming",
+     "when": "a change alters status codes, render/redirect behavior, formats, ETag/Last-Modified, or file/streaming responses. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "routine-changes.md",
+     "title": "Routine controller action changes",
+     "when": "the change is a routine controller action edit. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "sessions-callbacks-exceptions.md",
+     "title": "Sessions, cookies, flash, controller callbacks, exceptions, and security",
+     "when": "a change alters session/cookie/flash state, controller callbacks, rescue_from/exception mapping, or request security. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "rails-active-record": {
+   "family": "rails",
+   "description": "Use when implementing or reviewing deep Active Record model, relation, query, persistence lifecycle, scope, callback, bulk-write, deletion, or loading behavior. Also covers routine model, migration, query, scope, callback, and transaction changes.",
+   "triggers": [
+    "Active Record",
+    "ActiveRecord",
+    "ActiveRecord::Base",
+    "ApplicationRecord",
+    "ActiveRecord::Relation",
+    "relation",
+    "query composition",
+    "scope",
+    "default_scope",
+    "unscoped",
+    "preload",
+    "eager_load",
+    "includes",
+    "strict_loading",
+    "pluck",
+    "pick",
+    "persistence lifecycle",
+    "save",
+    "update",
+    "destroy",
+    "delete",
+    "update_all",
+    "delete_all",
+    "destroy_all",
+    "upsert",
+    "after_commit",
+    "after_rollback",
+    "Active Record callbacks",
+    "bulk write",
+    "model",
+    "migration",
+    "query",
+    "persistence"
+   ],
+   "references": [
+    {
+     "file": "bulk-writes-and-deletion.md",
+     "title": "Bulk writes and deletion semantics",
+     "when": "a change uses update_all, delete_all, destroy_all, insert/upsert, or alters deletion behavior. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "loading-and-performance.md",
+     "title": "Loading strategy and performance",
+     "when": "a change alters eager/strict loading, N+1 behavior, batching, or query cost. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "persistence-lifecycle-and-callbacks.md",
+     "title": "Persistence lifecycle, callbacks, dirty state, and transactions",
+     "when": "a change alters save/update/destroy semantics, callbacks, dirty tracking, or transaction participation. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "relations-and-queries.md",
+     "title": "Relations, queries, scopes, and projections",
+     "when": "a change alters model ownership, Relation composition, query shape, scopes/default_scope, or projections. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "routine-changes.md",
+     "title": "Routine model, migration, and query changes",
+     "when": "the change is a routine model, migration, scope, callback, or query edit. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "security-and-tenant-scope.md",
+     "title": "Security and tenant scope",
+     "when": "a query crosses tenant, authorization, unscoped, raw SQL, or dynamic identifier boundaries. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "testing.md",
+     "title": "Testing Active Record contracts",
+     "when": "choosing or writing tests for Active Record behavior. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "rails-associations": {
+   "family": "rails",
+   "description": "Use when designing or reviewing deep Active Record association contracts including cardinality, ownership, inverse relationships, through joins, polymorphism, dependent lifecycle, autosave, counters, touch, callbacks, and association testing.",
+   "triggers": [
+    "belongs_to",
+    "has_one",
+    "has_many",
+    "through",
+    "has_many :through",
+    "HABTM",
+    "relationship",
+    "association cardinality",
+    "association ownership",
+    "inverse_of",
+    "class_name",
+    "foreign_key",
+    "primary_key",
+    "polymorphic",
+    "dependent",
+    "destroy_async",
+    "restrict_with_exception",
+    "restrict_with_error",
+    "nullify",
+    "autosave",
+    "nested attributes",
+    "counter_cache",
+    "touch",
+    "association callbacks",
+    "before_add",
+    "after_add",
+    "before_remove",
+    "after_remove",
+    "association extension",
+    "deprecated association",
+    "association deprecation"
+   ],
+   "references": [
+    {
+     "file": "declarations.md",
+     "title": "belongs_to, has_one, has_many, through, polymorphic, and inverse associations",
+     "when": "a change declares or alters an association's type, options, through path, polymorphism, or inverse. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "loading-security-testing.md",
+     "title": "Loading, security and tenant isolation, performance, and testing",
+     "when": "a change alters association loading, crosses tenant or authorization boundaries, has capacity impact, or needs association tests. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "persistence-effects.md",
+     "title": "Autosave, dependent lifecycle, counter caches, touch, callbacks, and extensions",
+     "when": "a change alters autosave or nested writes, dependent behavior, counter caches or touch, association callbacks, or extensions. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "rails-validations": {
+   "family": "rails",
+   "description": "Use when implementing, reviewing, debugging, or testing Rails model validation contracts, validation contexts, error semantics, conditional rules, custom validators, database-backed invariants, or validation bypass paths.",
+   "triggers": [
+    "validation",
+    "validations",
+    "errors",
+    "validation context",
+    "validation contexts",
+    "validation lifecycle",
+    "validates_associated",
+    "validates_with",
+    "validation callbacks",
+    "conditional validation",
+    "allow_nil",
+    "allow_blank",
+    "except_on",
+    "strict validation",
+    "strict validations",
+    "custom validator",
+    "validation bypass",
+    "uniqueness",
+    "invariant",
+    "model validation"
+   ],
+   "references": [
+    {
+     "file": "contexts-and-errors.md",
+     "title": "Validation contexts and validation errors",
+     "when": "a change adds validation contexts or alters error keys, messages, or error details. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "custom-associated-strict.md",
+     "title": "Custom, associated, strict, and callback validation",
+     "when": "a change adds custom validation methods or validators, validates associations, uses strict validation, or adds validation callbacks. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "integration-performance-security.md",
+     "title": "API, form, and controller integration, performance, and tenant isolation",
+     "when": "validation errors cross an API/form/controller boundary, or a validation has performance or tenant-isolation impact. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "lifecycle-and-validators.md",
+     "title": "Validation lifecycle, built-in validators, and conditional validation",
+     "when": "a change adds or alters validators, when validation runs, or optional/conditional rules. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "uniqueness-and-bypass.md",
+     "title": "Uniqueness, concurrent invariants, and validation bypass paths",
+     "when": "a change validates uniqueness or concurrent invariants, or writes through paths that skip validation. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "rails-authentication": {
+   "family": "rails",
+   "description": "Use when designing, implementing, reviewing, testing, or debugging Rails authentication, credentials, sessions, password recovery, login abuse controls, authentication context propagation, or browser/API identity boundaries.",
+   "triggers": [
+    "authentication",
+    "session",
+    "sign in",
+    "sign out",
+    "protected route",
+    "password reset",
+    "session fixation",
+    "session revocation",
+    "remember me",
+    "bearer token",
+    "account lockout",
+    "login throttling",
+    "current user",
+    "reauthentication",
+    "authentication generator",
+    "Rails authentication generator",
+    "sign",
+    "fixation",
+    "rotation",
+    "in",
+    "out",
+    "protected",
+    "route",
+    "password",
+    "reset",
+    "revocation",
+    "remember",
+    "me",
+    "bearer",
+    "token",
+    "account",
+    "lockout"
+   ],
+   "references": [
+    {
+     "file": "browser-api-and-propagation.md",
+     "title": "Browser versus API authentication, context propagation, callbacks, and failure contracts",
+     "when": "a change adds API/token authentication, propagates the actor to jobs or services, adds authentication hooks, or changes failure responses. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "mechanism-and-credentials.md",
+     "title": "Authentication mechanism, identity, credential storage, and state machine",
+     "when": "a change alters the authentication mechanism, identity model, credential storage, or authentication states. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "operations-and-testing.md",
+     "title": "Observability, audit, performance, and testing",
+     "when": "adding authentication audit/telemetry, reviewing capacity, or choosing and writing authentication tests. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "recovery-and-abuse.md",
+     "title": "Password recovery, abuse controls, sensitive operations, and compromise response",
+     "when": "a change alters password reset, login throttling or lockout, re-authentication for sensitive operations, or compromise handling. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    },
+    {
+     "file": "sessions.md",
+     "title": "Sessions, fixation, revocation, cookies, remember-me, and devices",
+     "when": "a change alters session establishment, rotation, expiry, revocation, cookies, remember-me, or multi-device sessions. The operating rules, invariants, and verification steps stay in the skill's `SKILL.md`."
+    }
+   ]
+  },
+  "rails-authorization": {
+   "family": "rails",
+   "description": "Design and review authorization as an explicit Rails policy, resource-scope, tenant, and execution-boundary contract.",
+   "triggers": [
+    "authorization",
+    "policy",
+    "Pundit",
+    "CanCanCan",
+    "authorization policy",
+    "authorized scope",
+    "object-level authorization",
+    "IDOR",
+    "tenant isolation",
+    "role",
+    "permission",
+    "capability",
+    "ownership authorization",
+    "policy scope",
+    "access control",
+    "tenant"
+   ],
+   "references": []
+  },
+  "rails-cross-boundary-authorization-security": {
+   "family": "security",
+   "description": "Design and review authorization as a composed security boundary across controllers, services, jobs, APIs, Action Cable, engines, operational commands, events, tenants, and caches.",
+   "triggers": [
+    "cross-boundary authorization",
+    "authorization composition",
+    "authorization context",
+    "decision boundary",
+    "authorized resource",
+    "service authorization",
+    "controller service authorization",
+    "background re-authorization",
+    "API authorization",
+    "Action Cable authorization",
+    "realtime authorization",
+    "engine authorization",
+    "operational authorization",
+    "event authorization",
+    "capability propagation",
+    "authorization denial",
+    "authorization cache",
+    "authorization audit",
+    "authorization",
+    "cross-boundary",
+    "policy",
+    "tenant",
+    "service",
+    "job",
+    "API",
+    "Action",
+    "Cable",
+    "engine",
+    "operational",
+    "command",
+    "event",
+    "capability",
+    "denial",
+    "cache",
+    "audit"
+   ],
+   "references": []
+  },
+  "rails-asset-build-engineering": {
+   "family": "rails",
+   "description": "Use when designing, implementing, reviewing, testing, or debugging Rails JavaScript/CSS asset loading, bundling, compilation, development processes, and production asset builds.",
+   "triggers": [
+    "asset",
+    "assets",
+    "build",
+    "asset pipeline",
+    "Importmap",
+    "importmap-rails",
+    "jsbundling",
+    "jsbundling-rails",
+    "cssbundling",
+    "cssbundling-rails",
+    "Propshaft",
+    "Sprockets",
+    "bin/dev",
+    "Procfile.dev",
+    "precompile",
+    "JavaScript build",
+    "CSS build",
+    "pipeline",
+    "JavaScript",
+    "CSS"
+   ],
+   "references": []
+  },
+  "rails-rack-middleware-engineering": {
+   "family": "rails",
+   "description": "Design and review Rack and Rails middleware as explicit request/response, ordering, failure, security, observability, and concurrency boundaries.",
+   "triggers": [
+    "Rack",
+    "rack",
+    "middleware",
+    "request",
+    "ID",
+    "trusted",
+    "proxy",
+    "config.middleware",
+    "config.ru",
+    "bin/rails",
+    "bin/rails middleware",
+    "call(env)",
+    "short-circuit",
+    "request ID",
+    "trusted proxy"
+   ],
+   "references": []
+  },
+  "rails-encryption-credentials-engineering": {
+   "family": "rails",
+   "description": "Design and review Rails credentials, secret storage, key management, application-level encryption, rotation, migration, and secret-safe operational boundaries.",
+   "triggers": [
+    "credentials",
+    "config/credentials.yml.enc",
+    "config/credentials",
+    "master.key",
+    "RAILS_MASTER_KEY",
+    "credentials:edit",
+    "credentials:show",
+    "secret_key_base",
+    "Active Record Encryption",
+    "ActiveRecord::Encryption",
+    "encrypts",
+    "deterministic encryption",
+    "encrypted attribute",
+    "db:encryption:init",
+    "key rotation",
+    "rails credentials:fetch",
+    "credential fetch",
+    "Active",
+    "Record",
+    "Encryption",
+    "deterministic",
+    "encrypted",
+    "attribute",
+    "key",
+    "rotation",
+    "encryption"
+   ],
+   "references": []
+  },
+  "rails-serialization-globalid-engineering": {
+   "family": "rails",
+   "description": "Design and review Rails serialization, JSON representation, Active Job argument serialization, Global ID, Signed Global ID, object identity, payload versioning, and safe deserialization boundaries.",
+   "triggers": [
+    "serialization",
+    "serializable_hash",
+    "as_json",
+    "to_json",
+    "ActiveModel::Serialization",
+    "ActiveModel::Serializers::JSON",
+    "JSON representation",
+    "serializer",
+    "nested serialization",
+    "GlobalID",
+    "GlobalId",
+    "SignedGlobalID",
+    "Global ID",
+    "GlobalID::Locator",
+    "to_global_id",
+    "to_signed_global_id",
+    "to_sgid",
+    "Active Job arguments",
+    "custom serializer",
+    "deserialization",
+    "Active",
+    "Job",
+    "arguments",
+    "custom"
+   ],
+   "references": []
+  },
+  "rails-operational-tasks-maintenance": {
+   "family": "rails",
+   "description": "Design and review Rails operational commands, custom Rake tasks, Rails runner jobs, maintenance workflows, cleanup operations, data repair tasks, and one-off production-safe automation.",
+   "triggers": [
+    "Rake",
+    "task",
+    "lib/tasks",
+    "bin/rails runner",
+    "runner",
+    "maintenance",
+    "cleanup",
+    "backfill",
+    "repair",
+    "reconciliation",
+    "data repair",
+    "dry-run",
+    "idempotent",
+    "checkpoint",
+    "batch",
+    "lock",
+    "runbook",
+    "operational task",
+    "bin/rails"
+   ],
+   "references": []
+  },
+  "rails-staff-principal-architecture": {
+   "family": "architecture",
+   "description": "Make senior staff/principal-level Rails architecture decisions about boundaries, dependencies, modularity, coupling, ownership, evolution, and system-wide tradeoffs without adding architecture for its own sake.",
+   "triggers": [
+    "architecture",
+    "staff architecture",
+    "principal architecture",
+    "architectural decision",
+    "modular monolith",
+    "bounded context",
+    "dependency direction",
+    "data ownership",
+    "shared kernel",
+    "change coupling",
+    "service extraction",
+    "distributed boundary",
+    "architecture migration",
+    "ADR",
+    "architecture fitness",
+    "architecture tradeoff",
+    "architecture ownership",
+    "staff",
+    "principal",
+    "modular",
+    "monolith",
+    "bounded",
+    "context",
+    "dependency",
+    "direction",
+    "data",
+    "ownership",
+    "coupling",
+    "extraction",
+    "migration",
+    "fitness",
+    "tradeoff"
+   ],
+   "references": []
+  },
+  "rails-initialization-configuration-engineering": {
+   "family": "rails",
+   "description": "Design Rails boot, initialization, configuration, environment, and lifecycle boundaries with explicit ownership, ordering, reload, security, and failure contracts.",
+   "triggers": [
+    "initializer",
+    "config.initializers",
+    "config/application.rb",
+    "config/environment.rb",
+    "config/boot.rb",
+    "config.ru",
+    "config.x",
+    "before_initialize",
+    "after_initialize",
+    "to_prepare",
+    "load_defaults"
+   ],
+   "references": []
+  },
+  "rails-engines-railties-engineering": {
+   "family": "rails",
+   "description": "Design and review Rails Engines and Railties as isolated extension boundaries with explicit boot, routing, configuration, loading, dependency, and host-application contracts.",
+   "triggers": [
+    "Rails::Engine",
+    "Rails::Railtie",
+    "Engine",
+    "Railtie",
+    "plugin",
+    "mountable",
+    "isolate_namespace",
+    "routes",
+    "engine routes",
+    "engine",
+    "engine.rb",
+    "railtie.rb",
+    "generators",
+    "gemspec",
+    "engine gemspec"
+   ],
+   "references": []
+  },
+  "rails-hotwire": {
+   "family": "rails",
+   "description": "Use when designing, implementing, reviewing, testing, or debugging Rails Hotwire interfaces using Turbo Drive, Turbo Frames, Turbo Streams, morphing, Stimulus controllers, and server-rendered progressive enhancement.",
+   "triggers": [
+    "Hotwire",
+    "Turbo",
+    "turbo-rails",
+    "Turbo Drive",
+    "Turbo Frames",
+    "Turbo Streams",
+    "Turbo Frame",
+    "Turbo Stream",
+    "Turbo morphing",
+    "morphing",
+    "Stimulus",
+    "stimulus controller",
+    "Stimulus target",
+    "Stimulus value",
+    "progressive enhancement",
+    "turbo form",
+    "Turbo navigation",
+    "Turbo refresh",
+    "Drive",
+    "Frames",
+    "Streams"
+   ],
+   "references": []
+  },
+  "rails-generators": {
+   "family": "rails",
+   "description": "Use when using Rails generators or scaffolding to create conventional models, controllers, views, migrations, tests, or related application structure.",
+   "triggers": [
+    "generator",
+    "scaffold",
+    "rails generate",
+    "CRUD scaffold"
+   ],
+   "references": []
+  }
+ },
+ "patterns": {
+  "rails": [
+   {
+    "id": "authentication-mechanism-boundary",
+    "description": "Identify and preserve the repository's actual authentication mechanism before changing identity or session behavior."
+   },
+   {
+    "id": "credential-storage-contract",
+    "description": "Define safe password and long-lived credential storage, comparison, filtering, rotation, and migration behavior."
+   },
+   {
+    "id": "session-lifecycle-contract",
+    "description": "Specify authenticated session creation, renewal, expiry, logout, and invalidation as explicit state transitions."
+   },
+   {
+    "id": "session-fixation-rotation",
+    "description": "Ensure successful authentication establishes a fresh session context and invalidates attacker-controlled pre-authentication state."
+   },
+   {
+    "id": "session-revocation-contract",
+    "description": "Define authoritative revocation semantics for current-session, per-device, all-session, credential-change, and compromise flows."
+   },
+   {
+    "id": "password-recovery-contract",
+    "description": "Implement password reset as a one-time, expiring authentication protocol with enumeration-safe responses and explicit post-reset revocation."
+   },
+   {
+    "id": "login-abuse-controls",
+    "description": "Design bounded defenses against credential stuffing, brute force, account enumeration, reset abuse, and authentication endpoint overload."
+   },
+   {
+    "id": "remember-me-contract",
+    "description": "Define persistent-login credentials, rotation, device scope, logout behavior, expiration, and replay response."
+   },
+   {
+    "id": "browser-api-auth-boundary",
+    "description": "Separate browser session authentication from API/token authentication so CSRF, cookie, expiry, and revocation semantics remain explicit."
+   },
+   {
+    "id": "authentication-context-propagation",
+    "description": "Carry actor and tenant attribution across jobs, mailers, realtime connections, events, and services without serializing live credentials."
+   },
+   {
+    "id": "authentication-freshness-boundary",
+    "description": "Require recent or fresh authentication for high-impact security operations while preserving ordinary session semantics."
+   },
+   {
+    "id": "query-object",
+    "description": "Use when a database query has meaningful business intent, joins/filters become complex, or query logic needs independent testing without bloating a model."
+   },
+   {
+    "id": "form-object",
+    "description": "Use when input validation and transformation span multiple models or represent a user/application form rather than one persistence record."
+   },
+   {
+    "id": "policy-boundary",
+    "description": "Use when authorization rules need a dedicated, testable boundary rather than being scattered through controllers or views."
+   },
+   {
+    "id": "transaction-boundary",
+    "description": "Use when multiple database changes must succeed or fail together and the atomicity boundary needs to be explicit."
+   },
+   {
+    "id": "request-flow",
+    "description": "Use when implementing an HTTP feature that crosses routing, controller, authorization, domain logic, persistence, and response layers."
+   },
+   {
+    "id": "rest-resource",
+    "description": "Use when designing or changing a conventional Rails CRUD resource and its HTTP contract."
+   },
+   {
+    "id": "scaffold-lifecycle",
+    "description": "Use when using a Rails scaffold or generator as a starting point and then shaping the generated code into the actual application architecture."
+   },
+   {
+    "id": "presenter",
+    "description": "A presentation-focused object that transforms domain data for a view or response."
+   },
+   {
+    "id": "rails-best-practice-review",
+    "description": "Review Rails code-quality findings against the actual repository and Rails version."
+   },
+   {
+    "id": "threat-model",
+    "description": "Map assets, actors, trust boundaries, attacker capabilities, abuse cases, controls, and residual risk for a Rails feature or architecture."
+   },
+   {
+    "id": "trust-boundary",
+    "description": "Place validation, authentication, authorization, and encoding controls at the boundary where trust or authority changes."
+   },
+   {
+    "id": "authorization-matrix",
+    "description": "Specify who may perform which actions on which resources within which tenant or privilege scope."
+   },
+   {
+    "id": "tenant-isolation-review",
+    "description": "Verify tenant isolation across request, persistence, jobs, messages, caches, exports, and administrative paths."
+   },
+   {
+    "id": "secret-management-boundary",
+    "description": "Govern secret storage, access, rotation, exposure, and revocation across Rails code, CI, runtime, logs, and integrations."
+   },
+   {
+    "id": "ssrf-outbound-boundary",
+    "description": "Constrain application-controlled outbound URLs against SSRF, redirect, DNS, credential-forwarding, and resource-exhaustion risks."
+   },
+   {
+    "id": "dependency-supply-chain",
+    "description": "Review Ruby dependencies, build inputs, CI actions, and release artifacts as a security supply-chain boundary."
+   },
+   {
+    "id": "security-regression",
+    "description": "Turn a concrete security boundary failure into an executable abuse-case regression that preserves the security property."
+   },
+   {
+    "id": "security-boundary-review",
+    "description": "Review a security-sensitive Ruby/Rails boundary from attacker-controlled input through authorization, dangerous sinks, and observable tests."
+   },
+   {
+    "id": "cache-boundary",
+    "description": "Introduce or review a Ruby/Rails cache with explicit key, freshness, invalidation, capacity, and failure semantics."
+   },
+   {
+    "id": "api-contract-versioning",
+    "description": "Evolve a Rails API contract without silently breaking existing consumers."
+   },
+   {
+    "id": "webhook-ingestion",
+    "description": "Build replay-safe Rails webhook endpoints with authenticity verification, durable receipt state, and explicit acknowledgement semantics."
+   },
+   {
+    "id": "idempotent-request",
+    "description": "Make Rails API mutations safe across client retries, duplicate submissions, and ambiguous network outcomes."
+   },
+   {
+    "id": "n-plus-one-review",
+    "description": "Detect and correct Rails N+1 query behavior while controlling row explosion, memory use, and query shape."
+   },
+   {
+    "id": "query-plan-evidence",
+    "description": "Use execution-plan evidence to justify Rails database query and index performance changes."
+   },
+   {
+    "id": "connection-pool-capacity",
+    "description": "Size and diagnose Rails database connection pools against aggregate web/job concurrency and database limits."
+   },
+   {
+    "id": "cache-stampede-control",
+    "description": "Control concurrent recomputation of expensive Rails cache values without introducing unnecessary distributed coordination."
+   },
+   {
+    "id": "cache-key-isolation",
+    "description": "Define cache-key identity so tenant, user, authorization, locale, resource, and representation boundaries cannot collide."
+   },
+   {
+    "id": "cache-invalidation-contract",
+    "description": "Tie cache freshness and invalidation to the authoritative domain state transition instead of scattered callers."
+   },
+   {
+    "id": "cache-failure-boundary",
+    "description": "Define safe behavior when a Rails cache store is unavailable, slow, inconsistent, or returning invalid data."
+   },
+   {
+    "id": "cache-warming-strategy",
+    "description": "Precompute only high-value cache entries with bounded concurrency, source protection, and explicit refresh behavior."
+   },
+   {
+    "id": "cache-capacity-review",
+    "description": "Review cache storage, value size, TTL, eviction, hot keys, and serialization as a finite capacity system."
+   },
+   {
+    "id": "slo-error-budget",
+    "description": "Define measurable service objectives and use their error budget to guide operational and engineering decisions."
+   },
+   {
+    "id": "dependency-failure-boundary",
+    "description": "Classify a dependency's criticality and define bounded failure behavior before adding resilience mechanisms."
+   },
+   {
+    "id": "circuit-breaker",
+    "description": "Stop repeated calls to an unhealthy dependency after a justified failure threshold and probe recovery in a bounded way."
+   },
+   {
+    "id": "bulkhead-isolation",
+    "description": "Isolate shared capacity so failure or saturation in one workload cannot exhaust resources required by another."
+   },
+   {
+    "id": "load-shedding",
+    "description": "Protect critical system capacity by rejecting or degrading work before overload causes broad failure."
+   },
+   {
+    "id": "graceful-degradation",
+    "description": "Preserve critical user behavior with explicit stale, reduced, asynchronous, or fallback responses during dependency or capacity failures."
+   },
+   {
+    "id": "recovery-objectives",
+    "description": "Define and verify RTO, RPO, restore, failover, reconciliation, and post-recovery validation for critical Rails workloads."
+   },
+   {
+    "id": "resilience-testing",
+    "description": "Test failure containment and recovery with bounded fault injection and explicit expected system behavior."
+   },
+   {
+    "id": "event-envelope",
+    "description": "Define a stable message envelope that carries identity, type, version, time, and correlation metadata separately from the domain payload."
+   },
+   {
+    "id": "event-schema-evolution",
+    "description": "Evolve event and message schemas while old and new producers/consumers coexist."
+   },
+   {
+    "id": "consumer-group-partitioning",
+    "description": "Choose message partitioning, routing keys, consumer groups, and concurrency around ordering and downstream capacity."
+   },
+   {
+    "id": "dead-letter-replay",
+    "description": "Route terminal message failures to a controlled dead-letter workflow with safe inspection and replay."
+   },
+   {
+    "id": "message-observability",
+    "description": "Instrument message publication, delivery, processing, retry, dead-letter, and lag without exposing sensitive payloads."
+   },
+   {
+    "id": "broker-capacity",
+    "description": "Model message arrival, consumer throughput, downstream limits, lag, and backpressure before changing messaging concurrency."
+   },
+   {
+    "id": "message-handler-boundary",
+    "description": "Isolate transport decoding, validation, deduplication, dispatch, and acknowledgement from domain behavior."
+   },
+   {
+    "id": "distributed-service-boundary",
+    "description": "Define an explicit ownership and communication boundary between independently deployed or persisted components."
+   },
+   {
+    "id": "message-delivery-contract",
+    "description": "Make asynchronous delivery, acknowledgement, duplication, ordering, and replay semantics explicit."
+   },
+   {
+    "id": "outbox-publication",
+    "description": "Persist database changes and the intent to publish a message atomically, then publish from durable outbox state."
+   },
+   {
+    "id": "inbox-deduplication",
+    "description": "Deduplicate at-least-once message delivery with durable message identity and a side-effect boundary."
+   },
+   {
+    "id": "saga-orchestration",
+    "description": "Coordinate a multi-transaction business workflow with explicit state, compensation, retry, and recovery."
+   },
+   {
+    "id": "distributed-lock",
+    "description": "Coordinate cross-process ownership with an expiring distributed lock or lease only when simpler ownership primitives are insufficient."
+   },
+   {
+    "id": "multi-region-data-boundary",
+    "description": "Partition a Rails application across geographic regions with explicit region routing, authoritative write ownership, data residency, replication lag budgets, and fenced failover only when a concrete requirement exists."
+   },
+   {
+    "id": "eventual-consistency",
+    "description": "Make asynchronous propagation and stale-read behavior explicit instead of pretending independent state is immediately consistent."
+   },
+   {
+    "id": "zeitwerk-structure-review",
+    "description": "Review a Ruby/Rails file and constant tree for Zeitwerk path, namespace, inflection, root, reload, and eager-load correctness."
+   },
+   {
+    "id": "puma-capacity",
+    "description": "Size Puma workers and threads against CPU, memory, database pool, and downstream capacity."
+   },
+   {
+    "id": "graceful-shutdown",
+    "description": "Make Rails web and job processes stop safely within the platform termination budget."
+   },
+   {
+    "id": "zero-downtime-release",
+    "description": "Coordinate compatible application, schema, worker, and traffic transitions during a rolling deployment."
+   },
+   {
+    "id": "runtime-config-contract",
+    "description": "Validate required production configuration and secrets without exposing secret values."
+   },
+   {
+    "id": "release-migration-gate",
+    "description": "Gate deployment on migration compatibility and readiness without assuming database rollback equals application rollback."
+   },
+   {
+    "id": "expand-contract-migration",
+    "description": "Safely evolve a production schema across rolling application deployments."
+   },
+   {
+    "id": "production-index",
+    "description": "Add or change a database index with explicit lock, build, and rollback considerations."
+   },
+   {
+    "id": "database-constraint",
+    "description": "Enforce a cross-writer data invariant at the database boundary."
+   },
+   {
+    "id": "batched-backfill",
+    "description": "Execute large data transformations incrementally and resumably without loading the whole table into memory."
+   },
+   {
+    "id": "transaction-lock-boundary",
+    "description": "Define a minimal database transaction and lock boundary for a concurrency-sensitive state transition."
+   },
+   {
+    "id": "request-error-boundary",
+    "description": "Map Rails/domain exceptions to stable HTTP responses at the correct request boundary."
+   },
+   {
+    "id": "request-observability",
+    "description": "Add request correlation, logging, and metrics at the existing Rails request boundary."
+   },
+   {
+    "id": "health-endpoint",
+    "description": "Define Rails health and readiness semantics without coupling liveness to every dependency."
+   },
+   {
+    "id": "instrumentation-event",
+    "description": "Define a stable ActiveSupport::Notifications event without coupling subscribers to domain side effects."
+   },
+   {
+    "id": "idempotent-job",
+    "description": "Make a background job safe when execution can be repeated."
+   },
+   {
+    "id": "job-retry-policy",
+    "description": "Define explicit Active Job retry/discard behavior for transient and permanent failures."
+   },
+   {
+    "id": "transactional-job-enqueue",
+    "description": "Align job enqueue timing with database transaction commit semantics."
+   },
+   {
+    "id": "active-job-continuation-contract",
+    "description": "Use Rails Active Job Continuable for resumable multi-step jobs when durable progress and restart semantics require explicit continuation boundaries."
+   },
+   {
+    "id": "structured-event-reporting",
+    "description": "Use Rails structured Event Reporting for bounded operational events with stable names, correlation fields, and secret-safe payloads."
+   },
+   {
+    "id": "credentials-fetch-contract",
+    "description": "Use the Rails command-line credential fetch boundary for deploy-time integrations when credentials must remain inside the encrypted credentials contract."
+   },
+   {
+    "id": "concurrency-controlled-job",
+    "description": "Bound overlapping background job executions for the same business/resource key."
+   },
+   {
+    "id": "incident-triage",
+    "description": "Structure production incident triage around user impact, scope, onset, evidence, hypotheses, and next safe actions."
+   },
+   {
+    "id": "operational-runbook",
+    "description": "Write operator runbooks as bounded decision procedures with diagnostics, mitigations, recovery checks, and rollback paths."
+   },
+   {
+    "id": "alert-actionability",
+    "description": "Design alerts around actionable user-impact or system-risk signals with bounded context, ownership, and recovery conditions."
+   },
+   {
+    "id": "diagnostic-context",
+    "description": "Preserve stable, privacy-aware correlation context across requests, jobs, messages, dependencies, and deployment metadata."
+   },
+   {
+    "id": "incident-timeline",
+    "description": "Construct factual incident timelines from durable telemetry, deploy, control-plane, and operator-action timestamps."
+   },
+   {
+    "id": "safe-production-debugging",
+    "description": "Select the narrowest read-only or reversible production diagnostic before using state-changing incident interventions."
+   },
+   {
+    "id": "recovery-verification",
+    "description": "Verify incident recovery through user-impact, dependency, workload, backlog, and data-integrity signals rather than a single process health check."
+   },
+   {
+    "id": "post-incident-review",
+    "description": "Convert incident evidence into a small set of owned, testable engineering improvements without turning the review into blame or vague action items."
+   },
+   {
+    "id": "mailer-contract",
+    "description": "Define the recipient, sender, subject, content, attachment, and delivery-mode contract for a Rails mailer action."
+   },
+   {
+    "id": "mailer-delivery-semantics",
+    "description": "Choose and verify synchronous versus asynchronous Rails email delivery with transaction, retry, duplicate, and queue semantics."
+   },
+   {
+    "id": "mailer-provider-boundary",
+    "description": "Isolate SMTP or email API provider behavior behind explicit configuration and adapter/error semantics."
+   },
+   {
+    "id": "mailer-security-boundary",
+    "description": "Review outbound email as a privacy and authorization boundary for recipients, tenant data, links, attachments, and secrets."
+   },
+   {
+    "id": "mailer-observability",
+    "description": "Instrument Rails email delivery with bounded, privacy-aware outcome telemetry and correlation context."
+   },
+   {
+    "id": "active-storage-boundary",
+    "description": "Define the ownership, cardinality, lifecycle, and access contract for a Rails Active Storage attachment."
+   },
+   {
+    "id": "active-storage-upload-security",
+    "description": "Enforce safe Active Storage upload boundaries for type, size, authorization, tenant isolation, and untrusted file content."
+   },
+   {
+    "id": "active-storage-direct-upload",
+    "description": "Design Rails Active Storage direct uploads as an explicit browser-to-storage lifecycle with authorization, CORS, and orphan cleanup."
+   },
+   {
+    "id": "active-storage-serving",
+    "description": "Choose and enforce safe Active Storage serving, redirect, proxy, CDN, and authenticated-controller semantics for private or public files."
+   },
+   {
+    "id": "active-storage-processing",
+    "description": "Bound Active Storage analysis, variants, previews, and transformation workloads across dependencies, jobs, CPU, memory, and failure semantics."
+   },
+   {
+    "id": "active-storage-purge",
+    "description": "Design safe Active Storage deletion, purge, and unattached-blob cleanup with bounded retention and reconciliation."
+   },
+   {
+    "id": "action-cable-connection-auth",
+    "description": "Define authentication and connection identity for Rails Action Cable without confusing identity with channel authorization."
+   },
+   {
+    "id": "action-cable-channel-authorization",
+    "description": "Authorize every Rails Action Cable subscription against the owning resource and tenant boundary."
+   },
+   {
+    "id": "action-cable-stream-contract",
+    "description": "Define deterministic, bounded, authorization-safe Action Cable stream names and broadcasting identities."
+   },
+   {
+    "id": "action-cable-broadcast-contract",
+    "description": "Design small versioned Action Cable broadcast payloads and define compatibility, ordering, and authorization semantics."
+   },
+   {
+    "id": "action-cable-reconciliation",
+    "description": "Reconcile missed realtime state after disconnects, reconnects, or transient pub/sub failures."
+   },
+   {
+    "id": "action-cable-capacity",
+    "description": "Size Rails Action Cable connections, subscriptions, broadcast fan-out, serialization, Redis, and reconnect load."
+   },
+   {
+    "id": "action-cable-failure-boundary",
+    "description": "Define graceful degradation when Action Cable or its pub/sub adapter is unavailable."
+   },
+   {
+    "id": "i18n-locale-resolution",
+    "description": "Resolve Rails locale from trusted application inputs with explicit precedence, supported-locale validation, and deterministic fallback."
+   },
+   {
+    "id": "i18n-translation-key-contract",
+    "description": "Define stable semantic Rails translation keys and interpolation contracts across views, models, mailers, and APIs."
+   },
+   {
+    "id": "i18n-pluralization-formatting",
+    "description": "Use Rails I18n pluralization and locale-aware date/time/number formatting instead of hand-built language rules or presentation strings."
+   },
+   {
+    "id": "i18n-localized-routing",
+    "description": "Design locale-aware Rails routes and URL generation with bounded locale parameters and stable navigation semantics."
+   },
+   {
+    "id": "i18n-context-propagation",
+    "description": "Preserve or deliberately resolve locale across Rails background jobs, asynchronous work, and other execution boundaries."
+   },
+   {
+    "id": "i18n-cache-identity",
+    "description": "Decide when locale belongs in Rails cache identity and prevent localized content from crossing locale boundaries."
+   },
+   {
+    "id": "i18n-security-boundary",
+    "description": "Review Rails localization inputs, translated HTML, interpolation values, locale administration, and localized caches for security and privacy risks."
+   },
+   {
+    "id": "action-text-content-contract",
+    "description": "Define the ownership, purpose, allowed rich-text features, size, visibility, and lifecycle contract for Rails Action Text content."
+   },
+   {
+    "id": "action-text-sanitization-security",
+    "description": "Preserve safe Rails Action Text sanitization and review HTML, links, interpolation, and custom rendering for XSS and content-security risks."
+   },
+   {
+    "id": "action-text-attachment-authorization",
+    "description": "Authorize Action Text embedded Active Storage attachments and Signed Global ID attachables against the owning resource and tenant."
+   },
+   {
+    "id": "action-text-rendering",
+    "description": "Use the Rails Action Text rendering path for sanitized HTML, attachables, layouts, and plain-text extraction without duplicating rich-text parsing."
+   },
+   {
+    "id": "action-text-api-boundary",
+    "description": "Define stable API representations for Rails Action Text without exposing internal RichText or attachment storage structure."
+   },
+   {
+    "id": "action-text-preload-performance",
+    "description": "Control Rails Action Text RichText and embedded-attachment queries with measured preloading and bounded rendering work."
+   },
+   {
+    "id": "action-text-lifecycle",
+    "description": "Coordinate Rails Action Text creation, updates, deletion, embedded resources, and transactional/background lifecycle semantics."
+   },
+   {
+    "id": "action-text-attachable-contract",
+    "description": "Define safe Rails Action Text attachable types, Signed Global ID usage, rendering partials, and missing-record behavior."
+   },
+   {
+    "id": "active-support-loading-boundary",
+    "description": "Choose and verify the smallest Active Support loading/import boundary for Rails applications and reusable Ruby libraries."
+   },
+   {
+    "id": "active-support-concern-composition",
+    "description": "Design narrow ActiveSupport::Concern modules with explicit host contracts and dependency-safe composition."
+   },
+   {
+    "id": "active-support-class-configuration",
+    "description": "Use class_attribute for deliberately inherited Rails configuration without creating hidden mutable global state."
+   },
+   {
+    "id": "active-support-current-context",
+    "description": "Define narrow CurrentAttributes usage with explicit reset, ownership, concurrency, and background-job boundaries."
+   },
+   {
+    "id": "active-support-notifications-contract",
+    "description": "Define stable ActiveSupport::Notifications event names, payloads, timing, privacy, and subscriber behavior."
+   },
+   {
+    "id": "active-support-callback-boundary",
+    "description": "Define generic Active Support callback lifecycles without hiding application workflows in callback chains."
+   },
+   {
+    "id": "active-support-time-semantics",
+    "description": "Keep Rails time, date, timezone, and elapsed-duration behavior explicit and correct across DST and concurrency boundaries."
+   },
+   {
+    "id": "active-support-inflection-boundary",
+    "description": "Use Active Support inflection and constantization safely at naming and framework boundaries."
+   },
+   {
+    "id": "active-model-boundary",
+    "description": "Decide when a Rails-facing plain Ruby object should use Active Model instead of remaining a PORO or becoming Active Record."
+   },
+   {
+    "id": "active-model-attributes-contract",
+    "description": "Define typed attributes, defaults, casting, and serialization semantics for Active Model objects."
+   },
+   {
+    "id": "active-model-validation-contract",
+    "description": "Define validation and error semantics for non-persisted Active Model objects."
+   },
+   {
+    "id": "active-model-dirty-lifecycle",
+    "description": "Define explicit dirty-state transitions for non-persisted Active Model objects."
+   },
+   {
+    "id": "active-model-callback-boundary",
+    "description": "Use explicit Active Model callbacks only for intrinsic model lifecycle hooks and avoid hiding workflows in callback chains."
+   },
+   {
+    "id": "active-model-conversion-contract",
+    "description": "Define Active Model conversion, naming, key, and URL semantics for Rails-facing non-persisted objects."
+   },
+   {
+    "id": "active-model-serialization-contract",
+    "description": "Define explicit serialization fields and privacy rules for Active Model objects crossing application or API boundaries."
+   },
+   {
+    "id": "action-view-partial-contract",
+    "description": "Define stable Action View partial inputs, outputs, and rendering responsibilities."
+   },
+   {
+    "id": "action-view-strict-locals",
+    "description": "Use strict Action View local signatures to make reusable templates explicit and reduce accidental rendering variants."
+   },
+   {
+    "id": "action-view-output-safety",
+    "description": "Review and implement safe HTML rendering in Action View without bypassing Rails escaping or sanitizer boundaries."
+   },
+   {
+    "id": "action-view-layout-contract",
+    "description": "Define layout selection and shared presentation responsibilities without hiding business behavior in Action View layouts."
+   },
+   {
+    "id": "action-view-helper-boundary",
+    "description": "Keep Rails view helpers focused on presentation transformations instead of hiding domain workflows."
+   },
+   {
+    "id": "action-view-render-performance",
+    "description": "Investigate Action View rendering cost using template, partial, query, allocation, cache, and output evidence."
+   },
+   {
+    "id": "action-view-localized-template",
+    "description": "Define locale-specific Action View template selection without duplicating authorization or business behavior."
+   },
+   {
+    "id": "action-controller-request-boundary",
+    "description": "Use when a controller must translate HTTP request data into an explicit application input contract."
+   },
+   {
+    "id": "strong-parameters-contract",
+    "description": "Use when an action mutates or forwards request parameters and the permitted shape must be explicit."
+   },
+   {
+    "id": "controller-response-contract",
+    "description": "Use when a controller action's status, body, headers, format, or redirect behavior is part of an HTTP contract."
+   },
+   {
+    "id": "controller-session-cookie-boundary",
+    "description": "Use when controller behavior reads or writes sessions, cookies, or flash state."
+   },
+   {
+    "id": "action-controller-callback-contract",
+    "description": "Use when adding or reviewing before_action, after_action, or around_action behavior."
+   },
+   {
+    "id": "controller-content-negotiation",
+    "description": "Use when one controller endpoint serves multiple HTTP representations or must reject unsupported formats."
+   },
+   {
+    "id": "conditional-response-cache",
+    "description": "Use when a controller can safely use ETag or Last-Modified validators for conditional HTTP responses."
+   },
+   {
+    "id": "controller-streaming-download",
+    "description": "Use when a controller serves large files or long-lived response streams."
+   },
+   {
+    "id": "controller-exception-boundary",
+    "description": "Use when controller exceptions must be mapped to stable HTTP responses without hiding programmer defects."
+   },
+   {
+    "id": "action-mailbox-ingress-boundary",
+    "description": "Define the external provider or MTA ingress boundary before Action Mailbox creates an InboundEmail."
+   },
+   {
+    "id": "active-record-model-boundary",
+    "description": "Use when deciding what behavior belongs on an Active Record model versus a service, policy, or plain object."
+   },
+   {
+    "id": "active-record-query-contract",
+    "description": "Use when an Active Record query must preserve relation shape, cardinality, ordering, and laziness/materialization semantics."
+   },
+   {
+    "id": "active-record-relation-composition",
+    "description": "Use when building reusable, composable ActiveRecord::Relation logic."
+   },
+   {
+    "id": "active-record-scope-contract",
+    "description": "Use when adding or reviewing named scopes or default_scope behavior."
+   },
+   {
+    "id": "active-record-persistence-lifecycle",
+    "description": "Use when changing save/update/destroy lifecycle or behavior that depends on persisted state and callbacks."
+   },
+   {
+    "id": "active-record-callback-contract",
+    "description": "Use when adding or reviewing Active Record lifecycle callbacks, especially transactional callbacks."
+   },
+   {
+    "id": "active-record-bulk-write-boundary",
+    "description": "Use when using or reviewing update_all, delete_all, destroy_all, upsert, import, or other bulk persistence APIs."
+   },
+   {
+    "id": "active-record-strict-loading",
+    "description": "Use when preventing accidental lazy loading and making N+1 behavior an explicit Active Record contract."
+   },
+   {
+    "id": "active-record-deletion-contract",
+    "description": "Use when changing destroy/delete/dependent behavior or any deletion that crosses callbacks, associations, storage, or auditing."
+   },
+   {
+    "id": "association-cardinality-contract",
+    "description": "Use when defining or reviewing the cardinality and ownership contract of Active Record associations."
+   },
+   {
+    "id": "association-inverse-contract",
+    "description": "Use when association identity, autosave, validation, or query behavior depends on a bidirectional inverse relationship."
+   },
+   {
+    "id": "through-association-contract",
+    "description": "Use when designing or changing has_many through or has_one through relationships and join-model lifecycle."
+   },
+   {
+    "id": "polymorphic-association-boundary",
+    "description": "Use when implementing or reviewing polymorphic Active Record associations and their type discriminator."
+   },
+   {
+    "id": "association-dependent-lifecycle",
+    "description": "Use when changing dependent behavior or coordinating application and database deletion semantics for an association."
+   },
+   {
+    "id": "association-autosave-contract",
+    "description": "Use when changing how associated records are built, validated, and persisted with a parent record."
+   },
+   {
+    "id": "association-counter-touch-contract",
+    "description": "Use when adding counter_cache or touch and the association creates denormalized lifecycle or timestamp coupling."
+   },
+   {
+    "id": "association-callback-contract",
+    "description": "Use when adding before_add, after_add, before_remove, or after_remove callbacks to a collection association."
+   },
+   {
+    "id": "association-loading-contract",
+    "description": "Use when an association traversal path must have deliberate loading, inverse, or strict-loading behavior."
+   },
+   {
+    "id": "validation-boundary",
+    "description": "Use when deciding where a Rails invariant should be enforced across model validation and database integrity."
+   },
+   {
+    "id": "validation-context-contract",
+    "description": "Use when introducing or reviewing Rails validation contexts for named operations or state transitions."
+   },
+   {
+    "id": "validation-condition-contract",
+    "description": "Use when implementing conditional Rails validations with explicit if, unless, nil, or blank semantics."
+   },
+   {
+    "id": "validation-uniqueness-database-contract",
+    "description": "Use when combining Rails uniqueness validation with authoritative database uniqueness enforcement."
+   },
+   {
+    "id": "validation-associated-graph",
+    "description": "Use when validating owned Active Record associations without creating an unbounded validation graph."
+   },
+   {
+    "id": "validation-custom-validator",
+    "description": "Use when a coherent Rails validation rule is genuinely reusable across model types."
+   },
+   {
+    "id": "validation-strict-failure",
+    "description": "Use when invalid Rails model state must raise a deliberate strict-validation exception."
+   },
+   {
+    "id": "validation-error-contract",
+    "description": "Use when Rails validation errors cross form, API, service, or other presentation boundaries."
+   },
+   {
+    "id": "validation-callback-boundary",
+    "description": "Use when before_validation or after_validation behavior needs an explicit lifecycle boundary."
+   },
+   {
+    "id": "validation-bypass-audit",
+    "description": "Use when a Rails invariant may be bypassed by direct or bulk write APIs."
+   },
+   {
+    "id": "route-precedence-contract",
+    "description": "Use when adding or reordering Rails routes where earlier generic routes can shadow later specific routes."
+   },
+   {
+    "id": "nested-route-boundary",
+    "description": "Use when mapping parent-child resource addressing and deciding whether nested or shallow routing is the correct public contract."
+   },
+   {
+    "id": "route-scope-namespace-contract",
+    "description": "Use when changing Rails namespaces, scope path/module/as dimensions, or controller routing modules."
+   },
+   {
+    "id": "route-constraint-contract",
+    "description": "Use when adding segment, request, host, subdomain, format, or custom Rails routing constraints."
+   },
+   {
+    "id": "route-helper-contract",
+    "description": "Use when changing Rails route names, path/url helpers, polymorphic routing, route parameters, or object-based URL generation."
+   },
+   {
+    "id": "route-concern-contract",
+    "description": "Use when extracting or reusing a stable group of Rails resource routes through routing concerns."
+   },
+   {
+    "id": "direct-route-resolution",
+    "description": "Use when introducing Rails direct routes or resolve mappings for custom URL generation and object routing."
+   },
+   {
+    "id": "mounted-endpoint-boundary",
+    "description": "Use when mounting a Rack application or Rails engine into the application's route set."
+   },
+   {
+    "id": "catch-all-route-boundary",
+    "description": "Use when adding wildcards, catch-all routes, SPA fallbacks, legacy redirects, or broad fallback routing."
+   },
+   {
+    "id": "action-mailbox-routing-contract",
+    "description": "Define deterministic Action Mailbox recipient routing, precedence, and unmatched-email behavior."
+   },
+   {
+    "id": "action-mailbox-authenticity-security",
+    "description": "Separate ingress authentication, sender identity proof, recipient authorization, content safety, and tenant isolation for inbound email."
+   },
+   {
+    "id": "action-mailbox-idempotency",
+    "description": "Make inbound email business effects safe under duplicate delivery and controlled replay."
+   },
+   {
+    "id": "action-mailbox-processing-lifecycle",
+    "description": "Model Action Mailbox processing around explicit prerequisites, domain work, failure classification, and framework status transitions."
+   },
+   {
+    "id": "action-mailbox-tenant-association",
+    "description": "Resolve inbound email to a tenant or resource through authoritative application state and preserve isolation downstream."
+   },
+   {
+    "id": "action-mailbox-failure-quarantine",
+    "description": "Contain malformed, poison, or operationally unsafe inbound email without silently losing business evidence."
+   },
+   {
+    "id": "release-risk-classification",
+    "description": "Classify release risk from reversibility, blast radius, contract, data, security, and runtime impact before choosing release gates."
+   },
+   {
+    "id": "artifact-provenance",
+    "description": "Preserve source, dependency, build, and artifact identity across release promotion."
+   },
+   {
+    "id": "deployment-gate",
+    "description": "Convert release evidence into explicit pass/fail gates with bounded thresholds, ownership, and abort behavior."
+   },
+   {
+    "id": "progressive-delivery",
+    "description": "Expose a release incrementally and gate expansion on user-impact and resource evidence."
+   },
+   {
+    "id": "environment-parity",
+    "description": "Identify deliberate environment differences that can invalidate release evidence and make them explicit release concerns."
+   },
+   {
+    "id": "rollback-rollforward",
+    "description": "Decide and execute rollback or roll-forward based on durable-state compatibility, external side effects, and recoverability."
+   },
+   {
+    "id": "release-health-verification",
+    "description": "Verify release success using user-impact, dependency, workload, readiness, and correctness signals over a defined observation window."
+   },
+   {
+    "id": "release-evidence",
+    "description": "Preserve a machine-readable record of release identity, gate outcomes, exposure stages, recovery actions, and final state."
+   },
+   {
+    "id": "authorization-mechanism-boundary",
+    "description": "Reuse the repository's authoritative authorization mechanism without creating parallel policy paths."
+   },
+   {
+    "id": "policy-object-boundary",
+    "description": "Encapsulate a coherent authorization decision in a small policy object."
+   },
+   {
+    "id": "authorized-scope-boundary",
+    "description": "Constrain collection queries to resources the actor may enumerate."
+   },
+   {
+    "id": "tenant-isolation-authorization",
+    "description": "Enforce tenant membership and resource ownership as an explicit authorization boundary."
+   },
+   {
+    "id": "role-capability-boundary",
+    "description": "Separate role grouping from the actual capabilities required by an operation."
+   },
+   {
+    "id": "contextual-authorization",
+    "description": "Apply authorization rules that depend on explicit resource state, tenant, ownership, or other context."
+   },
+   {
+    "id": "authorization-service-boundary",
+    "description": "Protect security-sensitive application services when they can be invoked outside controllers."
+   },
+   {
+    "id": "background-authorization-boundary",
+    "description": "Re-authorize security-sensitive work when a background job executes after the request has ended."
+   },
+   {
+    "id": "api-authorization-boundary",
+    "description": "Enforce authorization explicitly at API resource boundaries."
+   },
+   {
+    "id": "action-cable-authorization-boundary",
+    "description": "Authorize realtime connections, subscriptions, streams, and state-changing channel actions."
+   },
+   {
+    "id": "authorization-cache-identity",
+    "description": "Key authorization caches by every input that can change a permission decision."
+   },
+   {
+    "id": "authorization-audit-contract",
+    "description": "Record bounded authorization outcomes without leaking sensitive policy inputs."
+   },
+   {
+    "id": "authorization-context-contract",
+    "description": "Authorization Context Contract"
+   },
+   {
+    "id": "authorization-decision-boundary",
+    "description": "Authorization Decision Boundary"
+   },
+   {
+    "id": "authorized-resource-resolution",
+    "description": "Authorized Resource Resolution Contract"
+   },
+   {
+    "id": "controller-service-authorization-composition",
+    "description": "Controller and Service Authorization Composition"
+   },
+   {
+    "id": "background-reauthorization-composition",
+    "description": "Background Re-Authorization Composition"
+   },
+   {
+    "id": "api-authorization-composition",
+    "description": "API Authorization Composition Contract"
+   },
+   {
+    "id": "realtime-authorization-composition",
+    "description": "Realtime Authorization Composition Contract"
+   },
+   {
+    "id": "engine-authorization-composition",
+    "description": "Engine Authorization Composition Contract"
+   },
+   {
+    "id": "operational-authorization-composition",
+    "description": "Operational Authorization Composition Contract"
+   },
+   {
+    "id": "event-consumer-authorization-contract",
+    "description": "Event Consumer Authorization Contract"
+   },
+   {
+    "id": "capability-propagation-contract",
+    "description": "Authorization Capability Propagation Contract"
+   },
+   {
+    "id": "authorization-denial-contract",
+    "description": "Authorization Denial Contract"
+   },
+   {
+    "id": "authorization-cache-composition",
+    "description": "Authorization Cache Composition Contract"
+   },
+   {
+    "id": "authorization-audit-composition",
+    "description": "Authorization Audit Composition Contract"
+   },
+   {
+    "id": "architecture-problem-statement",
+    "description": "Architecture Problem Statement Contract"
+   },
+   {
+    "id": "dependency-direction-contract",
+    "description": "Dependency Direction Contract"
+   },
+   {
+    "id": "bounded-context-contract",
+    "description": "Bounded Context Contract"
+   },
+   {
+    "id": "modular-monolith-boundary",
+    "description": "Modular Monolith Boundary Contract"
+   },
+   {
+    "id": "data-ownership-contract",
+    "description": "Data Ownership Contract"
+   },
+   {
+    "id": "shared-kernel-contract",
+    "description": "Shared Kernel Contract"
+   },
+   {
+    "id": "application-service-boundary",
+    "description": "Application Service Boundary Contract"
+   },
+   {
+    "id": "cross-cutting-ownership-contract",
+    "description": "Cross-Cutting Ownership Contract"
+   },
+   {
+    "id": "change-coupling-contract",
+    "description": "Change Coupling Contract"
+   },
+   {
+    "id": "distributed-boundary-readiness",
+    "description": "Distributed Boundary Readiness Contract"
+   },
+   {
+    "id": "architectural-migration-contract",
+    "description": "Architectural Migration Contract"
+   },
+   {
+    "id": "architecture-decision-record-contract",
+    "description": "Architecture Decision Record Contract"
+   },
+   {
+    "id": "architecture-fitness-check",
+    "description": "Architecture Fitness Check Contract"
+   },
+   {
+    "id": "architecture-tradeoff-contract",
+    "description": "Architecture Tradeoff Contract"
+   },
+   {
+    "id": "architecture-ownership-contract",
+    "description": "Architecture Ownership Contract"
+   },
+   {
+    "id": "turbo-drive-navigation-contract",
+    "description": "Define page navigation behavior, persistent shell state, and Turbo lifecycle cleanup."
+   },
+   {
+    "id": "turbo-frame-contract",
+    "description": "Define a stable Turbo Frame identity and server response boundary."
+   },
+   {
+    "id": "turbo-stream-response-contract",
+    "description": "Define deterministic Turbo Stream response actions and target identities."
+   },
+   {
+    "id": "turbo-stream-broadcast-contract",
+    "description": "Safely broadcast committed Turbo Stream updates to authorized subscribers."
+   },
+   {
+    "id": "turbo-morph-identity",
+    "description": "Preserve stable DOM identity and client state when Turbo morphing or refresh is used."
+   },
+   {
+    "id": "turbo-form-contract",
+    "description": "Preserve authentication, validation, HTTP status, redirect, and HTML fallback semantics for Turbo forms."
+   },
+   {
+    "id": "stimulus-controller-boundary",
+    "description": "Keep a Stimulus controller focused on one browser interaction responsibility."
+   },
+   {
+    "id": "stimulus-target-value-contract",
+    "description": "Use explicit Stimulus targets and values as a stable controller/view interface."
+   },
+   {
+    "id": "stimulus-lifecycle-boundary",
+    "description": "Make Stimulus connect/disconnect behavior safe across Turbo DOM replacement."
+   },
+   {
+    "id": "hotwire-progressive-enhancement",
+    "description": "Treat Hotwire as enhancement over a valid server-rendered HTML contract."
+   },
+   {
+    "id": "hotwire-csrf-security",
+    "description": "Preserve Rails CSRF and server-side security semantics in Turbo-driven interactions."
+   },
+   {
+    "id": "rails-asset-pipeline-contract",
+    "description": "Define the Rails static asset resolution, fingerprinting, and delivery boundary."
+   },
+   {
+    "id": "importmap-contract",
+    "description": "Define browser-native JavaScript module resolution through Rails-managed import maps."
+   },
+   {
+    "id": "jsbundling-contract",
+    "description": "Define a reproducible Rails JavaScript bundling boundary."
+   },
+   {
+    "id": "cssbundling-contract",
+    "description": "Define a reproducible Rails CSS compilation and delivery boundary."
+   },
+   {
+    "id": "bin-dev-process-contract",
+    "description": "Define deterministic Rails development process orchestration for web and asset watchers."
+   },
+   {
+    "id": "asset-build-reproducibility",
+    "description": "Ensure frontend asset builds are reproducible from declared dependencies and source."
+   },
+   {
+    "id": "asset-build-production-parity",
+    "description": "Verify development and production asset contracts remain intentionally aligned."
+   },
+   {
+    "id": "asset-dependency-boundary",
+    "description": "Keep frontend dependency installation, runtime versions, and Rails integration explicit."
+   },
+   {
+    "id": "engine-boundary-contract",
+    "description": "Engine Boundary Contract"
+   },
+   {
+    "id": "engine-namespace-isolation",
+    "description": "Engine Namespace Isolation"
+   },
+   {
+    "id": "engine-mount-routing-contract",
+    "description": "Engine Mount and Routing Contract"
+   },
+   {
+    "id": "engine-configuration-boundary",
+    "description": "Engine Configuration Boundary"
+   },
+   {
+    "id": "railtie-initialization-boundary",
+    "description": "Railtie Initialization Boundary"
+   },
+   {
+    "id": "engine-autoloading-contract",
+    "description": "Engine Autoloading Contract"
+   },
+   {
+    "id": "engine-dependency-compatibility",
+    "description": "Engine Dependency Compatibility Contract"
+   },
+   {
+    "id": "engine-host-override-contract",
+    "description": "Engine Host Override Contract"
+   },
+   {
+    "id": "engine-generator-task-contract",
+    "description": "Engine Generator and Task Contract"
+   },
+   {
+    "id": "engine-dummy-app-testing",
+    "description": "Engine Dummy Application Testing Contract"
+   },
+   {
+    "id": "engine-asset-integration-contract",
+    "description": "Engine Asset Integration Contract"
+   },
+   {
+    "id": "engine-cross-engine-composition",
+    "description": "Engine Cross-Composition Contract"
+   },
+   {
+    "id": "credentials-store-contract",
+    "description": "Credentials Store Contract"
+   },
+   {
+    "id": "credentials-environment-selection",
+    "description": "Credentials Environment Selection Contract"
+   },
+   {
+    "id": "master-key-boundary",
+    "description": "Master Key Boundary"
+   },
+   {
+    "id": "credentials-editing-workflow",
+    "description": "Credentials Editing Workflow Contract"
+   },
+   {
+    "id": "secret-key-base-contract",
+    "description": "Secret Key Base Contract"
+   },
+   {
+    "id": "credentials-redaction-contract",
+    "description": "Secret Redaction and Filtering Contract"
+   },
+   {
+    "id": "active-record-encryption-contract",
+    "description": "Active Record Encryption Contract"
+   },
+   {
+    "id": "deterministic-encryption-query-contract",
+    "description": "Deterministic Encryption Query Contract"
+   },
+   {
+    "id": "encrypted-storage-capacity-contract",
+    "description": "Encrypted Storage Capacity Contract"
+   },
+   {
+    "id": "encrypted-data-migration-contract",
+    "description": "Encrypted Data Migration Contract"
+   },
+   {
+    "id": "encryption-key-rotation-contract",
+    "description": "Encryption Key Rotation Contract"
+   },
+   {
+    "id": "credentials-testing-contract",
+    "description": "Credentials and Encryption Testing Contract"
+   },
+   {
+    "id": "serialization-boundary-contract",
+    "description": "Serialization Boundary Contract"
+   },
+   {
+    "id": "serializable-hash-allowlist",
+    "description": "Serializable Hash Allowlist"
+   },
+   {
+    "id": "json-representation-contract",
+    "description": "JSON Representation Contract"
+   },
+   {
+    "id": "nested-serialization-boundary",
+    "description": "Nested Serialization Boundary"
+   },
+   {
+    "id": "sensitive-serialization-contract",
+    "description": "Sensitive Serialization Contract"
+   },
+   {
+    "id": "serialization-versioning-contract",
+    "description": "Serialization Versioning Contract"
+   },
+   {
+    "id": "operational-task-boundary",
+    "description": "Operational Task Boundary"
+   },
+   {
+    "id": "task-namespace-contract",
+    "description": "Task Namespace Contract"
+   },
+   {
+    "id": "environment-gate-contract",
+    "description": "Operational Environment Gate Contract"
+   },
+   {
+    "id": "operational-dry-run-contract",
+    "description": "Operational Dry-Run Contract"
+   },
+   {
+    "id": "idempotent-maintenance-contract",
+    "description": "Idempotent Maintenance Contract"
+   },
+   {
+    "id": "batch-checkpoint-contract",
+    "description": "Batch Checkpoint and Resumability Contract"
+   },
+   {
+    "id": "maintenance-lock-contract",
+    "description": "Maintenance Lock Contract"
+   },
+   {
+    "id": "mutation-invariant-contract",
+    "description": "Maintenance Mutation Invariant Contract"
+   },
+   {
+    "id": "partial-failure-contract",
+    "description": "Operational Partial Failure Contract"
+   },
+   {
+    "id": "operational-observability-contract",
+    "description": "Operational Observability Contract"
+   },
+   {
+    "id": "scheduled-maintenance-overlap-contract",
+    "description": "Scheduled Maintenance Overlap Contract"
+   },
+   {
+    "id": "data-repair-verification-contract",
+    "description": "Data Repair Verification Contract"
+   },
+   {
+    "id": "production-runbook-command-contract",
+    "description": "Production Runbook Command Contract"
+   },
+   {
+    "id": "globalid-identity-contract",
+    "description": "Global ID Identity Contract"
+   },
+   {
+    "id": "signed-globalid-integrity-contract",
+    "description": "Signed Global ID Integrity Contract"
+   },
+   {
+    "id": "globalid-locator-allowlist",
+    "description": "Global ID Locator Allowlist Contract"
+   },
+   {
+    "id": "globalid-resolution-failure-contract",
+    "description": "Global ID Resolution Failure Contract"
+   },
+   {
+    "id": "activejob-argument-serialization-contract",
+    "description": "Active Job Argument Serialization Contract"
+   },
+   {
+    "id": "custom-activejob-serializer-contract",
+    "description": "Custom Active Job Serializer Contract"
+   },
+   {
+    "id": "rack-request-response-contract",
+    "description": "Preserve the Rack environment and response tuple contract at a middleware boundary."
+   },
+   {
+    "id": "middleware-stack-ordering",
+    "description": "Make middleware ordering an explicit behavioral contract."
+   },
+   {
+    "id": "custom-rack-middleware-contract",
+    "description": "Define a small, explicit custom Rack middleware responsibility."
+   },
+   {
+    "id": "middleware-short-circuit-contract",
+    "description": "Short-circuit requests only when the middleware owns the rejection or response."
+   },
+   {
+    "id": "middleware-exception-propagation",
+    "description": "Preserve intentional exception ownership across middleware."
+   },
+   {
+    "id": "middleware-thread-safety",
+    "description": "Keep middleware safe under concurrent request execution."
+   },
+   {
+    "id": "request-id-correlation-boundary",
+    "description": "Initialize and propagate one authoritative request correlation contract."
+   },
+   {
+    "id": "middleware-security-boundary",
+    "description": "Use middleware for transport/infrastructure security controls without moving resource authorization into the stack."
+   },
+   {
+    "id": "middleware-rate-limit-boundary",
+    "description": "Apply rate limiting at the correct infrastructure boundary with explicit capacity and consistency semantics."
+   },
+   {
+    "id": "trusted-proxy-header-contract",
+    "description": "Normalize forwarded request metadata only from a documented trusted proxy boundary."
+   },
+   {
+    "id": "configuration-ownership-contract",
+    "description": "Configuration Ownership Contract"
+   },
+   {
+    "id": "configuration-precedence-contract",
+    "description": "Configuration Precedence Contract"
+   },
+   {
+    "id": "initializer-dependency-contract",
+    "description": "Initializer Dependency Contract"
+   },
+   {
+    "id": "lifecycle-hook-contract",
+    "description": "Lifecycle Hook Contract"
+   },
+   {
+    "id": "reload-safe-initializer",
+    "description": "Reload-Safe Initializer"
+   },
+   {
+    "id": "boot-external-dependency-boundary",
+    "description": "Boot External Dependency Boundary"
+   },
+   {
+    "id": "environment-configuration-contract",
+    "description": "Environment Configuration Contract"
+   },
+   {
+    "id": "boot-failure-contract",
+    "description": "Boot Failure Contract"
+   },
+   {
+    "id": "application-config-contract",
+    "description": "Application Config Contract"
+   },
+   {
+    "id": "boot-performance-contract",
+    "description": "Boot Performance Contract"
+   },
+   {
+    "id": "initializer-testing-contract",
+    "description": "Initializer Testing Contract"
+   },
+   {
+    "id": "middleware-observability-boundary",
+    "description": "Instrument middleware without creating a second telemetry contract."
+   },
+   {
+    "id": "middleware-testing",
+    "description": "Test middleware behavior at the Rack boundary and stack integration boundary."
+   }
+  ],
+  "ruby-design": [
+   {
+    "id": "value-object",
+    "description": "Use when a primitive value has meaningful domain validation, normalization, comparison, formatting, or behavior."
+   },
+   {
+    "id": "service-object",
+    "description": "Use when a named application workflow coordinates multiple collaborators, side effects, or external boundaries."
+   },
+   {
+    "id": "strategy-object",
+    "description": "Use when one stable workflow needs interchangeable algorithms or policies selected by explicit runtime context."
+   },
+   {
+    "id": "composition-over-inheritance",
+    "description": "Use when behavior can be assembled from collaborators and inheritance would mainly provide implementation reuse."
+   },
+   {
+    "id": "adapter",
+    "description": "Use when an external or legacy interface does not match the application's internal contract and should be isolated behind a stable boundary."
+   },
+   {
+    "id": "external-api-client",
+    "description": "Use when integrating a remote HTTP/API boundary that should be isolated from domain code and made testable."
+   },
+   {
+    "id": "resilient-http-client",
+    "description": "Design a bounded, testable outbound HTTP client with explicit timeout, retry, error, and idempotency semantics."
+   },
+   {
+    "id": "ruby-gem",
+    "description": "Use when extracting reusable Ruby functionality into a gem with a deliberate public API, dependency boundary, test suite, and release contract."
+   },
+   {
+    "id": "metaprogramming-boundary",
+    "description": "Use when dynamic Ruby behavior is required and its scope must remain explicit, discoverable, testable, and safe."
+   },
+   {
+    "id": "application-service",
+    "description": "A shared entry-point convention for application operations."
+   },
+   {
+    "id": "command-object",
+    "description": "A focused object representing one executable application action."
+   },
+   {
+    "id": "policy-object",
+    "description": "A focused object that answers an authorization or business decision."
+   },
+   {
+    "id": "null-object",
+    "description": "A safe object representing absence while preserving a collaborator interface."
+   },
+   {
+    "id": "factory",
+    "description": "A construction boundary that selects or assembles an object based on explicit inputs."
+   },
+   {
+    "id": "builder",
+    "description": "A staged construction object for complex object assembly."
+   },
+   {
+    "id": "decorator",
+    "description": "An object that wraps a stable interface to add behavior without changing the wrapped object."
+   },
+   {
+    "id": "facade",
+    "description": "A small interface hiding a complex subsystem."
+   },
+   {
+    "id": "repository",
+    "description": "An abstraction around persistence access when the repository boundary has independent domain value."
+   },
+   {
+    "id": "specification",
+    "description": "A composable object representing a business predicate."
+   },
+   {
+    "id": "state-object",
+    "description": "An object that encapsulates behavior that changes according to an entity's current state."
+   },
+   {
+    "id": "dependency-injection",
+    "description": "An explicit composition boundary for replaceable collaborators."
+   },
+   {
+    "id": "bounded-concurrency",
+    "description": "A bounded worker/queue pattern for concurrent I/O or producer-consumer workloads."
+   },
+   {
+    "id": "performance-investigation",
+    "description": "Investigate a measured Ruby/Rails performance problem from workload and baseline through profiling, hypothesis, targeted change, and remeasurement."
+   },
+   {
+    "id": "service-composition",
+    "description": "A composition boundary for a workflow that coordinates multiple focused operations."
+   },
+   {
+    "id": "rubocop-review",
+    "description": "Apply RuboCop and applicable extension plugins to a Ruby/Rails review without over-enabling plugins or blindly accepting lint findings."
+   }
+  ],
+  "testing": [
+   {
+    "id": "authentication-testing",
+    "description": "Build deterministic transition-focused tests for login, session lifecycle, recovery, revocation, abuse controls, and authentication boundaries."
+   },
+   {
+    "id": "test-boundary-selection",
+    "description": "Select the smallest Rails test boundary that proves the required contract."
+   },
+   {
+    "id": "deterministic-async-test",
+    "description": "Test asynchronous Rails jobs without sleeps, timing races, or bypassing the relevant framework boundary."
+   },
+   {
+    "id": "parallel-safe-test",
+    "description": "Make tests independent of process/thread order, shared state, fixed resources, and implicit database transactions."
+   },
+   {
+    "id": "flaky-test-diagnosis",
+    "description": "Diagnose nondeterministic test failures by reproducing the exact execution conditions."
+   },
+   {
+    "id": "test-performance-budget",
+    "description": "Optimize Rails test-suite performance using measured boot, database, factory, parallelization, and system-test costs."
+   },
+   {
+    "id": "system-test-contract",
+    "description": "Use Rails system tests only for user-visible browser behavior that lower-level tests cannot prove reliably."
+   },
+   {
+    "id": "request-contract",
+    "description": "Test an HTTP endpoint from routing through response while keeping assertions on the stable external contract."
+   },
+   {
+    "id": "parallel-database-test",
+    "description": "Configure concurrent database tests without accidental transaction blocking or connection exhaustion."
+   },
+   {
+    "id": "regression-test",
+    "description": "Use when fixing a defect so the previously failing behavior becomes an explicit executable contract."
+   },
+   {
+    "id": "mailer-testing",
+    "description": "Test Rails mailers deterministically across message contracts, previews, asynchronous delivery, and provider boundaries without live email services."
+   },
+   {
+    "id": "active-storage-testing",
+    "description": "Test Rails Active Storage deterministically across attachment contracts, access control, direct uploads, processing, and cleanup without ordinary CI dependence on cloud storage."
+   },
+   {
+    "id": "action-cable-testing",
+    "description": "Test Rails Action Cable connections, subscriptions, broadcasts, authorization, and reconnect contracts deterministically without live Redis."
+   },
+   {
+    "id": "i18n-testing",
+    "description": "Test Rails localization deterministically across locale isolation, key coverage, interpolation, pluralization, formatting, fallback, URLs, jobs, and cache identity."
+   },
+   {
+    "id": "action-text-testing",
+    "description": "Test Rails Action Text deterministically across rich-text persistence, sanitization, authorization, attachments, attachables, rendering, APIs, and performance boundaries."
+   },
+   {
+    "id": "action-view-testing",
+    "description": "Verify Action View rendering contracts deterministically at the smallest boundary that proves behavior."
+   },
+   {
+    "id": "action-controller-testing",
+    "description": "Use when testing an Action Controller HTTP contract across request input, response behavior, lifecycle, and error paths."
+   },
+   {
+    "id": "active-record-testing",
+    "description": "Use when testing Active Record query, persistence, callback, bulk-operation, and loading contracts."
+   },
+   {
+    "id": "association-testing",
+    "description": "Use when testing Active Record association cardinality, mutation, lifecycle, inverse, through, polymorphic, or dependent behavior."
+   },
+   {
+    "id": "validation-testing",
+    "description": "Use when validating Rails model behavior requires deterministic boundary-level tests."
+   },
+   {
+    "id": "active-model-testing",
+    "description": "Test Active Model protocol behavior, validations, attributes, callbacks, conversion, and Rails consumers deterministically."
+   },
+   {
+    "id": "active-support-testing",
+    "description": "Test Active Support composition, context, configuration, callbacks, instrumentation, and time semantics deterministically."
+   },
+   {
+    "id": "action-mailbox-testing",
+    "description": "Test Action Mailbox ingress, routing, mailbox processing, failure, security, and idempotency deterministically without live email providers."
+   },
+   {
+    "id": "route-testing",
+    "description": "Use when proving Rails route recognition, URL generation, precedence, constraints, helpers, or dispatch contracts."
+   },
+   {
+    "id": "authorization-testing",
+    "description": "Test authorization decisions and application boundaries with deterministic allow/deny contracts."
+   },
+   {
+    "id": "hotwire-testing",
+    "description": "Test Turbo and Stimulus behavior at deterministic request, system, and JavaScript boundaries."
+   },
+   {
+    "id": "asset-build-testing",
+    "description": "Test Rails asset builds as deterministic CI and deployment contracts."
+   },
+   {
+    "id": "middleware-testing",
+    "description": "Test middleware behavior at the Rack boundary and stack integration boundary."
+   },
+   {
+    "id": "initializer-testing-contract",
+    "description": "Initializer Testing Contract"
+   },
+   {
+    "id": "credentials-testing-contract",
+    "description": "Credentials and Encryption Testing Contract"
+   },
+   {
+    "id": "engine-dummy-app-testing",
+    "description": "Engine Dummy Application Testing Contract"
+   },
+   {
+    "id": "rspec-request-spec",
+    "description": "Test an HTTP endpoint through the Rails stack with an RSpec request spec."
+   },
+   {
+    "id": "rspec-job-and-mail-enqueue",
+    "description": "Assert Active Job and mailer enqueueing with rspec-rails block matchers, and job behaviour with perform_now."
+   },
+   {
+    "id": "rspec-mailer-spec",
+    "description": "Test a mailer's recipients, headers, and rendered content with an RSpec mailer spec."
+   },
+   {
+    "id": "rspec-factory-traits",
+    "description": "Keep factory_bot factories minimal and name test-relevant states as traits."
+   },
+   {
+    "id": "rspec-shared-examples-contract",
+    "description": "Use RSpec shared examples to enforce one contract across several endpoints or objects."
+   },
+   {
+    "id": "rspec-verifying-doubles",
+    "description": "Stub collaborators with RSpec verifying doubles so tests fail when the real interface changes."
+   }
+  ],
+  "stack-minimality": [
+   {
+    "id": "rails-convention-before-abstraction",
+    "description": "Rails Convention Before Abstraction"
+   },
+   {
+    "id": "active-record-before-repository",
+    "description": "Active Record Before Repository"
+   },
+   {
+    "id": "postgres-constraint-before-application-check",
+    "description": "PostgreSQL Constraint Before Application Check"
+   },
+   {
+    "id": "postgres-index-from-query-evidence",
+    "description": "PostgreSQL Index From Query Evidence"
+   },
+   {
+    "id": "postgres-query-before-cache",
+    "description": "PostgreSQL Query Before Cache"
+   },
+   {
+    "id": "react-local-state-before-context",
+    "description": "React Local State Before Context"
+   },
+   {
+    "id": "react-derived-state-in-render",
+    "description": "React Derived State In Render"
+   },
+   {
+    "id": "react-native-before-dependency",
+    "description": "React Native Before Dependency"
+   },
+   {
+    "id": "typescript-type-before-wrapper",
+    "description": "TypeScript Type Before Wrapper"
+   },
+   {
+    "id": "fullstack-existing-boundary-before-adapter",
+    "description": "Fullstack Existing Boundary Before Adapter"
+   },
+   {
+    "id": "existing-dependency-before-new-gem-package",
+    "description": "Existing Dependency Before New Gem Or Package"
+   },
+   {
+    "id": "modular-monolith-before-service-split",
+    "description": "Modular Monolith Before Service Split"
+   },
+   {
+    "id": "minimal-change-at-shared-root",
+    "description": "Minimal Change At Shared Root"
+   },
+   {
+    "id": "deliberate-simplification-marker",
+    "description": "Deliberate Simplification Marker"
+   }
+  ]
+ },
+ "routes": [
+  {
+   "task": "Runtime/version compatibility",
+   "primary": [
+    "ruby-runtime-compatibility"
+   ],
+   "secondary": [
+    "ruby-core",
+    "ruby-gems-io-services",
+    "ruby-debugging"
+   ]
+  },
+  {
+   "task": "Ruby toolchain/environment setup",
+   "primary": [
+    "ruby-toolchain"
+   ],
+   "secondary": [
+    "ruby-runtime-compatibility",
+    "ruby-gems-io-services",
+    "ruby-debugging"
+   ]
+  },
+  {
+   "task": "Create a Rails application / `rails new`",
+   "primary": [
+    "rails-application-bootstrap"
+   ],
+   "secondary": [
+    "ruby-toolchain",
+    "ruby-runtime-compatibility",
+    "rails-architecture",
+    "rails-generators"
+   ]
+  },
+  {
+   "task": "Ruby gem authoring/packaging/release",
+   "primary": [
+    "ruby-gem-development"
+   ],
+   "secondary": [
+    "ruby-toolchain",
+    "ruby-gems-io-services",
+    "ruby-tdd-refactoring",
+    "pattern:ruby-gem"
+   ]
+  },
+  {
+   "task": "Skill-system maintenance, completeness, registry, routing, or audit",
+   "primary": [
+    "agent-workflow"
+   ],
+   "secondary": [
+    "ruby-clean-code",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Ruby syntax/semantics",
+   "primary": [
+    "ruby-core"
+   ],
+   "secondary": [
+    "ruby-clean-code"
+   ]
+  },
+  {
+   "task": "Ruby values/data representation",
+   "primary": [
+    "ruby-data-types"
+   ],
+   "secondary": [
+    "ruby-core",
+    "ruby-clean-code"
+   ]
+  },
+  {
+   "task": "Branches/loops/boolean logic",
+   "primary": [
+    "ruby-control-flow"
+   ],
+   "secondary": [
+    "ruby-core",
+    "ruby-clean-code"
+   ]
+  },
+  {
+   "task": "Arrays/hashes/Enumerable",
+   "primary": [
+    "ruby-collections"
+   ],
+   "secondary": [
+    "ruby-enumerables",
+    "ruby-data-types",
+    "ruby-clean-code"
+   ]
+  },
+  {
+   "task": "Blocks/Procs/lambdas",
+   "primary": [
+    "ruby-blocks-procs-lambdas"
+   ],
+   "secondary": [
+    "ruby-method-design",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Public Ruby API contract",
+   "primary": [
+    "ruby-api-design"
+   ],
+   "secondary": [
+    "ruby-method-design",
+    "ruby-oop",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Plain Ruby object extraction",
+   "primary": [
+    "ruby-poro"
+   ],
+   "secondary": [
+    "ruby-oop",
+    "ruby-object-composition",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Application workflow",
+   "primary": [
+    "ruby-service-objects"
+   ],
+   "secondary": [
+    "ruby-poro",
+    "ruby-api-design",
+    "ruby-tdd-refactoring",
+    "pattern:service-object"
+   ]
+  },
+  {
+   "task": "Business concept/invariant modeling",
+   "primary": [
+    "ruby-domain-modeling"
+   ],
+   "secondary": [
+    "ruby-poro",
+    "ruby-oop",
+    "ruby-clean-code",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Replaceable/external collaborator",
+   "primary": [
+    "ruby-dependency-injection"
+   ],
+   "secondary": [
+    "ruby-poro",
+    "ruby-api-design",
+    "pattern:dependency-injection",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Inheritance/coupling refactor",
+   "primary": [
+    "ruby-object-composition"
+   ],
+   "secondary": [
+    "ruby-oop",
+    "ruby-dependency-injection",
+    "pattern:composition-over-inheritance",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Complex boolean predicates",
+   "primary": [
+    "ruby-boolean-logic"
+   ],
+   "secondary": [
+    "ruby-control-flow",
+    "ruby-method-design",
+    "ruby-clean-code"
+   ]
+  },
+  {
+   "task": "New/refactored method",
+   "primary": [
+    "ruby-method-design"
+   ],
+   "secondary": [
+    "ruby-clean-code",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Class/domain design",
+   "primary": [
+    "ruby-oop"
+   ],
+   "secondary": [
+    "ruby-method-design",
+    "ruby-clean-code"
+   ]
+  },
+  {
+   "task": "Shared behavior/namespaces",
+   "primary": [
+    "ruby-modules-mixins"
+   ],
+   "secondary": [
+    "ruby-oop",
+    "ruby-clean-code"
+   ]
+  },
+  {
+   "task": "Reflection/metaprogramming",
+   "primary": [
+    "ruby-metaprogramming"
+   ],
+   "secondary": [
+    "ruby-clean-code",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "File/CSV/HTTP/dependency boundary",
+   "primary": [
+    "ruby-gems-io-services"
+   ],
+   "secondary": [
+    "ruby-api-design",
+    "ruby-debugging",
+    "ruby-tdd-refactoring",
+    "pattern:external-api-client"
+   ]
+  },
+  {
+   "task": "Runtime failure/exception",
+   "primary": [
+    "ruby-debugging"
+   ],
+   "secondary": [
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Rails application structure",
+   "primary": [
+    "rails-architecture"
+   ],
+   "secondary": [
+    "ruby-clean-code",
+    "stack-minimality"
+   ]
+  },
+  {
+   "task": "Ruby/Rails + React + PostgreSQL implementation minimality",
+   "primary": [
+    "stack-minimality"
+   ],
+   "secondary": [
+    "relevant domain skill",
+    "ruby-clean-code",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Branch/PR/diff review for standards and spec fidelity",
+   "primary": [
+    "change-review"
+   ],
+   "secondary": [
+    "stack-minimality-review",
+    "rubocop",
+    "relevant domain skill"
+   ]
+  },
+  {
+   "task": "Stress-test a plan or design with the user",
+   "primary": [
+    "planning-interview"
+   ],
+   "secondary": [
+    "ruby-domain-modeling"
+   ]
+  },
+  {
+   "task": "Write a spec from a discussed feature",
+   "primary": [
+    "planning-spec"
+   ],
+   "secondary": [
+    "planning-tracker",
+    "owning domain skill"
+   ]
+  },
+  {
+   "task": "Break a spec or plan into tickets",
+   "primary": [
+    "planning-tickets"
+   ],
+   "secondary": [
+    "planning-tracker",
+    "rails-database-engineering (schema expand–contract)"
+   ]
+  },
+  {
+   "task": "Chart an effort larger than one session",
+   "primary": [
+    "planning-wayfinder"
+   ],
+   "secondary": [
+    "planning-interview",
+    "planning-tracker"
+   ]
+  },
+  {
+   "task": "Read, create, link, or validate planning items",
+   "primary": [
+    "planning-tracker"
+   ],
+   "secondary": [
+    "the planning skill that owns the item"
+   ]
+  },
+  {
+   "task": "Over-engineering review",
+   "primary": [
+    "stack-minimality-review"
+   ],
+   "secondary": [
+    "relevant domain review skill"
+   ]
+  },
+  {
+   "task": "Whole-repository minimality audit",
+   "primary": [
+    "stack-minimality-audit"
+   ],
+   "secondary": [
+    "stack-minimality"
+   ]
+  },
+  {
+   "task": "Deliberate simplification debt",
+   "primary": [
+    "stack-minimality-debt"
+   ],
+   "secondary": [
+    "stack-minimality"
+   ]
+  },
+  {
+   "task": "Minimality measurement/evidence",
+   "primary": [
+    "stack-minimality-evidence"
+   ],
+   "secondary": [
+    "relevant performance or dependency skill"
+   ]
+  },
+  {
+   "task": "Minimality help/reference",
+   "primary": [
+    "stack-minimality-help"
+   ],
+   "secondary": [
+    "stack-minimality"
+   ]
+  },
+  {
+   "task": "Rails routes",
+   "primary": [
+    "rails-routing"
+   ],
+   "secondary": [
+    "rails-action-controller",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Rails Routing deep engineering",
+   "primary": [
+    "rails-routing"
+   ],
+   "secondary": [
+    "rails-action-controller",
+    "rails-authentication",
+    "rails-security",
+    "rails-i18n",
+    "rails-api-integration",
+    "rails-observability",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Rails controller action",
+   "primary": [
+    "rails-action-controller"
+   ],
+   "secondary": [
+    "rails-routing",
+    "ruby-method-design",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Rails Action Controller HTTP boundary",
+   "primary": [
+    "rails-action-controller"
+   ],
+   "secondary": [
+    "rails-routing",
+    "rails-authentication",
+    "rails-security",
+    "rails-api-integration",
+    "rails-observability",
+    "rails-caching",
+    "rails-active-storage",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Rails view/form",
+   "primary": [
+    "rails-action-view"
+   ],
+   "secondary": [
+    "rails-action-controller",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Model/migration/query",
+   "primary": [
+    "rails-active-record"
+   ],
+   "secondary": [
+    "rails-architecture",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Rails data modeling: what the schema represents (facts, keys, normalization, hierarchies, JSON boundary, history, denormalization)",
+   "primary": [
+    "rails-data-modeling"
+   ],
+   "secondary": [
+    "rails-associations",
+    "rails-database-engineering",
+    "rails-active-record",
+    "ruby-domain-modeling"
+   ]
+  },
+  {
+   "task": "Rails Active Record deep engineering",
+   "primary": [
+    "rails-active-record"
+   ],
+   "secondary": [
+    "rails-associations",
+    "rails-validations",
+    "rails-database-engineering",
+    "rails-performance",
+    "rails-security",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Active Record association",
+   "primary": [
+    "rails-associations"
+   ],
+   "secondary": [
+    "rails-active-record",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Rails Association deep engineering",
+   "primary": [
+    "rails-associations"
+   ],
+   "secondary": [
+    "rails-active-record",
+    "rails-database-engineering",
+    "rails-validations",
+    "rails-security",
+    "rails-active-job",
+    "rails-active-storage",
+    "rails-performance",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Validation/invariant",
+   "primary": [
+    "rails-validations"
+   ],
+   "secondary": [
+    "rails-active-record",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Rails Validation deep engineering",
+   "primary": [
+    "rails-validations"
+   ],
+   "secondary": [
+    "rails-active-record",
+    "rails-active-model",
+    "rails-associations",
+    "rails-database-engineering",
+    "rails-action-controller",
+    "rails-action-view",
+    "rails-api-integration",
+    "rails-i18n",
+    "rails-security",
+    "rails-performance",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Authentication/session",
+   "primary": [
+    "rails-authentication"
+   ],
+   "secondary": [
+    "rails-action-controller",
+    "rails-test-engineering",
+    "session-fixation-rotation"
+   ]
+  },
+  {
+   "task": "Rails test design",
+   "primary": [
+    "rails-test-engineering"
+   ],
+   "secondary": [
+    "relevant implementation skill",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Rails generator/scaffold",
+   "primary": [
+    "rails-generators"
+   ],
+   "secondary": [
+    "relevant Rails skill",
+    "rails-test-engineering",
+    "pattern:scaffold-lifecycle"
+   ]
+  },
+  {
+   "task": "`rails new` versus generator",
+   "primary": [
+    "rails-application-bootstrap"
+   ],
+   "secondary": [
+    "rails-generators",
+    "ruby-toolchain",
+    "ruby-runtime-compatibility"
+   ]
+  },
+  {
+   "task": "Rails REST resource",
+   "primary": [
+    "rails-routing"
+   ],
+   "secondary": [
+    "rails-action-controller",
+    "rails-authentication",
+    "rails-test-engineering",
+    "pattern:rest-resource"
+   ]
+  },
+  {
+   "task": "Route precedence/shadowing",
+   "primary": [
+    "rails-routing"
+   ],
+   "secondary": [
+    "rails-action-controller",
+    "rails-test-engineering",
+    "pattern:route-precedence-contract"
+   ]
+  },
+  {
+   "task": "Nested/shallow route design",
+   "primary": [
+    "rails-routing"
+   ],
+   "secondary": [
+    "rails-associations",
+    "rails-authentication",
+    "rails-test-engineering",
+    "pattern:nested-route-boundary"
+   ]
+  },
+  {
+   "task": "Route scopes/namespaces/constraints",
+   "primary": [
+    "rails-routing"
+   ],
+   "secondary": [
+    "rails-action-controller",
+    "rails-security",
+    "rails-test-engineering",
+    "pattern:route-scope-namespace-contract",
+    "pattern:route-constraint-contract"
+   ]
+  },
+  {
+   "task": "URL helper/polymorphic routing",
+   "primary": [
+    "rails-routing"
+   ],
+   "secondary": [
+    "rails-action-view",
+    "rails-action-mailer",
+    "rails-i18n",
+    "rails-test-engineering",
+    "pattern:route-helper-contract"
+   ]
+  },
+  {
+   "task": "Routing concerns/direct/resolve",
+   "primary": [
+    "rails-routing"
+   ],
+   "secondary": [
+    "rails-test-engineering",
+    "pattern:route-concern-contract",
+    "pattern:direct-route-resolution"
+   ]
+  },
+  {
+   "task": "Mounted Rack/engine endpoint",
+   "primary": [
+    "rails-routing"
+   ],
+   "secondary": [
+    "rails-security",
+    "rails-test-engineering",
+    "pattern:mounted-endpoint-boundary"
+   ]
+  },
+  {
+   "task": "Catch-all/redirect fallback routing",
+   "primary": [
+    "rails-routing"
+   ],
+   "secondary": [
+    "rails-action-controller",
+    "rails-security",
+    "rails-test-engineering",
+    "pattern:catch-all-route-boundary"
+   ]
+  },
+  {
+   "task": "Rails Authentication engineering",
+   "primary": [
+    "rails-authentication"
+   ],
+   "secondary": [
+    "rails-action-controller",
+    "rails-security",
+    "rails-security-engineering",
+    "rails-api-integration",
+    "rails-observability",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Rails Authorization engineering",
+   "primary": [
+    "rails-authorization"
+   ],
+   "secondary": [
+    "rails-authentication",
+    "rails-security",
+    "rails-security-engineering",
+    "rails-active-record",
+    "rails-active-job",
+    "rails-action-cable",
+    "rails-api-integration",
+    "rails-database-engineering",
+    "rails-test-engineering",
+    "pattern:authorized-scope-boundary",
+    "pattern:tenant-isolation-authorization"
+   ]
+  },
+  {
+   "task": "Rails Hotwire engineering",
+   "primary": [
+    "rails-hotwire"
+   ],
+   "secondary": [
+    "rails-action-controller",
+    "rails-action-view",
+    "rails-authentication",
+    "rails-authorization",
+    "rails-security",
+    "rails-i18n",
+    "rails-action-cable",
+    "rails-caching",
+    "rails-test-engineering",
+    "pattern:turbo-frame-contract",
+    "pattern:stimulus-controller-boundary"
+   ]
+  },
+  {
+   "task": "Rails Asset and Build Infrastructure engineering",
+   "primary": [
+    "rails-asset-build-engineering"
+   ],
+   "secondary": [
+    "rails-hotwire",
+    "rails-production-runtime",
+    "rails-release-engineering",
+    "rails-security-engineering",
+    "ruby-runtime-compatibility",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Rails deployment/hosting",
+   "primary": [
+    "rails-release-engineering"
+   ],
+   "secondary": [
+    "rails-architecture",
+    "ruby-debugging"
+   ]
+  },
+  {
+   "task": "Rails performance/scalability",
+   "primary": [
+    "rails-performance"
+   ],
+   "secondary": [
+    "ruby-performance",
+    "rails-active-record",
+    "rails-database-engineering",
+    "rails-active-job",
+    "rails-observability",
+    "ruby-concurrency",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Rails caching engineering",
+   "primary": [
+    "rails-caching"
+   ],
+   "secondary": [
+    "rails-performance",
+    "ruby-performance",
+    "rails-active-record",
+    "rails-database-engineering",
+    "rails-active-job",
+    "rails-observability",
+    "rails-security",
+    "rails-security-engineering",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Rails email / Action Mailer",
+   "primary": [
+    "rails-action-mailer"
+   ],
+   "secondary": [
+    "rails-active-job",
+    "rails-api-integration",
+    "rails-security",
+    "rails-security-engineering",
+    "rails-observability",
+    "rails-test-engineering",
+    "rails-distributed-systems"
+   ]
+  },
+  {
+   "task": "Rails Active Storage / file attachments",
+   "primary": [
+    "rails-active-storage"
+   ],
+   "secondary": [
+    "rails-security",
+    "rails-security-engineering",
+    "rails-active-job",
+    "rails-api-integration",
+    "rails-performance",
+    "rails-caching",
+    "rails-observability",
+    "rails-production-runtime",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Rails Action Cable / realtime WebSockets",
+   "primary": [
+    "rails-action-cable"
+   ],
+   "secondary": [
+    "rails-security",
+    "rails-security-engineering",
+    "rails-active-job",
+    "rails-event-driven-messaging",
+    "rails-distributed-systems",
+    "rails-reliability-engineering",
+    "rails-performance",
+    "ruby-performance",
+    "ruby-concurrency",
+    "rails-production-runtime",
+    "rails-release-engineering",
+    "rails-observability",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Rails I18n / localization",
+   "primary": [
+    "rails-i18n"
+   ],
+   "secondary": [
+    "rails-routing",
+    "rails-action-view",
+    "rails-validations",
+    "rails-api-integration",
+    "rails-action-mailer",
+    "rails-active-job",
+    "rails-caching",
+    "rails-security",
+    "rails-test-engineering",
+    "ruby-concurrency"
+   ]
+  },
+  {
+   "task": "Rails Action Text / rich text",
+   "primary": [
+    "rails-action-text"
+   ],
+   "secondary": [
+    "rails-action-view",
+    "rails-active-record",
+    "rails-validations",
+    "rails-active-storage",
+    "rails-security",
+    "rails-security-engineering",
+    "rails-i18n",
+    "rails-caching",
+    "rails-performance",
+    "ruby-performance",
+    "rails-api-integration",
+    "rails-active-job",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Rails API and integration architecture",
+   "primary": [
+    "rails-api-integration"
+   ],
+   "secondary": [
+    "rails-routing",
+    "rails-action-controller",
+    "rails-authentication",
+    "rails-security",
+    "rails-observability",
+    "rails-active-job",
+    "ruby-api-design",
+    "ruby-gems-io-services",
+    "ruby-dependency-injection",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Distributed systems and service architecture",
+   "primary": [
+    "rails-distributed-systems"
+   ],
+   "secondary": [
+    "rails-api-integration",
+    "rails-active-job",
+    "rails-database-engineering",
+    "ruby-concurrency",
+    "rails-observability",
+    "rails-production-runtime",
+    "rails-security",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Event-driven messaging architecture",
+   "primary": [
+    "rails-event-driven-messaging"
+   ],
+   "secondary": [
+    "rails-distributed-systems",
+    "rails-active-job",
+    "rails-api-integration",
+    "rails-observability",
+    "rails-production-runtime",
+    "ruby-concurrency",
+    "rails-security",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Reliability engineering and resilience",
+   "primary": [
+    "rails-reliability-engineering"
+   ],
+   "secondary": [
+    "rails-observability",
+    "rails-performance",
+    "rails-api-integration",
+    "rails-distributed-systems",
+    "rails-event-driven-messaging",
+    "rails-production-runtime",
+    "rails-active-job",
+    "ruby-concurrency",
+    "rails-database-engineering",
+    "rails-security",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Incident response and operational debugging",
+   "primary": [
+    "rails-incident-engineering"
+   ],
+   "secondary": [
+    "rails-observability",
+    "rails-reliability-engineering",
+    "rails-production-runtime",
+    "rails-active-job",
+    "rails-event-driven-messaging",
+    "rails-distributed-systems",
+    "rails-security",
+    "rails-security-engineering",
+    "rails-performance",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Release engineering and release readiness",
+   "primary": [
+    "rails-release-engineering"
+   ],
+   "secondary": [
+    "rails-production-runtime",
+    "rails-database-engineering",
+    "rails-reliability-engineering",
+    "rails-incident-engineering",
+    "rails-security-engineering",
+    "rails-api-integration",
+    "rails-active-job",
+    "rails-event-driven-messaging",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Security engineering and threat modeling",
+   "primary": [
+    "rails-security-engineering"
+   ],
+   "secondary": [
+    "rails-security",
+    "rails-authentication",
+    "rails-api-integration",
+    "rails-distributed-systems",
+    "rails-event-driven-messaging",
+    "rails-reliability-engineering",
+    "rails-database-engineering",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Rails code-quality review",
+   "primary": [
+    "rails-architecture"
+   ],
+   "secondary": [
+    "relevant Rails skill",
+    "ruby-clean-code",
+    "rails-test-engineering",
+    "pattern:rails-best-practice-review"
+   ]
+  },
+  {
+   "task": "Code review/refactor",
+   "primary": [
+    "ruby-clean-code"
+   ],
+   "secondary": [
+    "ruby-method-design",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "RuboCop/linting review",
+   "primary": [
+    "rubocop"
+   ],
+   "secondary": [
+    "ruby-clean-code",
+    "relevant implementation skill",
+    "pattern:rubocop-review"
+   ]
+  },
+  {
+   "task": "Test-driven change",
+   "primary": [
+    "ruby-tdd-refactoring"
+   ],
+   "secondary": [
+    "relevant implementation skill"
+   ]
+  },
+  {
+   "task": "Primitive with domain behavior",
+   "primary": [
+    "ruby-data-types"
+   ],
+   "secondary": [
+    "ruby-oop",
+    "pattern:value-object"
+   ]
+  },
+  {
+   "task": "Multi-step application workflow",
+   "primary": [
+    "ruby-service-objects"
+   ],
+   "secondary": [
+    "ruby-poro",
+    "ruby-domain-modeling",
+    "pattern:service-object",
+    "pattern:application-service",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Explicit application command",
+   "primary": [
+    "ruby-service-objects"
+   ],
+   "secondary": [
+    "ruby-api-design",
+    "pattern:command-object",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Reusable business decision",
+   "primary": [
+    "ruby-domain-modeling"
+   ],
+   "secondary": [
+    "pattern:policy-object",
+    "pattern:specification",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Interchangeable implementation",
+   "primary": [
+    "ruby-object-composition"
+   ],
+   "secondary": [
+    "ruby-dependency-injection",
+    "pattern:strategy-object",
+    "pattern:factory",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "External boundary",
+   "primary": [
+    "ruby-dependency-injection"
+   ],
+   "secondary": [
+    "pattern:adapter",
+    "pattern:dependency-injection",
+    "pattern:external-api-client"
+   ]
+  },
+  {
+   "task": "Complex object construction",
+   "primary": [
+    "ruby-object-composition"
+   ],
+   "secondary": [
+    "pattern:factory",
+    "pattern:builder",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Optional collaborator with safe no-op",
+   "primary": [
+    "ruby-object-composition"
+   ],
+   "secondary": [
+    "pattern:null-object",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Layer behavior around stable interface",
+   "primary": [
+    "ruby-object-composition"
+   ],
+   "secondary": [
+    "pattern:decorator",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Complex subsystem interface",
+   "primary": [
+    "ruby-object-composition"
+   ],
+   "secondary": [
+    "pattern:facade",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Complex persistence abstraction",
+   "primary": [
+    "ruby-domain-modeling"
+   ],
+   "secondary": [
+    "pattern:repository",
+    "rails-active-record",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Repeated state-specific behavior",
+   "primary": [
+    "ruby-domain-modeling"
+   ],
+   "secondary": [
+    "pattern:state-object",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Rails presentation transformation",
+   "primary": [
+    "rails-action-view"
+   ],
+   "secondary": [
+    "pattern:presenter",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Interchangeable algorithm/policy",
+   "primary": [
+    "ruby-oop"
+   ],
+   "secondary": [
+    "pattern:strategy-object"
+   ]
+  },
+  {
+   "task": "Replace inheritance with collaborators",
+   "primary": [
+    "ruby-oop"
+   ],
+   "secondary": [
+    "pattern:composition-over-inheritance"
+   ]
+  },
+  {
+   "task": "External/legacy API boundary",
+   "primary": [
+    "ruby-gems-io-services"
+   ],
+   "secondary": [
+    "ruby-api-design",
+    "pattern:external-api-client",
+    "pattern:adapter",
+    "ruby-debugging"
+   ]
+  },
+  {
+   "task": "Reusable Ruby gem/library",
+   "primary": [
+    "ruby-gems-io-services"
+   ],
+   "secondary": [
+    "ruby-api-design",
+    "pattern:ruby-gem"
+   ]
+  },
+  {
+   "task": "Complex/read-oriented Rails query",
+   "primary": [
+    "rails-active-record"
+   ],
+   "secondary": [
+    "pattern:query-object",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Multi-model/input validation boundary",
+   "primary": [
+    "rails-action-controller"
+   ],
+   "secondary": [
+    "pattern:form-object",
+    "rails-validations"
+   ]
+  },
+  {
+   "task": "Authorization boundary",
+   "primary": [
+    "rails-authentication"
+   ],
+   "secondary": [
+    "pattern:policy-boundary",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Atomic multi-write workflow",
+   "primary": [
+    "rails-active-record"
+   ],
+   "secondary": [
+    "pattern:transaction-boundary",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "End-to-end Rails endpoint",
+   "primary": [
+    "rails-architecture"
+   ],
+   "secondary": [
+    "pattern:request-flow",
+    "rails-test-engineering"
+   ]
+  },
+  {
+   "task": "Bug regression coverage",
+   "primary": [
+    "ruby-debugging"
+   ],
+   "secondary": [
+    "pattern:regression-test",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Pair-search on sorted data",
+   "primary": [
+    "ruby-collections"
+   ],
+   "secondary": [
+    "pattern:two-pointers",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "Repeated membership/counting",
+   "primary": [
+    "ruby-collections"
+   ],
+   "secondary": [
+    "pattern:frequency-map",
+    "ruby-tdd-refactoring"
+   ]
+  },
+  {
+   "task": "TypeScript language/compiler/type error",
+   "primary": [
+    "typescript-core-engineering"
+   ],
+   "secondary": [
+    "typescript-type-design",
+    "typescript-runtime-contracts"
+   ]
+  },
+  {
+   "task": "TypeScript domain type modeling",
+   "primary": [
+    "typescript-type-design"
+   ],
+   "secondary": [
+    "typescript-core-engineering"
+   ]
+  },
+  {
+   "task": "Untrusted JSON/API/storage input",
+   "primary": [
+    "typescript-runtime-contracts"
+   ],
+   "secondary": [
+    "typescript-core-engineering",
+    "typescript-type-design"
+   ]
+  },
+  {
+   "task": "React component design/composition",
+   "primary": [
+    "react-component-engineering"
+   ],
+   "secondary": [
+    "react-architecture",
+    "react-testing-engineering"
+   ]
+  },
+  {
+   "task": "React state/effect/lifecycle change",
+   "primary": [
+    "react-state-effects"
+   ],
+   "secondary": [
+    "react-component-engineering",
+    "react-testing-engineering"
+   ]
+  },
+  {
+   "task": "React API data fetching/cache/mutation",
+   "primary": [
+    "react-data-fetching"
+   ],
+   "secondary": [
+    "typescript-runtime-contracts",
+    "react-state-effects",
+    "react-testing-engineering"
+   ]
+  },
+  {
+   "task": "React application structure/feature boundaries",
+   "primary": [
+    "react-architecture"
+   ],
+   "secondary": [
+    "react-component-engineering",
+    "react-state-effects",
+    "react-data-fetching"
+   ]
+  },
+  {
+   "task": "React component/hook/UI tests",
+   "primary": [
+    "react-testing-engineering"
+   ],
+   "secondary": [
+    "react-component-engineering",
+    "typescript-runtime-contracts"
+   ]
+  },
+  {
+   "task": "React accessibility/keyboard/focus",
+   "primary": [
+    "react-accessibility-performance"
+   ],
+   "secondary": [
+    "react-component-engineering",
+    "react-testing-engineering"
+   ]
+  },
+  {
+   "task": "React render performance/memoization",
+   "primary": [
+    "react-accessibility-performance"
+   ],
+   "secondary": [
+    "react-state-effects",
+    "react-architecture"
+   ]
+  },
+  {
+   "task": "TypeScript and React feature implementation",
+   "primary": [
+    "react-component-engineering"
+   ],
+   "secondary": [
+    "typescript-core-engineering",
+    "typescript-type-design",
+    "react-state-effects",
+    "react-testing-engineering"
+   ]
+  },
+  {
+   "task": "React code calling a Rails endpoint (fetch, response types, error handling)",
+   "primary": [
+    "rails-react-integration"
+   ],
+   "secondary": [
+    "rails-api-integration",
+    "typescript-runtime-contracts",
+    "react-data-fetching"
+   ]
+  },
+  {
+   "task": "React form showing Rails 422 validation errors",
+   "primary": [
+    "rails-react-integration"
+   ],
+   "secondary": [
+    "rails-validations",
+    "react-component-engineering",
+    "react-testing-engineering"
+   ]
+  },
+  {
+   "task": "React fetch fails with InvalidAuthenticityToken or loses the session",
+   "primary": [
+    "rails-react-integration"
+   ],
+   "secondary": [
+    "rails-authentication",
+    "rails-security"
+   ]
+  },
+  {
+   "task": "Choosing Inertia, a JSON API with a separate client, or React islands",
+   "primary": [
+    "rails-react-integration"
+   ],
+   "secondary": [
+    "react-architecture",
+    "rails-api-integration",
+    "rails-hotwire"
+   ]
+  },
+  {
+   "task": "Paginating, filtering, or sorting a Rails collection in React",
+   "primary": [
+    "rails-react-integration"
+   ],
+   "secondary": [
+    "react-data-fetching",
+    "rails-active-record"
+   ]
+  },
+  {
+   "task": "Changing a Rails JSON contract that a React client consumes",
+   "primary": [
+    "rails-api-integration"
+   ],
+   "secondary": [
+    "rails-react-integration",
+    "rails-test-engineering"
+   ]
+  }
+ ]
+}
