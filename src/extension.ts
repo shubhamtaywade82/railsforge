@@ -33,6 +33,8 @@ import { TestExplorerController, debugRubyCommand } from './testing/TestExplorer
 import { TestCodeLensProvider } from './testing/TestCodeLensProvider'
 import { activeWorkspaceRoot, workspaceRoots, workspaceRootFor } from './workspace/activeRoot'
 import { isInside, resolveWorkspaceRoot } from './workspace/WorkspaceRoots'
+import { RubyAnalyzersProvider, AnalyzerRunResult } from './lint/RubyAnalyzersProvider'
+import { ANALYZER_IDS, AnalyzerId } from './lint/AnalyzerParsers'
 import { showRuntimeSnapshot } from './rails/RuntimeIntrospectionService'
 import { RAILSFORGE_TASK_TYPE, RailsTaskProvider } from './tasks/RailsTaskProvider'
 import { GENERATORS, GeneratorMode, buildGeneratorArgs, parseAttributes, parseGeneratorOutput, validateGeneratorName } from './rails/RailsGenerators'
@@ -170,6 +172,8 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     timeoutMs: config.rubydocRequestTimeoutMs,
     baseUrl: config.rubydocBaseUrl,
   })
+  const analyzers = new RubyAnalyzersProvider()
+  context.subscriptions.push(analyzers)
   const testExplorer = new TestExplorerController()
   context.subscriptions.push(testExplorer)
   const serviceExtractor = new ServiceExtractor()
@@ -609,6 +613,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     relatedFilesIndex,
     dependencyGraph,
     persistentIndexes,
+    analyzers,
     schemaIndexer,
     env,
     semanticSearchIndex,
@@ -1412,6 +1417,7 @@ function registerCommands(
   relatedFilesIndex: RelatedFilesIndex,
   dependencyGraph: MinimalDependencyGraph,
   persistentIndexes: PersistentIndexRegistry<PersistentIndexManager>,
+  analyzers: RubyAnalyzersProvider,
   schemaIndexer: SchemaIndexer,
   env: ProjectEnvironment,
   semanticSearchIndex: SemanticSearchIndex,
@@ -2370,6 +2376,8 @@ function registerCommands(
       const root = activeWorkspaceRoot()
       if (root) {await showRuntimeSnapshot(root, true)}
     }),
+    vscode.commands.registerCommand('railsforge.runAnalyzers', () => runCodeAnalyzers(analyzers)),
+    vscode.commands.registerCommand('railsforge.clearAnalyzers', () => analyzers.clear()),
     vscode.commands.registerCommand('railsforge.generate', () => runRailsGenerator('generate', rubocop)),
     vscode.commands.registerCommand('railsforge.destroyGenerated', () => runRailsGenerator('destroy', rubocop)),
     vscode.commands.registerCommand('railsforge.runRakeTask', (taskName: string) => {
@@ -2571,6 +2579,48 @@ function formatRubyDocEntry(entry: RubyDocEntry): string {
  * Minitest gem/script test runs the whole file instead of one line — Minitest itself has
  * no universal line-based selection.
  */
+/** Runs the configured (or user-picked) analyzers over the active project and publishes findings. */
+async function runCodeAnalyzers(provider: RubyAnalyzersProvider): Promise<void> {
+  const root = activeWorkspaceRoot()
+  if (!root) {
+    vscode.window.showWarningMessage('RailsForge: Open a Ruby project to run analyzers.')
+    return
+  }
+  const cfg = readConfig()
+  let ids = cfg.analyzersEnabled.filter((x): x is AnalyzerId => (ANALYZER_IDS as readonly string[]).includes(x))
+  if (ids.length === 0) {
+    const picked = await vscode.window.showQuickPick(
+      ANALYZER_IDS.map(id => ({ label: id, picked: id === 'reek' || id === 'flog' })),
+      { canPickMany: true, placeHolder: 'Analyzers to run (they must be in your Gemfile; set railsForge.analyzers.enabled to skip this prompt)' },
+    )
+    if (!picked || picked.length === 0) {return}
+    ids = picked.map(p => p.label as AnalyzerId)
+  }
+
+  const results = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: `RailsForge: running ${ids.join(', ')}…`, cancellable: true },
+    async (_progress, token) => {
+      const abort = new AbortController()
+      token.onCancellationRequested(() => abort.abort())
+      const out: AnalyzerRunResult[] = []
+      for (const id of ids) {
+        if (token.isCancellationRequested) {break}
+        out.push(await provider.runAnalyzer(root, id, cfg.analyzersPaths, cfg.analyzersFlogThreshold, abort.signal))
+      }
+      return out
+    },
+  )
+
+  const total = provider.publish(root, results)
+  const summary = results.map(r => r.status === 'ok' ? `${r.id}: ${r.findings.length}` : `${r.id}: ${r.status}`).join(' · ')
+  const unavailable = results.filter(r => r.status === 'unavailable').map(r => r.id)
+  Logger.info(`[analyzers] ${summary}`)
+  for (const r of results.filter(x => x.status !== 'ok' && x.detail)) {Logger.warn(`[analyzers] ${r.id} ${r.status}: ${r.detail}`)}
+  vscode.window.showInformationMessage(
+    `RailsForge: ${total} finding(s) in Problems — ${summary}${unavailable.length > 0 ? `. Not installed: ${unavailable.join(', ')} (bundle add … --group development).` : ''}`,
+  )
+}
+
 interface GeneratorRunResult {
   ok: boolean
   output: string

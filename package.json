@@ -452,6 +452,23 @@
           "default": false,
           "description": "Automatically re-run Steep in the background on Ruby file save when railsForge.types.steepEnabled is true. Debounced (like brakeman.scanOnSave) since Steep checks the whole configured target, not just the saved file."
         },
+        "railsForge.analyzers.enabled": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["reek", "flog", "flay", "debride", "standard"] },
+          "default": [],
+          "description": "Analyzers run by 'RailsForge: Run Code Analyzers' (findings go to the Problems panel). They must be in your bundle (bundle add <name> --group development). Empty = ask each time."
+        },
+        "railsForge.analyzers.flogThreshold": {
+          "type": "number",
+          "default": 20,
+          "description": "Flog complexity score at or above which a method is reported."
+        },
+        "railsForge.analyzers.paths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["app", "lib"],
+          "description": "Project-relative paths the analyzers scan."
+        },
         "railsForge.runtime.introspection.enabled": {
           "type": "boolean",
           "default": false,
@@ -707,6 +724,16 @@
       {
         "command": "railsforge.refreshRuntimeIntrospection",
         "title": "RailsForge: Refresh Rails Runtime Introspection (boots the app)",
+        "category": "RailsForge"
+      },
+      {
+        "command": "railsforge.runAnalyzers",
+        "title": "RailsForge: Run Code Analyzers (Reek, Flog, Flay, Debride, Standard)",
+        "category": "RailsForge"
+      },
+      {
+        "command": "railsforge.clearAnalyzers",
+        "title": "RailsForge: Clear Code Analyzer Findings",
         "category": "RailsForge"
       },
       {

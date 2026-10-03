@@ -1,0 +1,11 @@
+These methods MIGHT not be called:
+
+Greeter
+  dup_a                               app/a.rb:12-14 (3)
+  greet                               app/a.rb:2-10 (9)
+  unused_method                       app/a.rb:16-18 (3)
+
+Other
+  dup_b                               app/b.rb:2-4 (3)
+
+Total suspect LOC: 18

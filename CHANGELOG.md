@@ -17,6 +17,9 @@
 - `RailsForge: Rails Generate…` / `Rails Destroy…` run `rails generate|destroy` with validated, shell-free arguments, open the created files and offer RuboCop autocorrect on them.
 - Native VS Code tasks (`type: "railsforge"`) for tests, RuboCop, Brakeman and common `db:`/routes commands, with RuboCop, RSpec and Minitest problem matchers.
 - Test Explorer: workspace-wide discovery with nested `describe`/`context`/`it` and Minitest classes/`def test_`; one run per file with per-test status, durations, failure locations and streamed output (RSpec JSON, Minitest text); cancellable; a Debug profile that launches the Ruby `rdbg` extension (terminal fallback). CodeLens "Debug" uses the same path.
+- Optional code analyzers — Reek, Flog, Flay, Debride, Standard — via `RailsForge: Run Code Analyzers`; findings appear in Problems (`railsForge.analyzers.*`). Parsers are verified against real tool output.
+- Opt-in Rails runtime introspection (`rails runner`, trust- and consent-gated): real associations, validations, callbacks, routes and middleware cached in `.railsforge/runtime.json`.
+- Ruby LSP add-on 0.2.0: route-helper and column completion, go-to-definition from route helpers to `config/routes.rb` and from `render` to partials.
 
 ### Changed
 - `@rails` slash commands now run distinct workflows: `/optimize` performs schema-aware N+1 static analysis, `/migrate` runs the strong_migrations checks, `/fix` includes active diagnostics, `/service` `/scaffold` `/spec` ground the prompt in existing patterns, tables and the detected test framework.
