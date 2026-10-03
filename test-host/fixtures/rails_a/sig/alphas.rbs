@@ -1,0 +1,3 @@
+class Alphas
+  def only_in_a: () -> String
+end

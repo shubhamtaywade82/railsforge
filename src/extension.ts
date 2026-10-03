@@ -59,6 +59,8 @@ import { RailsChatParticipant } from './chat/RailsChatParticipant'
 import { RailsChatViewProvider } from './chat/RailsChatViewProvider'
 import { smartApplyResponse } from './chat/ChatDiffApplier'
 import { PersistentIndexManager } from './indexer/PersistentIndexManager'
+import { PerRootRegistry } from './workspace/PerRootRegistry'
+import { DevDocsProject } from './docs/DevDocsProject'
 import { PersistentIndexRegistry, IndexState } from './indexer/PersistentIndexRegistry'
 import { findDuplicateCallSites } from './refactor/DuplicateCallSiteFinder'
 import { specFilePathFor, buildRspecSkeleton } from './refactor/SpecFileGenerator'
@@ -109,6 +111,10 @@ export interface RailsForgeTestApi {
   getSchemaTableNames(): string[]
   /** AST index status keyed by workspace root (only roots that were activated). */
   getAstIndexStatuses(): Record<string, string>
+  /** Number of RBS signatures for `methodName` in the project that owns `filePath`. */
+  countRbsMethods(filePath: string, methodName: string): number
+  /** DevDocs cache directory of the project that owns `filePath`. */
+  getDevDocsCacheDir(filePath: string): string
 }
 
 export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
@@ -182,28 +188,36 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
 
   applyLogSettings(config, workspaceRoot)
 
-  // Offline DevDocs cache: workspace-local (not globalStorageUri) so the standalone MCP
-  // server can find it too — same rationale as PersistentIndexManager's .railsforge/index.sqlite3.
-  const devDocsCacheDir = path.join(workspaceRoot, '.railsforge', 'devdocs')
-  const devDocsFetcher = new DevDocsFetcher({
-    cacheDir: devDocsCacheDir,
-    timeoutMs: config.devdocsFetchTimeoutMs,
-    baseUrl: config.devdocsDataBaseUrl,
+  // Offline DevDocs + RBS signatures are per project: each workspace root has its own
+  // cache directory / sig index, keyed by root, created lazily and dropped with its folder.
+  const devDocsProjects = new PerRootRegistry<DevDocsProject>(root => new DevDocsProject(root, {
+    createFetcher: cacheDir => new DevDocsFetcher({
+      cacheDir,
+      timeoutMs: readConfig().devdocsFetchTimeoutMs,
+      baseUrl: readConfig().devdocsDataBaseUrl,
+    }),
+    slugsFor: projectRoot => {
+      const cfg = readConfig()
+      const projectEnv = projectRoot === activeProject.root ? env : envDetector.detectEnvironment(projectRoot)
+      const slugs = [cfg.devdocsRubySlug || (isKnownVersion(projectEnv.rubyVersion) ? toDevDocsSlug('ruby', projectEnv.rubyVersion) : 'ruby')]
+      if (projectEnv.hasRails) {
+        slugs.push(cfg.devdocsRailsSlug || (isKnownVersion(projectEnv.railsVersion) ? toDevDocsSlug('rails', projectEnv.railsVersion) : 'rails'))
+      }
+      return slugs
+    },
+  }))
+  const devDocsIndexFor = (uri: vscode.Uri): DevDocsOfflineIndex =>
+    devDocsProjects.get(workspaceRootFor(uri) ?? activeProject.root).index
+  // Parsed on first use of a root (RBS sig dirs are small), so a hover in any root is correct.
+  const rbsIndexes = new PerRootRegistry<RBSIndex>(root => {
+    const index = new RBSIndex()
+    index.loadFromWorkspace(root, readConfig().typesRbsSigDir)
+    return index
   })
-  const devDocsSlugs = [config.devdocsRubySlug || (isKnownVersion(env.rubyVersion) ? toDevDocsSlug('ruby', env.rubyVersion) : 'ruby')]
-  if (env.hasRails) {
-    devDocsSlugs.push(config.devdocsRailsSlug || (isKnownVersion(env.railsVersion) ? toDevDocsSlug('rails', env.railsVersion) : 'rails'))
-  }
-  // Empty until the background download (kicked off below, once workspaceRoot is confirmed
-  // non-empty) finishes — DevDocsHoverProvider reads through this holder (same "mutable
-  // holder swapped once ready" idiom as `persistentIndex` below) so hovers work immediately
-  // once the first activation's downloads land, without needing a window reload.
-  const devDocsIndexHolder: { index: DevDocsOfflineIndex } = { index: new DevDocsOfflineIndex(devDocsCacheDir, []) }
-
-  const rbsIndex = new RBSIndex()
+  const rbsIndexFor = (uri: vscode.Uri): RBSIndex => rbsIndexes.get(workspaceRootFor(uri) ?? activeProject.root)
   if (workspaceRoot) {
     // Deferred: RBS sig directory walk uses sync I/O; yield to event loop first.
-    setTimeout(() => rbsIndex.loadFromWorkspace(workspaceRoot, config.typesRbsSigDir), 800)
+    setTimeout(() => rbsIndexes.get(workspaceRoot), 800)
   }
   const steepProvider = new SteepProvider()
   const steepDiagnostics = vscode.languages.createDiagnosticCollection('steep')
@@ -314,14 +328,12 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   }
 
   // Offline DevDocs: downloads (or reuses an already-cached) docset in the background,
-  // then swaps devDocsIndexHolder.index so DevDocsHoverProvider picks it up without a
-  // window reload. Silent on failure/offline — APIDock/RubyDoc's network-backed hovers
+  // then swaps that project's index so DevDocsHoverProvider picks it up without a
+  // window reload (per root: a root's docs load when it first becomes the active project). Silent on failure/offline — APIDock/RubyDoc's network-backed hovers
   // and the live `railsforge.openDevDocs` webview keep working regardless.
   // Deferred 5s: network I/O that can safely wait until core features are up.
   if (workspaceRoot && config.devdocsOfflineEnabled) {
-    setTimeout(() => {
-      void refreshDevDocsCache(devDocsFetcher, devDocsCacheDir, devDocsSlugs, devDocsIndexHolder, false)
-    }, 5000)
+    setTimeout(() => void devDocsProjects.get(workspaceRoot).refresh(false), 5000)
   }
 
   // 2. Initial Indexing & Live Workspace Analysis
@@ -403,6 +415,8 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     factoryBotResolver.indexFactories(newRoot)
     rakeTaskTreeProvider.setRoot(newRoot)
     void persistentIndexes.ensure(newRoot)
+    rbsIndexes.get(newRoot)
+    if (readConfig().devdocsOfflineEnabled) {void devDocsProjects.get(newRoot).refresh(false)}
     architectureTreeProvider.refresh(env)
   }
   const syncActiveProject = (uri: vscode.Uri | undefined): void => {
@@ -417,6 +431,8 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
       for (const root of persistentIndexes.roots()) {
         if (!open.has(root)) {persistentIndexes.release(root)}
       }
+      devDocsProjects.retainOnly(open)
+      rbsIndexes.retainOnly(open)
       // Active project's folder was removed: fall back to whatever now owns the editor / first folder.
       if (!workspaceRoots().includes(activeProject.root)) {
         const next = activeWorkspaceRoot()
@@ -433,14 +449,14 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     vscode.languages.registerHoverProvider({ language: 'ruby', scheme: 'file' }, new GemLensProvider(rubyGemsClient)),
     vscode.languages.registerHoverProvider(
       { language: 'ruby', scheme: 'file' },
-      new DevDocsHoverProvider(devDocsIndexHolder, () => readConfig().devdocsOfflineEnabled),
+      new DevDocsHoverProvider(devDocsIndexFor, () => readConfig().devdocsOfflineEnabled),
     ),
     vscode.languages.registerHoverProvider(
       { language: 'ruby', scheme: 'file' },
       new ApiDockHoverProvider(apiDockClient, apiDockMethodIndex, () => readConfig().apidockEnabled),
     ),
-    vscode.languages.registerHoverProvider({ language: 'ruby', scheme: 'file' }, new RBSHoverProvider(rbsIndex)),
-    vscode.languages.registerDefinitionProvider({ language: 'ruby', scheme: 'file' }, new RBSDefinitionProvider(rbsIndex)),
+    vscode.languages.registerHoverProvider({ language: 'ruby', scheme: 'file' }, new RBSHoverProvider(rbsIndexFor)),
+    vscode.languages.registerDefinitionProvider({ language: 'ruby', scheme: 'file' }, new RBSDefinitionProvider(rbsIndexFor)),
     vscode.languages.registerDefinitionProvider({ language: 'ruby', scheme: 'file' }, factoryBotResolver),
     vscode.languages.registerDefinitionProvider(['erb', 'haml', 'slim', 'html'], new StimulusDefinitionProvider(stimulusIndexer)),
     vscode.languages.registerDefinitionProvider(['erb', 'haml', 'slim', 'html', 'ruby'], new TurboFrameDefinitionProvider(turboFrameNavigator)),
@@ -589,13 +605,10 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     env,
     semanticSearchIndex,
     rubyDocProvider,
-    devDocsFetcher,
-    devDocsCacheDir,
+    devDocsProjects,
     speculativeFixCache,
-    devDocsSlugs,
-    devDocsIndexHolder,
     rakeTaskTreeProvider,
-    rbsIndex,
+    rbsIndexes,
     steepProvider,
     steepDiagnostics,
     getAgentConfig,
@@ -626,6 +639,8 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   return {
     getActiveProjectRoot: () => activeProject.root,
     getSchemaTableNames: () => schemaIndexer.getAllTables().map(t => t.name),
+    countRbsMethods: (filePath, methodName) => rbsIndexFor(vscode.Uri.file(filePath)).lookup(methodName).length,
+    getDevDocsCacheDir: filePath => devDocsProjects.get(workspaceRootFor(vscode.Uri.file(filePath)) ?? activeProject.root).cacheDir,
     getAstIndexStatuses: () => Object.fromEntries(persistentIndexes.roots().map(r => [r, persistentIndexes.state(r).status])),
   }
 }
@@ -1024,24 +1039,6 @@ function registerMcpServer(root: string, mcpServerPath: string): void {
   fs.writeFileSync(mcpConfigPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8')
 }
 
-async function refreshDevDocsCache(
-  fetcher: DevDocsFetcher,
-  cacheDir: string,
-  slugs: string[],
-  holder: { index: DevDocsOfflineIndex },
-  forceRefresh: boolean,
-): Promise<boolean[]> {
-  const results = await Promise.all(slugs.map(slug => fetcher.ensureDocset(slug, forceRefresh)))
-  holder.index = new DevDocsOfflineIndex(cacheDir, slugs)
-  if (results.some(Boolean)) {
-    Logger.info(`RailsForge: offline DevDocs cache ready for ${slugs.filter((_, i) => results[i]).join(', ')}.`)
-  }
-  if (results.some(ok => !ok)) {
-    Logger.warn(`RailsForge: could not download offline DevDocs data for ${slugs.filter((_, i) => !results[i]).join(', ')} (offline, or docset unavailable at that slug).`)
-  }
-  return results
-}
-
 async function updateSteepDiagnostics(
   steepProvider: SteepProvider,
   collection: vscode.DiagnosticCollection,
@@ -1392,13 +1389,10 @@ function registerCommands(
   env: ProjectEnvironment,
   semanticSearchIndex: SemanticSearchIndex,
   rubyDocProvider: RubyDocProvider,
-  devDocsFetcher: DevDocsFetcher,
-  devDocsCacheDir: string,
+  devDocsProjects: PerRootRegistry<DevDocsProject>,
   speculativeFixCache: SpeculativeFixCache,
-  devDocsSlugs: string[],
-  devDocsIndexHolder: { index: DevDocsOfflineIndex },
   rakeTaskTreeProvider: RakeTaskTreeProvider,
-  rbsIndex: RBSIndex,
+  rbsIndexes: PerRootRegistry<RBSIndex>,
   steepProvider: SteepProvider,
   steepDiagnostics: vscode.DiagnosticCollection,
   getAgentConfig: (cfg?: RailsForgeConfig) => RailsAgentConfig,
@@ -2327,11 +2321,17 @@ function registerCommands(
       await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'RailsForge: Downloading offline DevDocs data…' },
         async () => {
-          const results = await refreshDevDocsCache(devDocsFetcher, devDocsCacheDir, devDocsSlugs, devDocsIndexHolder, true)
+          const root = activeWorkspaceRoot()
+          if (!root) {
+            vscode.window.showWarningMessage('RailsForge: Open a Ruby project to update its offline DevDocs cache.')
+            return
+          }
+          const project = devDocsProjects.get(root)
+          const results = await project.refresh(true)
           if (results.every(Boolean)) {
-            vscode.window.showInformationMessage(`RailsForge: Offline DevDocs cache updated (${devDocsSlugs.join(', ')}).`)
+            vscode.window.showInformationMessage(`RailsForge: Offline DevDocs cache updated (${project.slugs.join(', ')}).`)
           } else {
-            vscode.window.showWarningMessage(`RailsForge: Could not download ${devDocsSlugs.filter((_, i) => !results[i]).join(', ')} — check your network connection. Previously cached data (if any) is unchanged.`)
+            vscode.window.showWarningMessage(`RailsForge: Could not download ${project.slugs.filter((_, i) => !results[i]).join(', ')} — check your network connection. Previously cached data (if any) is unchanged.`)
           }
         },
       )
@@ -2445,7 +2445,7 @@ function registerCommands(
         }
       }
 
-      rbsIndex.loadFromWorkspace(root, sigDir)
+      rbsIndexes.get(root).loadFromWorkspace(root, sigDir)
       const generatedPath = path.join(outDir, `${relativePath.replace(/\.rb$/, '')}.rbs`)
       if (fs.existsSync(generatedPath)) {
         const doc = await vscode.workspace.openTextDocument(generatedPath)

@@ -7,6 +7,8 @@ interface RailsForgeTestApi {
   getActiveProjectRoot(): string
   getSchemaTableNames(): string[]
   getAstIndexStatuses(): Record<string, string>
+  countRbsMethods(filePath: string, methodName: string): number
+  getDevDocsCacheDir(filePath: string): string
 }
 
 const EXTENSION_ID = 'ShubhamTaywade.railsforge'
@@ -73,5 +75,21 @@ describe('RailsForge in a real Extension Host', function () {
     for (const status of Object.values(api.getAstIndexStatuses())) {
       assert.ok(['ready', 'unsupported'].includes(status), `unexpected AST index status: ${status}`)
     }
+  })
+
+  it('multi-root: RBS signatures and the DevDocs cache are per project', () => {
+    const folders = vscode.workspace.workspaceFolders ?? []
+    const a = folders.find(f => f.uri.fsPath.endsWith('rails_a'))!.uri.fsPath
+    const b = folders.find(f => f.uri.fsPath.endsWith('rails_b'))!.uri.fsPath
+    const fileA = path.join(a, 'app', 'models', 'alphas.rb')
+    const fileB = path.join(b, 'app', 'models', 'betas.rb')
+
+    assert.strictEqual(api.countRbsMethods(fileA, 'only_in_a'), 1)
+    assert.strictEqual(api.countRbsMethods(fileA, 'only_in_b'), 0)
+    assert.strictEqual(api.countRbsMethods(fileB, 'only_in_b'), 1)
+    assert.strictEqual(api.countRbsMethods(fileB, 'only_in_a'), 0)
+
+    assert.strictEqual(api.getDevDocsCacheDir(fileA), path.join(a, '.railsforge', 'devdocs'))
+    assert.strictEqual(api.getDevDocsCacheDir(fileB), path.join(b, '.railsforge', 'devdocs'))
   })
 })

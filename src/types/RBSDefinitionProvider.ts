@@ -16,10 +16,12 @@ import { RBSIndex } from './RBSIndex'
 const DEF_LINE = /^(\s*)def\s+(self\.)?([A-Za-z_]\w*[?!]?)/
 
 export class RBSDefinitionProvider implements vscode.DefinitionProvider {
-  constructor(private index: RBSIndex) {}
+  /** Resolves the index for the project that owns the document (multi-root safe). */
+  constructor(private indexFor: (uri: vscode.Uri) => RBSIndex) {}
 
   provideDefinition(document: vscode.TextDocument, position: vscode.Position): vscode.ProviderResult<vscode.Definition> {
-    if (this.index.isEmpty) {return null}
+    const index = this.indexFor(document.uri)
+    if (index.isEmpty) {return null}
 
     const line = document.lineAt(position.line).text
     const match = DEF_LINE.exec(line)
@@ -36,7 +38,7 @@ export class RBSDefinitionProvider implements vscode.DefinitionProvider {
     const className = findEnclosingClass(precedingLines, indent.length)
     if (!className) {return null}
 
-    const rbsMethod = this.index.lookupExact(className, methodName, Boolean(selfPrefix))
+    const rbsMethod = index.lookupExact(className, methodName, Boolean(selfPrefix))
     if (!rbsMethod) {return null}
 
     return new vscode.Location(vscode.Uri.file(rbsMethod.filePath), new vscode.Position(rbsMethod.line, 0))

@@ -19,7 +19,8 @@ import { DevDocsOfflineIndex } from './DevDocsOfflineIndex'
 
 export class DevDocsHoverProvider implements vscode.HoverProvider {
   constructor(
-    private indexHolder: { index: DevDocsOfflineIndex },
+    /** Resolves the offline index for the project that owns the hovered document. */
+    private indexFor: (uri: vscode.Uri) => DevDocsOfflineIndex,
     private isEnabled: () => boolean,
   ) {}
 
@@ -30,7 +31,7 @@ export class DevDocsHoverProvider implements vscode.HoverProvider {
     if (!range) {return null}
 
     const word = document.getText(range)
-    const result = this.indexHolder.index.lookup(word)
+    const result = this.indexFor(document.uri).lookup(word)
     if (!result) {return null}
 
     const md = new vscode.MarkdownString()
