@@ -33,6 +33,7 @@ import { TestExplorerController } from './testing/TestExplorerController'
 import { TestCodeLensProvider } from './testing/TestCodeLensProvider'
 import { activeWorkspaceRoot, workspaceRoots, workspaceRootFor } from './workspace/activeRoot'
 import { isInside, resolveWorkspaceRoot } from './workspace/WorkspaceRoots'
+import { ShellKind, shellKindFromPath, buildCommandLine, hasPathSegment } from './util/ShellCommand'
 import { patchFileMatches } from './patch/PatchPaths'
 import { EnvironmentDetector, ProjectEnvironment, isKnownVersion } from './environment/EnvironmentDetector'
 import { RailsDeprecationLinter } from './lint/RailsDeprecationLinter'
@@ -2167,12 +2168,12 @@ function registerCommands(
       }
     }),
     vscode.commands.registerCommand('railsforge.runSingleTest', (uri: vscode.Uri, line: number) => {
-      const term = vscode.window.createTerminal('RailsForge Test')
+      const term = createProjectTerminal('RailsForge Test', uri)
       term.show()
       term.sendText(buildSingleTestCommand(uri, line, env))
     }),
     vscode.commands.registerCommand('railsforge.debugSingleTest', (uri: vscode.Uri, line: number) => {
-      const term = vscode.window.createTerminal('RailsForge rdbg')
+      const term = createProjectTerminal('RailsForge rdbg', uri)
       term.show()
       term.sendText(`rdbg -n -c -- ${buildSingleTestCommand(uri, line, env)}`)
     }),
@@ -2246,22 +2247,22 @@ function registerCommands(
     }),
     vscode.commands.registerCommand('railsforge.runRakeTask', (taskName: string) => {
       if (!taskName) {return}
-      const term = vscode.window.createTerminal('RailsForge Rake')
+      const term = createProjectTerminal('RailsForge Rake')
       term.show()
-      term.sendText(`bundle exec rake ${shellQuote(taskName)}`)
+      term.sendText(buildCommandLine('bundle', ['exec', 'rake', taskName], currentShellKind()))
     }),
     vscode.commands.registerCommand('railsforge.refreshRakeTasks', () => {
       rakeTaskTreeProvider.refresh()
     }),
     vscode.commands.registerCommand('railsforge.openRailsConsole', () => {
-      const term = vscode.window.createTerminal('RailsForge Console')
+      const term = createProjectTerminal('RailsForge Console')
       term.show()
       if (env.hasRails) {
         term.sendText('bundle exec rails console')
       } else if (env.hasPry) {
         term.sendText('bundle exec pry')
       } else {
-        term.sendText('bundle exec irb || irb')
+        term.sendText(currentShellKind() === 'powershell' ? 'bundle exec irb' : 'bundle exec irb || irb')
       }
     }),
     vscode.commands.registerCommand('railsforge.evaluateInREPL', () => {
@@ -2438,30 +2439,29 @@ function formatRubyDocEntry(entry: RubyDocEntry): string {
  * Minitest gem/script test runs the whole file instead of one line — Minitest itself has
  * no universal line-based selection.
  */
-/**
- * POSIX single-quote escaping for a string embedded in a shell command line sent via
- * `Terminal.sendText` — VS Code's Terminal API only accepts a command string, not
- * execFile-style argv, so this is the safe way to embed a file path (which can contain
- * arbitrary characters in an untrusted workspace) without it being interpreted by the shell.
- */
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`
+function currentShellKind(): ShellKind {
+  return shellKindFromPath(vscode.env.shell)
 }
 
 function buildSingleTestCommand(uri: vscode.Uri, line: number, env: ProjectEnvironment): string {
-  const isRSpec = uri.fsPath.includes('/spec/')
+  const kind = currentShellKind()
+  const isRSpec = hasPathSegment(uri.fsPath, 'spec')
     ? true
-    : uri.fsPath.includes('/test/')
+    : hasPathSegment(uri.fsPath, 'test')
       ? false
       : readConfig().testingFramework === 'rspec'
 
-  const path = shellQuote(uri.fsPath)
   if (isRSpec) {
-    return `bundle exec rspec ${shellQuote(`${uri.fsPath}:${line}`)}`
+    return buildCommandLine('bundle', ['exec', 'rspec', `${uri.fsPath}:${line}`], kind)
   }
   return env.hasRails
-    ? `bundle exec rails test ${shellQuote(`${uri.fsPath}:${line}`)}`
-    : `bundle exec ruby -Itest ${path}`
+    ? buildCommandLine('bundle', ['exec', 'rails', 'test', `${uri.fsPath}:${line}`], kind)
+    : buildCommandLine('bundle', ['exec', 'ruby', '-Itest', uri.fsPath], kind)
+}
+
+/** Terminal rooted at the project that owns `uri` (never an arbitrary first folder). */
+function createProjectTerminal(name: string, uri?: vscode.Uri): vscode.Terminal {
+  return vscode.window.createTerminal({ name, cwd: workspaceRootFor(uri) })
 }
 
 function navigateCompanion(mvc: MVCNavigator, targetType: string): void {
