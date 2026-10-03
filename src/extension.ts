@@ -33,7 +33,9 @@ import { TestExplorerController } from './testing/TestExplorerController'
 import { TestCodeLensProvider } from './testing/TestCodeLensProvider'
 import { activeWorkspaceRoot, workspaceRoots, workspaceRootFor } from './workspace/activeRoot'
 import { isInside, resolveWorkspaceRoot } from './workspace/WorkspaceRoots'
-import { firstCandidate, projectVersionManager, rubyTerminalCommand } from './util/RubyCommand'
+import { RAILSFORGE_TASK_TYPE, RailsTaskProvider } from './tasks/RailsTaskProvider'
+import { GENERATORS, GeneratorMode, buildGeneratorArgs, parseAttributes, parseGeneratorOutput, validateGeneratorName } from './rails/RailsGenerators'
+import { firstCandidate, projectVersionManager, rubyCandidates, rubyTerminalCommand } from './util/RubyCommand'
 import { ShellKind, shellKindFromPath, hasPathSegment } from './util/ShellCommand'
 import { patchFileMatches } from './patch/PatchPaths'
 import { EnvironmentDetector, ProjectEnvironment, isKnownVersion } from './environment/EnvironmentDetector'
@@ -630,6 +632,8 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   if (workspaceRoot) {
     void suggestRubyLspAddon(context, workspaceRoot)
   }
+
+  context.subscriptions.push(vscode.tasks.registerTaskProvider(RAILSFORGE_TASK_TYPE, new RailsTaskProvider()))
 
   // 6. Status Bar
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)
@@ -2345,6 +2349,8 @@ function registerCommands(
         },
       )
     }),
+    vscode.commands.registerCommand('railsforge.generate', () => runRailsGenerator('generate', rubocop)),
+    vscode.commands.registerCommand('railsforge.destroyGenerated', () => runRailsGenerator('destroy', rubocop)),
     vscode.commands.registerCommand('railsforge.runRakeTask', (taskName: string) => {
       if (!taskName) {return}
       const term = createProjectTerminal('RailsForge Rake')
@@ -2544,6 +2550,107 @@ function formatRubyDocEntry(entry: RubyDocEntry): string {
  * Minitest gem/script test runs the whole file instead of one line — Minitest itself has
  * no universal line-based selection.
  */
+interface GeneratorRunResult {
+  ok: boolean
+  output: string
+}
+
+/** Runs `rails <args>` through the project toolchain, returning combined output even on failure. */
+async function execRails(root: string, args: string[]): Promise<GeneratorRunResult> {
+  for (const c of rubyCandidates(root, 'rails', args)) {
+    try {
+      const { stdout, stderr } = await execFileAsync(c.command, c.args, { cwd: root, maxBuffer: 10 * 1024 * 1024, timeout: 120_000 })
+      return { ok: true, output: `${stdout}${stderr}` }
+    } catch (err: unknown) {
+      const e = err as { code?: string; stdout?: string; stderr?: string; message?: string }
+      if (e.code === 'ENOENT') {continue}
+      return { ok: false, output: `${e.stdout ?? ''}${e.stderr ?? ''}` || (e.message ?? 'rails failed') }
+    }
+  }
+  return { ok: false, output: 'Could not launch `rails` (no bin/rails, bundler or rails executable found).' }
+}
+
+/** `rails generate` / `rails destroy` driven from the UI: validated input, argv execution, parsed result. */
+async function runRailsGenerator(mode: GeneratorMode, rubocop: RuboCopProvider): Promise<void> {
+  const root = activeWorkspaceRoot()
+  if (!root || !fs.existsSync(path.join(root, 'config', 'application.rb'))) {
+    vscode.window.showWarningMessage('RailsForge: Open a Rails application to use the generators.')
+    return
+  }
+
+  const kind = await vscode.window.showQuickPick(
+    GENERATORS.map(g => ({ label: g.label, description: g.description, generator: g })),
+    { placeHolder: mode === 'generate' ? 'Rails generator to run' : 'Generator to destroy (removes the files it created)' },
+  )
+  if (!kind) {return}
+
+  const name = await vscode.window.showInputBox({ prompt: kind.generator.namePrompt, validateInput: validateGeneratorName })
+  if (!name) {return}
+
+  let attributes: string[] = []
+  if (kind.generator.takesAttributes && mode === 'generate') {
+    const raw = await vscode.window.showInputBox({
+      prompt: 'Attributes / actions (space separated, optional) — e.g. name:string email:string:index',
+      validateInput: value => {
+        const parsed = parseAttributes(value)
+        return 'error' in parsed ? parsed.error : undefined
+      },
+    })
+    if (raw === undefined) {return}
+    const parsed = parseAttributes(raw)
+    if ('error' in parsed) {return}
+    attributes = parsed.attributes
+  }
+
+  const args = buildGeneratorArgs(mode, kind.generator.id, name, attributes)
+  if (mode === 'destroy') {
+    const confirm = await vscode.window.showWarningMessage(
+      `This runs "rails ${args.join(' ')}" and deletes the files that generator created. Continue?`,
+      { modal: true },
+      'Destroy',
+    )
+    if (confirm !== 'Destroy') {return}
+  }
+
+  const result = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: `RailsForge: rails ${args.slice(0, 3).join(' ')}…` },
+    () => execRails(root, args),
+  )
+  Logger.info(`[generator] rails ${args.join(' ')} -> ${result.ok ? 'ok' : 'failed'}\n${result.output}`)
+  if (!result.ok) {
+    const choice = await vscode.window.showErrorMessage(`RailsForge: rails ${args[0]} ${args[1]} failed.`, 'Show Log')
+    if (choice === 'Show Log') {Logger.show(false)}
+    return
+  }
+
+  const parsed = parseGeneratorOutput(result.output)
+  if (parsed.conflicts.length > 0) {
+    vscode.window.showWarningMessage(`RailsForge: ${parsed.conflicts.length} file(s) already existed and were not overwritten: ${parsed.conflicts.join(', ')}`)
+  }
+  if (mode === 'destroy') {
+    vscode.window.showInformationMessage(`RailsForge: removed ${parsed.removed.length} file(s).`)
+    return
+  }
+
+  const files = parsed.created.map(f => path.join(root, f)).filter(f => fs.existsSync(f))
+  if (files.length === 0) {
+    vscode.window.showInformationMessage('RailsForge: generator finished — no new files were created.')
+    return
+  }
+  const preferred = files.find(f => !/[\\/]db[\\/]migrate[\\/]/.test(f)) ?? files[0]
+  await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(preferred))
+
+  const rubyFiles = files.filter(f => f.endsWith('.rb'))
+  const choice = await vscode.window.showInformationMessage(
+    `RailsForge: created ${files.length} file(s).`,
+    ...(rubyFiles.length > 0 ? ['Run RuboCop autocorrect on new files'] : []),
+  )
+  if (choice) {
+    const results = await Promise.all(rubyFiles.map(f => rubocop.autoCorrectFile(vscode.Uri.file(f))))
+    vscode.window.showInformationMessage(`RailsForge: RuboCop autocorrected ${results.filter(Boolean).length}/${rubyFiles.length} file(s).`)
+  }
+}
+
 function currentShellKind(): ShellKind {
   return shellKindFromPath(vscode.env.shell)
 }

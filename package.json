@@ -454,7 +454,15 @@
         },
         "railsForge.ruby.versionManager": {
           "type": "string",
-          "enum": ["auto", "none", "mise", "asdf", "rbenv", "rvm", "chruby"],
+          "enum": [
+            "auto",
+            "none",
+            "mise",
+            "asdf",
+            "rbenv",
+            "rvm",
+            "chruby"
+          ],
           "default": "auto",
           "description": "Version manager used to run project tools (RuboCop, Rails, RSpec, Brakeman, ...) so the project's Ruby is used even when VS Code was launched without shell init. 'auto' detects it from .tool-versions / mise.toml / .ruby-version and only wraps when the manager is installed; 'none' runs tools directly."
         },
@@ -687,6 +695,16 @@
         "category": "RailsForge"
       },
       {
+        "command": "railsforge.generate",
+        "title": "RailsForge: Rails Generate…",
+        "category": "RailsForge"
+      },
+      {
+        "command": "railsforge.destroyGenerated",
+        "title": "RailsForge: Rails Destroy…",
+        "category": "RailsForge"
+      },
+      {
         "command": "railsforge.showSchemaPeek",
         "title": "RailsForge: Peek Model Schema",
         "category": "RailsForge"
@@ -799,6 +817,14 @@
           "when": "railsforge.isRailsApp"
         },
         {
+          "command": "railsforge.generate",
+          "when": "railsforge.isRailsApp"
+        },
+        {
+          "command": "railsforge.destroyGenerated",
+          "when": "railsforge.isRailsApp"
+        },
+        {
           "command": "railsforge.goToPolicy",
           "when": "railsforge.hasPundit"
         },
@@ -877,6 +903,81 @@
         "key": "alt+r e",
         "mac": "cmd+alt+r e",
         "when": "editorTextFocus"
+      }
+    ],
+    "taskDefinitions": [
+      {
+        "type": "railsforge",
+        "required": [
+          "task"
+        ],
+        "properties": {
+          "task": {
+            "type": "string",
+            "description": "Preset id (test, rubocop, brakeman, db:migrate, db:rollback, db:prepare, db:seed, routes) or one of rake / rails / rspec / rubocop together with args."
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Arguments for rake / rails / rspec / rubocop tasks (passed as argv, not through a shell)."
+          }
+        }
+      }
+    ],
+    "problemMatchers": [
+      {
+        "name": "rubocop-railsforge",
+        "label": "RuboCop (emacs format)",
+        "owner": "rubocop",
+        "source": "RuboCop",
+        "severity": "warning",
+        "fileLocation": [
+          "relative",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^(.+?):(\\d+):(\\d+):\\s+[CWEFR]:\\s+(?:\\[Correctable\\]\\s+)?(.+)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "message": 4
+        }
+      },
+      {
+        "name": "rspec-railsforge",
+        "label": "RSpec failures",
+        "owner": "rspec",
+        "source": "RSpec",
+        "severity": "error",
+        "fileLocation": [
+          "relative",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^rspec (\\.?/?[^:\\s]+\\.rb):(\\d+) # (.+)$",
+          "file": 1,
+          "line": 2,
+          "message": 3
+        }
+      },
+      {
+        "name": "minitest-railsforge",
+        "label": "Minitest failures",
+        "owner": "minitest",
+        "source": "Minitest",
+        "severity": "error",
+        "fileLocation": [
+          "relative",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^(\\S+#\\S+) \\[(.+?\\.rb):(\\d+)\\]:$",
+          "message": 1,
+          "file": 2,
+          "line": 3
+        }
       }
     ]
   },

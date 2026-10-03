@@ -92,4 +92,16 @@ describe('RailsForge in a real Extension Host', function () {
     assert.strictEqual(api.getDevDocsCacheDir(fileA), path.join(a, '.railsforge', 'devdocs'))
     assert.strictEqual(api.getDevDocsCacheDir(fileB), path.join(b, '.railsforge', 'devdocs'))
   })
+
+  it('task provider offers RailsForge tasks for each Rails root, executed without a shell', async () => {
+    const tasks = await vscode.tasks.fetchTasks({ type: 'railsforge' })
+    const names = tasks.map(t => `${(t.scope as vscode.WorkspaceFolder).name}:${t.name}`)
+    for (const folder of ['rails_a', 'rails_b']) {
+      assert.ok(names.includes(`${folder}:RuboCop: lint`), `missing RuboCop task for ${folder}: ${names.join(', ')}`)
+      assert.ok(names.includes(`${folder}:Rails: db:migrate`), `missing db:migrate for ${folder}`)
+    }
+    const rubocop = tasks.find(t => t.name === 'RuboCop: lint')!
+    assert.ok(rubocop.execution instanceof vscode.ProcessExecution)
+    assert.deepStrictEqual(rubocop.problemMatchers, ['$rubocop-railsforge'])
+  })
 })
