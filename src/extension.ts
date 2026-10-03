@@ -35,10 +35,11 @@ import { activeWorkspaceRoot, workspaceRoots, workspaceRootFor } from './workspa
 import { isInside, resolveWorkspaceRoot } from './workspace/WorkspaceRoots'
 import { RubyAnalyzersProvider, AnalyzerRunResult } from './lint/RubyAnalyzersProvider'
 import { ANALYZER_IDS, AnalyzerId } from './lint/AnalyzerParsers'
+import { LmApiLike, registerRailsLanguageModelTools } from './ai/RailsLanguageModelTools'
 import { showRuntimeSnapshot } from './rails/RuntimeIntrospectionService'
 import { RAILSFORGE_TASK_TYPE, RailsTaskProvider } from './tasks/RailsTaskProvider'
 import { GENERATORS, GeneratorMode, buildGeneratorArgs, parseAttributes, parseGeneratorOutput, validateGeneratorName } from './rails/RailsGenerators'
-import { firstCandidate, projectVersionManager, rubyCandidates, rubyTerminalCommand } from './util/RubyCommand'
+import { firstCandidate, projectVersionManager, setVersionManagerSettingProvider, rubyCandidates, rubyTerminalCommand } from './util/RubyCommand'
 import { ShellKind, shellKindFromPath, hasPathSegment } from './util/ShellCommand'
 import { patchFileMatches } from './patch/PatchPaths'
 import { EnvironmentDetector, ProjectEnvironment, isKnownVersion } from './environment/EnvironmentDetector'
@@ -77,7 +78,7 @@ import { EndwiseProvider } from './editing/EndwiseProvider'
 import { ErbTagCompletionProvider } from './editing/ErbTagCompletionProvider'
 import { GemLensProvider } from './gems/GemLensProvider'
 import { RubyGemsClient } from './gems/RubyGemsClient'
-import { readConfig, buildExcludeGlob, isExcludedPath, onConfigChanged, RailsForgeConfig } from './config/RailsForgeConfig'
+import { readConfig, buildExcludeGlob, isExcludedPath, onConfigChanged, RailsForgeConfig, AiProvider } from './config/RailsForgeConfig'
 import { buildOpenApiSkeleton } from './docs/OpenApiSkeletonGenerator'
 import { ApiDockClient } from './docs/ApiDockClient'
 import { ApiDockMethodIndex } from './docs/ApiDockMethodIndex'
@@ -126,6 +127,7 @@ export interface RailsForgeTestApi {
 }
 
 export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
+  setVersionManagerSettingProvider(() => readConfig().rubyVersionManager)
   Logger.init(context)
   const config = readConfig()
   Logger.setLevel(config.logLevel)
@@ -266,6 +268,9 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     ollamaRepeatPenalty: cfg.ollamaRepeatPenalty,
     ollamaMinP: cfg.ollamaMinP,
     getApiKey: async () => context.secrets.get(aiApiKeySecretKey(readConfig().aiProvider)),
+    vscodeLmFamily: cfg.aiVscodeLmFamily,
+    vscodeLmRequest: (system, prompt) => requestViaVsCodeLm(system, prompt, readConfig().aiVscodeLmFamily, readConfig().aiTimeoutMs),
+    vscodeLmStatus: () => vscodeLmStatus(readConfig().aiVscodeLmFamily),
     log: (level: 'debug' | 'trace' | 'warn', message: string) => {
       if (level === 'debug') { Logger.debug(message) }
       else if (level === 'trace') { Logger.trace(message) }
@@ -642,6 +647,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     void suggestRubyLspAddon(context, workspaceRoot)
   }
 
+  registerAgentIntegrations(context)
   context.subscriptions.push(vscode.tasks.registerTaskProvider(RAILSFORGE_TASK_TYPE, new RailsTaskProvider()))
 
   // 6. Status Bar
@@ -798,8 +804,51 @@ function watchStimulusControllers(context: vscode.ExtensionContext, indexer: Sti
   context.subscriptions.push(watcher)
 }
 
+type VsCodeLmApi = { selectChatModels?: (selector?: { family?: string }) => Thenable<vscode.LanguageModelChat[]> }
+
+async function selectVsCodeLmModel(family: string): Promise<vscode.LanguageModelChat | undefined> {
+  const lm = (vscode as unknown as { lm?: VsCodeLmApi }).lm
+  if (typeof lm?.selectChatModels !== 'function') {return undefined}
+  const models = await lm.selectChatModels(family ? { family } : undefined)
+  return models[0]
+}
+
+/** One system+user request through VS Code's Language Model API (the user is asked for consent on first use). */
+async function requestViaVsCodeLm(system: string, prompt: string, family: string, timeoutMs: number): Promise<string> {
+  const model = await selectVsCodeLmModel(family)
+  if (!model) {
+    throw new Error(family
+      ? `No VS Code language model matches family "${family}". Install/sign in to a model provider or change railsForge.ai.vscodeLm.family.`
+      : 'No VS Code language model is available. Sign in to Copilot or install a Language Model provider extension.')
+  }
+  const source = new vscode.CancellationTokenSource()
+  const timer = setTimeout(() => source.cancel(), timeoutMs)
+  try {
+    // The Language Model API has no system role: fold the system prompt into the first user message.
+    const messages = [vscode.LanguageModelChatMessage.User(`${system}\n\n---\n\n${prompt}`)]
+    const response = await model.sendRequest(messages, { justification: 'RailsForge needs a model to answer your Rails question.' }, source.token)
+    let text = ''
+    for await (const chunk of response.text) {text += chunk}
+    return text
+  } finally {
+    clearTimeout(timer)
+    source.dispose()
+  }
+}
+
+async function vscodeLmStatus(family: string): Promise<{ state: 'authenticated' | 'error'; detail?: string }> {
+  try {
+    const model = await selectVsCodeLmModel(family)
+    return model
+      ? { state: 'authenticated', detail: `${model.name} (${model.vendor})` }
+      : { state: 'error', detail: family ? `No model for family "${family}"` : 'No VS Code language model available' }
+  } catch (err) {
+    return { state: 'error', detail: err instanceof Error ? err.message : String(err) }
+  }
+}
+
 /** SecretStorage key for a given AI provider's API key — never the same key across providers, so switching providers doesn't require re-entering the other one's key. */
-function aiApiKeySecretKey(provider: 'ollama' | 'openai' | 'anthropic'): string {
+function aiApiKeySecretKey(provider: AiProvider): string {
   return `railsForge.aiApiKey.${provider}`
 }
 
@@ -1474,7 +1523,7 @@ function registerCommands(
     }),
     vscode.commands.registerCommand('railsforge.setAiApiKey', async () => {
       let provider = readConfig().aiProvider
-      if (provider === 'ollama') {
+      if (provider === 'ollama' || provider === 'vscode-lm') {
         const choice = await vscode.window.showQuickPick(
           [
             { label: '$(cloud) OpenAI / Compatible', description: 'OpenAI, OpenRouter, MiniMax, Groq, DeepSeek', provider: 'openai' as const },
@@ -2579,6 +2628,55 @@ function formatRubyDocEntry(entry: RubyDocEntry): string {
  * Minitest gem/script test runs the whole file instead of one line — Minitest itself has
  * no universal line-based selection.
  */
+/**
+ * Agent-native integrations, each feature-detected (the engine floor is ^1.96, but these
+ * APIs only exist on newer hosts / forks): Language Model tools for agent mode and a native
+ * MCP server definition provider for the bundled RailsForge MCP server.
+ */
+function registerAgentIntegrations(context: vscode.ExtensionContext): void {
+  const lm = (vscode as unknown as { lm?: { registerTool?: unknown; registerMcpServerDefinitionProvider?: unknown } }).lm
+
+  if (typeof lm?.registerTool === 'function') {
+    const toolDisposables = registerRailsLanguageModelTools({
+      lm: vscode.lm as unknown as LmApiLike,
+      getRoot: () => activeWorkspaceRoot(),
+      toResult: text => new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(text)]),
+      log: message => Logger.debug(message),
+    })
+    context.subscriptions.push(...toolDisposables)
+    Logger.info(`Registered ${toolDisposables.length - 1} RailsForge Language Model tools.`)
+  } else {
+    Logger.debug('vscode.lm.registerTool is unavailable in this host; skipping Language Model tools.')
+  }
+
+  const serverPath = path.join(context.extensionPath, 'dist', 'mcp', 'server.js')
+  const McpStdio = (vscode as unknown as { McpStdioServerDefinition?: new (label: string, command: string, args?: string[], env?: Record<string, string | number | null>, version?: string) => unknown }).McpStdioServerDefinition
+  if (typeof lm?.registerMcpServerDefinitionProvider === 'function' && McpStdio && fs.existsSync(serverPath)) {
+    const changed = new vscode.EventEmitter<void>()
+    context.subscriptions.push(changed, onConfigChanged(() => changed.fire()))
+    const provider = {
+      onDidChangeMcpServerDefinitions: changed.event,
+      provideMcpServerDefinitions: () => {
+        if (!readConfig().mcpEnabled) {return []}
+        // One server per workspace root: each reads its own schema/routes/index.
+        return workspaceRoots().map(root => new McpStdio(
+          `RailsForge (${path.basename(root)})`,
+          'node',
+          [serverPath],
+          { RAILSFORGE_WORKSPACE_ROOT: root },
+          context.extension.packageJSON.version as string,
+        ))
+      },
+    }
+    context.subscriptions.push(
+      (lm.registerMcpServerDefinitionProvider as (id: string, p: unknown) => vscode.Disposable)('railsforge.mcp', provider),
+    )
+    Logger.info('Registered the RailsForge MCP server definition provider.')
+  } else {
+    Logger.debug('MCP server definition provider API unavailable (older host) or server bundle missing; the .cursor/mcp.json writer remains.')
+  }
+}
+
 /** Runs the configured (or user-picked) analyzers over the active project and publishes findings. */
 async function runCodeAnalyzers(provider: RubyAnalyzersProvider): Promise<void> {
   const root = activeWorkspaceRoot()

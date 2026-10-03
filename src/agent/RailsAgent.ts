@@ -50,7 +50,7 @@ export interface ProviderStatus {
   detail?: string
 }
 
-export type AiAgentProvider = 'ollama' | 'openai' | 'anthropic'
+export type AiAgentProvider = 'ollama' | 'openai' | 'anthropic' | 'vscode-lm'
 
 export interface RailsAgentConfig {
   ollamaHost: string
@@ -80,6 +80,15 @@ export interface RailsAgentConfig {
    * fails `run()` with a clear message instead of sending an unauthenticated request.
    */
   getApiKey?: () => Promise<string | undefined>
+  /**
+   * 'vscode-lm' only: sends one system+user request through VS Code's Language Model API
+   * (`vscode.lm.selectChatModels` / `model.sendRequest`) and resolves with the full text.
+   * Injected by the extension so this class stays free of a `vscode` import.
+   */
+  vscodeLmRequest?: (systemPrompt: string, prompt: string) => Promise<string>
+  /** 'vscode-lm' only: reports whether a usable model is available. */
+  vscodeLmStatus?: () => Promise<ProviderStatus>
+  vscodeLmFamily?: string
   /**
    * Host-provided logging callback (wired in extension.ts to the RailsForge
    * logger) so this class stays vscode-free. 'debug' carries AI request/response
@@ -138,6 +147,7 @@ export class RailsAgent {
   private modelFor(provider: AiAgentProvider): string {
     if (provider === 'openai') { return this.config.openaiModel ?? 'gpt-4o-mini' }
     if (provider === 'anthropic') { return this.config.anthropicModel ?? 'claude-sonnet-4-5' }
+    if (provider === 'vscode-lm') { return this.config.vscodeLmFamily || 'default (VS Code model picker)' }
     return this.config.model
   }
 
@@ -147,6 +157,17 @@ export class RailsAgent {
 
   private async chatCompletion(systemPrompt: string, prompt: string): Promise<{ success: boolean; response: string }> {
     const provider = this.config.provider ?? 'ollama'
+
+    if (provider === 'vscode-lm') {
+      if (!this.config.vscodeLmRequest) {
+        return { success: false, response: 'The VS Code Language Model API is not available in this editor. Switch railsForge.ai.provider to ollama/openai/anthropic.' }
+      }
+      try {
+        return { success: true, response: await this.config.vscodeLmRequest(systemPrompt, prompt) }
+      } catch (err) {
+        return { success: false, response: `VS Code language model error: ${err instanceof Error ? err.message : String(err)}` }
+      }
+    }
 
     if (provider === 'anthropic') {
       const apiKey = await this.config.getApiKey?.()
@@ -574,6 +595,10 @@ private buildFixRetryInstruction(code: string, diagnosticMessage: string, previo
       } catch (err) {
         return { state: 'offline', detail: err instanceof Error ? err.message : String(err) }
       }
+    }
+
+    if (provider === 'vscode-lm') {
+      return this.config.vscodeLmStatus ? this.config.vscodeLmStatus() : { state: 'error', detail: 'VS Code Language Model API unavailable' }
     }
 
     const apiKey = await this.config.getApiKey?.()

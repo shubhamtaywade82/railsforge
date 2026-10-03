@@ -21,7 +21,7 @@ export interface GemNamespaceMapping {
   gem: string
 }
 
-export type AiProvider = 'ollama' | 'openai' | 'anthropic'
+export type AiProvider = 'ollama' | 'openai' | 'anthropic' | 'vscode-lm'
 export type ProjectTypeOverride = 'auto' | 'monolith' | 'api_only' | 'gem' | 'script'
 export type RubocopMode = 'safe' | 'unsafe'
 export type TestingFramework = 'rspec' | 'minitest'
@@ -55,6 +55,8 @@ export interface RailsForgeConfig {
   ollamaRepeatPenalty: number
   ollamaMinP: number
   aiProvider: AiProvider
+  /** Preferred model family when aiProvider is 'vscode-lm' (empty = the user's default model). */
+  aiVscodeLmFamily: string
   aiOpenaiModel: string
   aiOpenaiBaseUrl: string
   aiAnthropicModel: string
@@ -117,6 +119,7 @@ export function readConfig(scope?: vscode.ConfigurationScope): RailsForgeConfig 
     ollamaRepeatPenalty: cfg.get<number>('ollama.repeatPenalty', 1.15),
     ollamaMinP: cfg.get<number>('ollama.minP', 0.05),
     aiProvider: cfg.get<AiProvider>('ai.provider', 'ollama'),
+    aiVscodeLmFamily: cfg.get<string>('ai.vscodeLm.family', ''),
     aiOpenaiModel: cfg.get<string>('ai.openai.model', 'gpt-4o-mini'),
     aiOpenaiBaseUrl: cfg.get<string>('ai.openai.baseUrl', 'https://api.openai.com'),
     aiAnthropicModel: cfg.get<string>('ai.anthropic.model', 'claude-sonnet-4-5'),

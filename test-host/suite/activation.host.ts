@@ -115,4 +115,15 @@ describe('RailsForge in a real Extension Host', function () {
     assert.ok(tree.includes('      when blank'), `context missing:\n${text}`)
     assert.ok(tree.includes('        is invalid'), `nested example missing:\n${text}`)
   })
+
+  it('registers RailsForge Language Model tools and they run against the active project', async function () {
+    const lm = (vscode as unknown as { lm?: { tools: Array<{ name: string }>; invokeTool(name: string, options: { input: object; toolInvocationToken: undefined }): Thenable<{ content: Array<{ value?: string }> }> } }).lm
+    if (!lm?.tools) {return this.skip()}
+    assert.ok(lm.tools.some(t => t.name === 'railsforge_get_schema'), 'railsforge_get_schema not registered')
+    await openFile('rails_a', 'app/models/alphas.rb')
+    const result = await lm.invokeTool('railsforge_get_schema', { input: {}, toolInvocationToken: undefined })
+    const text = result.content.map(part => part.value ?? '').join('')
+    assert.ok(text.includes('alphas'), `unexpected tool output: ${text.slice(0, 200)}`)
+    assert.ok(!text.includes('betas'), 'rails_b schema leaked into the rails_a tool call')
+  })
 })

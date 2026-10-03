@@ -6,11 +6,11 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
-import { readConfig } from '../config/RailsForgeConfig'
 import {
   ResolvedCommand,
   ToolchainEnv,
   VersionManager,
+  VersionManagerSetting,
   detectVersionManager,
   rubyCommandCandidates,
 } from '../environment/RubyToolchain'
@@ -41,8 +41,18 @@ export const realToolchainEnv: ToolchainEnv = {
   platform: process.platform,
 }
 
+/**
+ * Where the `railsForge.ruby.versionManager` setting comes from. This module is also bundled into the
+ * standalone MCP server (no `vscode`), so the extension injects the setting instead of importing it.
+ */
+let versionManagerSetting: () => VersionManagerSetting = () => 'auto'
+
+export function setVersionManagerSettingProvider(provider: () => VersionManagerSetting): void {
+  versionManagerSetting = provider
+}
+
 export function projectVersionManager(root: string): VersionManager {
-  return detectVersionManager(root, realToolchainEnv, readConfig().rubyVersionManager)
+  return detectVersionManager(root, realToolchainEnv, versionManagerSetting())
 }
 
 /** Ordered commands to try for `tool` in `root` (preferred first). */

@@ -20,6 +20,9 @@
 - Optional code analyzers — Reek, Flog, Flay, Debride, Standard — via `RailsForge: Run Code Analyzers`; findings appear in Problems (`railsForge.analyzers.*`). Parsers are verified against real tool output.
 - Opt-in Rails runtime introspection (`rails runner`, trust- and consent-gated): real associations, validations, callbacks, routes and middleware cached in `.railsforge/runtime.json`.
 - Ruby LSP add-on 0.2.0: route-helper and column completion, go-to-definition from route helpers to `config/routes.rb` and from `render` to partials.
+- Agent-native: every RailsForge MCP tool is also a VS Code Language Model tool (`railsforge_*`, agent mode / `#` references) via one shared implementation (`src/mcp/tools`); package.json's `languageModelTools` is generated from it and checked by a sync test. A native MCP server definition provider registers the bundled server per workspace root. New `get_runtime_introspection` tool.
+- `railsForge.ai.provider = "vscode-lm"` uses VS Code's model picker (Copilot or any Language Model provider) through the Language Model API, no API key stored by RailsForge.
+- Fixed: the standalone MCP server bundle no longer pulls in `vscode` (CI now guards this).
 
 ### Changed
 - `@rails` slash commands now run distinct workflows: `/optimize` performs schema-aware N+1 static analysis, `/migrate` runs the strong_migrations checks, `/fix` includes active diagnostics, `/service` `/scaffold` `/spec` ground the prompt in existing patterns, tables and the detected test framework.

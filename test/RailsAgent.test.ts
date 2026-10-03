@@ -404,3 +404,29 @@ describe('RailsAgent provider dispatch', () => {
     expect(prompt).toContain('Return a corrected minimal unified diff')
   })
 })
+
+describe('RailsAgent vscode-lm provider', () => {
+  it('sends the system and user prompts through the injected VS Code LM request', async () => {
+    const vscodeLmRequest = vi.fn(async (_system: string, _prompt: string) => 'model answer')
+    const agent = buildAgent({ provider: 'vscode-lm', vscodeLmRequest })
+    const result = await agent.run('what is a scope?', {})
+    expect(result).toMatchObject({ success: true, response: 'model answer' })
+    expect(vscodeLmRequest).toHaveBeenCalledTimes(1)
+    expect(vscodeLmRequest.mock.calls[0][0]).toContain('RailsForge AI')
+    expect(vscodeLmRequest.mock.calls[0][1]).toBe('what is a scope?')
+  })
+
+  it('reports model errors and a missing LM API as failures, not exceptions', async () => {
+    const failing = buildAgent({ provider: 'vscode-lm', vscodeLmRequest: async () => { throw new Error('consent denied') } })
+    expect(await failing.run('x', {})).toMatchObject({ success: false, response: expect.stringContaining('consent denied') })
+    const unavailable = buildAgent({ provider: 'vscode-lm' })
+    expect(await unavailable.run('x', {})).toMatchObject({ success: false, response: expect.stringContaining('not available') })
+  })
+
+  it('delegates status to the injected check', async () => {
+    const agent = buildAgent({ provider: 'vscode-lm', vscodeLmStatus: async () => ({ state: 'authenticated', detail: 'GPT (copilot)' }) })
+    expect(await agent.getProviderStatus()).toEqual({ state: 'authenticated', detail: 'GPT (copilot)' })
+    expect(await agent.healthCheck()).toBe(true)
+    expect((await buildAgent({ provider: 'vscode-lm' }).getProviderStatus()).state).toBe('error')
+  })
+})

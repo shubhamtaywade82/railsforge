@@ -47,6 +47,11 @@ jobs:
       - name: Compile Extension (Webpack)
         run: pnpm run compile
 
+      # The standalone MCP server runs outside VS Code; a stray `import 'vscode'` anywhere in
+      # its import graph would crash it at startup, so guard the built bundle.
+      - name: Check the MCP server bundle has no vscode dependency
+        run: "! grep -q 'require(\"vscode\")' dist/mcp/server.js"
+
       - name: Run Vitest Unit Tests
         run: pnpm test
 
