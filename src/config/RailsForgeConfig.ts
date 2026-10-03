@@ -86,6 +86,8 @@ export interface RailsForgeConfig {
   typesSteepEnabled: boolean
   typesSteepScanOnSave: boolean
   typesRbsSigDir: string
+  /** Version manager used to run project tools ('auto' detects from .tool-versions/.ruby-version). */
+  rubyVersionManager: 'auto' | 'none' | 'mise' | 'asdf' | 'rbenv' | 'rvm' | 'chruby'
   logLevel: LogLevelName
   logFileEnabled: boolean
 }
@@ -141,6 +143,7 @@ export function readConfig(scope?: vscode.ConfigurationScope): RailsForgeConfig 
     typesSteepEnabled: cfg.get<boolean>('types.steepEnabled', false),
     typesSteepScanOnSave: cfg.get<boolean>('types.steepScanOnSave', false),
     typesRbsSigDir: cfg.get<string>('types.rbsSigDir', 'sig'),
+    rubyVersionManager: cfg.get<RailsForgeConfig['rubyVersionManager']>('ruby.versionManager', 'auto'),
     logLevel: cfg.get<LogLevelName>('log.level', 'info'),
     logFileEnabled: cfg.get<boolean>('log.file', false),
   }

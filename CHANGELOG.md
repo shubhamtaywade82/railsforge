@@ -13,6 +13,7 @@
 
 - Persistent AST index is per workspace root (own SQLite file, worker and watchers, started lazily, disposed with its folder). When the native module can't load, RailsForge now says why (one-time notice with log link + permanent dismiss, status in the Architecture view, precise command messages) instead of silently disabling the feature.
 - Offline DevDocs cache and RBS signature index are per workspace root: each project caches docsets for its own Ruby/Rails versions under its own `.railsforge/devdocs`, hovers/definitions resolve the index from the document's owning root, `Update Offline DevDocs` targets the active project, and a removed folder's state is dropped.
+- Project tools (RuboCop, Brakeman, bundler-audit, Steep, RBS, rake, rspec/rails test, console, release) now run through one toolchain resolver: `bin/` binstub, else `bundle exec`, else the bare tool, wrapped in the project's version manager (mise, asdf, rbenv, rvm, chruby) when detected and installed (`railsForge.ruby.versionManager`). RuboCop now runs inside the owning project's root instead of the host's working directory.
 
 ### Changed
 - `@rails` slash commands now run distinct workflows: `/optimize` performs schema-aware N+1 static analysis, `/migrate` runs the strong_migrations checks, `/fix` includes active diagnostics, `/service` `/scaffold` `/spec` ground the prompt in existing patterns, tables and the detected test framework.

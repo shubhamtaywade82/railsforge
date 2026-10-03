@@ -452,6 +452,12 @@
           "default": false,
           "description": "Automatically re-run Steep in the background on Ruby file save when railsForge.types.steepEnabled is true. Debounced (like brakeman.scanOnSave) since Steep checks the whole configured target, not just the saved file."
         },
+        "railsForge.ruby.versionManager": {
+          "type": "string",
+          "enum": ["auto", "none", "mise", "asdf", "rbenv", "rvm", "chruby"],
+          "default": "auto",
+          "description": "Version manager used to run project tools (RuboCop, Rails, RSpec, Brakeman, ...) so the project's Ruby is used even when VS Code was launched without shell init. 'auto' detects it from .tool-versions / mise.toml / .ruby-version and only wraps when the manager is installed; 'none' runs tools directly."
+        },
         "railsForge.types.rbsSigDir": {
           "type": "string",
           "default": "sig",

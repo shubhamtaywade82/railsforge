@@ -4,6 +4,7 @@
 
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { firstCandidate } from '../util/RubyCommand'
 
 const execFileAsync = promisify(execFile)
 
@@ -27,9 +28,8 @@ export interface BrakemanReport {
 
 export class BrakemanProvider {
   async runScan(workspaceRoot: string): Promise<BrakemanReport> {
-    const viaBundle = await this.tryBrakeman('bundle', ['exec', 'brakeman', '-f', 'json', '-q'], workspaceRoot)
-    if (viaBundle) {return viaBundle}
-    return (await this.tryBrakeman('brakeman', ['-f', 'json', '-q'], workspaceRoot)) ?? {
+    const report = await firstCandidate(workspaceRoot, 'brakeman', ['-f', 'json', '-q'], (cmd, args) => this.tryBrakeman(cmd, args, workspaceRoot))
+    return report ?? {
       warnings: [],
       errors: ['Brakeman execution failed.'],
       scanDuration: 0,

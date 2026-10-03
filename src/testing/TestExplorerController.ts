@@ -3,7 +3,8 @@
  */
 
 import * as vscode from 'vscode'
-import { activeWorkspaceRoot } from '../workspace/activeRoot'
+import { activeWorkspaceRoot, workspaceRootFor } from '../workspace/activeRoot'
+import { rubyCandidates } from '../util/RubyCommand'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 
@@ -75,9 +76,24 @@ export class TestExplorerController {
 
       // execFile (not exec/a shell string) so the file path — which can contain
       // arbitrary characters in an untrusted workspace — is never interpreted by a shell.
-      const [command, args] = this.buildTestCommand(test)
+      const root = (test.uri ? workspaceRootFor(test.uri) : undefined) ?? activeWorkspaceRoot() ?? ''
+      const [tool, toolArgs] = this.buildTestCommand(test)
       try {
-        await execFileAsync(command, args, { cwd: activeWorkspaceRoot() })
+        // Binstub / bundle exec / bare, wrapped in the project's version manager.
+        let lastError: unknown
+        let ran = false
+        for (const c of rubyCandidates(root, tool, toolArgs)) {
+          try {
+            await execFileAsync(c.command, c.args, { cwd: root })
+            ran = true
+            break
+          } catch (err: unknown) {
+            lastError = err
+            // A missing launcher (ENOENT) means try the next candidate; a real test failure stops here.
+            if ((err as { code?: string }).code !== 'ENOENT') {throw err}
+          }
+        }
+        if (!ran) {throw lastError}
         run.passed(test)
       } catch (err: unknown) {
         const execErr = err as { stdout?: string; stderr?: string; message?: string }
@@ -95,8 +111,8 @@ export class TestExplorerController {
     const target = item.range ? `${uri}:${item.range.start.line + 1}` : uri
 
     return isRSpec
-      ? ['bundle', ['exec', 'rspec', target]]
-      : ['bundle', ['exec', 'rails', 'test', target]]
+      ? ['rspec', [target]]
+      : ['rails', ['test', target]]
   }
 
   dispose(): void {

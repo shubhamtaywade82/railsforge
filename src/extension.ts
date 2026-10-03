@@ -33,7 +33,8 @@ import { TestExplorerController } from './testing/TestExplorerController'
 import { TestCodeLensProvider } from './testing/TestCodeLensProvider'
 import { activeWorkspaceRoot, workspaceRoots, workspaceRootFor } from './workspace/activeRoot'
 import { isInside, resolveWorkspaceRoot } from './workspace/WorkspaceRoots'
-import { ShellKind, shellKindFromPath, buildCommandLine, hasPathSegment } from './util/ShellCommand'
+import { firstCandidate, projectVersionManager, rubyTerminalCommand } from './util/RubyCommand'
+import { ShellKind, shellKindFromPath, hasPathSegment } from './util/ShellCommand'
 import { patchFileMatches } from './patch/PatchPaths'
 import { EnvironmentDetector, ProjectEnvironment, isKnownVersion } from './environment/EnvironmentDetector'
 import { RailsDeprecationLinter } from './lint/RailsDeprecationLinter'
@@ -377,6 +378,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     routesIndexer,
     stimulusIndexer,
     () => describeAstIndex(persistentIndexes.state(activeProject.root)),
+    () => describeToolchain(activeProject.root),
   )
   const rakeTaskIndexer = new RakeTaskIndexer()
   const rakeTaskTreeProvider = new RakeTaskTreeProvider(rakeTaskIndexer, workspaceRoot)
@@ -668,6 +670,13 @@ async function suggestRubyLspAddon(context: vscode.ExtensionContext, root: strin
   if (choice) {
     void context.globalState.update(dismissedKey, true)
   }
+}
+
+/** One-line description of how project tools are launched (version manager + binstub preference). */
+function describeToolchain(root: string): string {
+  const manager = projectVersionManager(root)
+  const launcher = fs.existsSync(path.join(root, 'bin', 'rails')) ? 'bin/ stubs' : fs.existsSync(path.join(root, 'Gemfile')) ? 'bundle exec' : 'bare tools'
+  return `${manager === 'none' ? 'no version manager' : manager} · ${launcher}`
 }
 
 function describeAstIndex(state: IndexState<PersistentIndexManager>): string {
@@ -1550,15 +1559,15 @@ function registerCommands(
       }
 
       const choice = await vscode.window.showWarningMessage(
-        'This runs "bundle exec rake release", which builds the gem, creates and pushes a git tag, and publishes it to RubyGems.org. This cannot be undone. Continue?',
+        'This runs "rake release" (through your project\'s Ruby toolchain), which builds the gem, creates and pushes a git tag, and publishes it to RubyGems.org. This cannot be undone. Continue?',
         { modal: true },
-        'Run bundle exec rake release',
+        'Run rake release',
       )
-      if (choice !== 'Run bundle exec rake release') {return}
+      if (choice !== 'Run rake release') {return}
 
       const term = vscode.window.createTerminal({ name: 'RailsForge Release', cwd: root })
       term.show()
-      term.sendText('bundle exec rake release')
+      term.sendText(rubyTerminalCommand(root, 'rake', ['release'], currentShellKind()))
     }),
     vscode.commands.registerCommand('railsforge.showLogs', () => {
       Logger.show()
@@ -2340,7 +2349,7 @@ function registerCommands(
       if (!taskName) {return}
       const term = createProjectTerminal('RailsForge Rake')
       term.show()
-      term.sendText(buildCommandLine('bundle', ['exec', 'rake', taskName], currentShellKind()))
+      term.sendText(rubyTerminalCommand(activeWorkspaceRoot() ?? '', 'rake', [taskName], currentShellKind()))
     }),
     vscode.commands.registerCommand('railsforge.refreshRakeTasks', () => {
       rakeTaskTreeProvider.refresh()
@@ -2348,12 +2357,15 @@ function registerCommands(
     vscode.commands.registerCommand('railsforge.openRailsConsole', () => {
       const term = createProjectTerminal('RailsForge Console')
       term.show()
+      const consoleRoot = activeWorkspaceRoot() ?? ''
+      const kind = currentShellKind()
       if (env.hasRails) {
-        term.sendText('bundle exec rails console')
+        term.sendText(rubyTerminalCommand(consoleRoot, 'rails', ['console'], kind))
       } else if (env.hasPry) {
-        term.sendText('bundle exec pry')
+        term.sendText(rubyTerminalCommand(consoleRoot, 'pry', [], kind))
       } else {
-        term.sendText(currentShellKind() === 'powershell' ? 'bundle exec irb' : 'bundle exec irb || irb')
+        const irb = rubyTerminalCommand(consoleRoot, 'irb', [], kind)
+        term.sendText(kind === 'powershell' ? irb : `${irb} || irb`)
       }
     }),
     vscode.commands.registerCommand('railsforge.evaluateInREPL', () => {
@@ -2434,15 +2446,17 @@ function registerCommands(
       // -> `greeter.rbs`, `app/models/x.rb` -> `models/x.rbs`) rather than preserving the
       // full relative path, which would make `generatedPath` below wrong.
       const rbsArgs = ['prototype', 'rb', `--out-dir=${outDir}`, '--base-dir=.', relativePath]
-      try {
-        await execFileAsync('bundle', ['exec', 'rbs', ...rbsArgs], { cwd: root })
-      } catch {
+      const ranRbs = await firstCandidate(root, 'rbs', rbsArgs, async (cmd, args) => {
         try {
-          await execFileAsync('rbs', rbsArgs, { cwd: root })
+          await execFileAsync(cmd, args, { cwd: root })
+          return true
         } catch {
-          vscode.window.showErrorMessage('RailsForge: Could not run `rbs prototype rb` — is the rbs gem installed (bundle add rbs --group development)?')
-          return
+          return null
         }
+      })
+      if (!ranRbs) {
+        vscode.window.showErrorMessage('RailsForge: Could not run `rbs prototype rb` — is the rbs gem installed (bundle add rbs --group development)?')
+        return
       }
 
       rbsIndexes.get(root).loadFromWorkspace(root, sigDir)
@@ -2542,12 +2556,13 @@ function buildSingleTestCommand(uri: vscode.Uri, line: number, env: ProjectEnvir
       ? false
       : readConfig().testingFramework === 'rspec'
 
+  const root = workspaceRootFor(uri) ?? path.dirname(uri.fsPath)
   if (isRSpec) {
-    return buildCommandLine('bundle', ['exec', 'rspec', `${uri.fsPath}:${line}`], kind)
+    return rubyTerminalCommand(root, 'rspec', [`${uri.fsPath}:${line}`], kind)
   }
   return env.hasRails
-    ? buildCommandLine('bundle', ['exec', 'rails', 'test', `${uri.fsPath}:${line}`], kind)
-    : buildCommandLine('bundle', ['exec', 'ruby', '-Itest', uri.fsPath], kind)
+    ? rubyTerminalCommand(root, 'rails', ['test', `${uri.fsPath}:${line}`], kind)
+    : rubyTerminalCommand(root, 'ruby', ['-Itest', uri.fsPath], kind)
 }
 
 /** Terminal rooted at the project that owns `uri` (never an arbitrary first folder). */

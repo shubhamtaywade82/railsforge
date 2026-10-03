@@ -3,8 +3,11 @@
  */
 
 import * as vscode from 'vscode'
+import * as path from 'path'
 import { execFile, spawn } from 'child_process'
 import { promisify } from 'util'
+import { firstCandidate, rubyCandidates } from '../util/RubyCommand'
+import { workspaceRootFor } from '../workspace/activeRoot'
 
 const execFileAsync = promisify(execFile)
 
@@ -44,9 +47,8 @@ export class RuboCopProvider implements vscode.CodeActionProvider {
     // so `filePath` — which can contain arbitrary characters in an untrusted workspace — is
     // never interpreted by a shell.
     const args = ['--format', 'json', '--stdin', filePath]
-    const viaBundle = await this.tryRuboCop('bundle', ['exec', 'rubocop', ...args], content)
-    if (viaBundle) {return viaBundle}
-    return (await this.tryRuboCop('rubocop', args, content)) ?? []
+    const root = this.rootFor(filePath)
+    return (await firstCandidate(root, 'rubocop', args, (cmd, a) => this.tryRuboCop(cmd, a, content, root))) ?? []
   }
 
   /**
@@ -57,24 +59,28 @@ export class RuboCopProvider implements vscode.CodeActionProvider {
    */
   async offensesForCop(cop: string, filePath: string, content: string): Promise<RuboCopOffense[] | null> {
     const args = ['--format', 'json', '--only', cop, '--stdin', filePath]
-    const viaBundle = await this.tryRuboCop('bundle', ['exec', 'rubocop', ...args], content)
-    if (viaBundle) {return viaBundle}
-    return (await this.tryRuboCop('rubocop', args, content)) ?? null
+    const root = this.rootFor(filePath)
+    return await firstCandidate(root, 'rubocop', args, (cmd, a) => this.tryRuboCop(cmd, a, content, root))
   }
 
   /** Runs one rubocop invocation; returns null (not []) only when it couldn't produce usable output at all, so the caller knows to try the next command instead of accepting "zero offenses". */
-  private async tryRuboCop(command: string, args: string[], content: string): Promise<RuboCopOffense[] | null> {
+  private async tryRuboCop(command: string, args: string[], content: string, cwd: string): Promise<RuboCopOffense[] | null> {
     try {
-      const stdout = await this.spawnWithStdin(command, args, content)
+      const stdout = await this.spawnWithStdin(command, args, content, cwd)
       return stdout === null ? null : this.parseOffenses(stdout)
     } catch {
       return null
     }
   }
 
-  private spawnWithStdin(command: string, args: string[], content: string): Promise<string | null> {
+  /** Project root owning `filePath` (RuboCop must run inside it so bundler and .rubocop.yml resolve). */
+  private rootFor(filePath: string): string {
+    return workspaceRootFor(vscode.Uri.file(filePath)) ?? path.dirname(filePath)
+  }
+
+  private spawnWithStdin(command: string, args: string[], content: string, cwd: string): Promise<string | null> {
     return new Promise(resolve => {
-      const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'ignore'] })
+      const child = spawn(command, args, { cwd, stdio: ['pipe', 'pipe', 'ignore'] })
       let stdout = ''
       child.stdout.on('data', chunk => { stdout += chunk })
       child.on('error', () => resolve(null))
@@ -176,17 +182,16 @@ export class RuboCopProvider implements vscode.CodeActionProvider {
   async autoCorrectFile(uri: vscode.Uri, mode: 'safe' | 'unsafe' = 'safe'): Promise<boolean> {
     const flag = mode === 'unsafe' ? '-A' : '-a'
     const args = [flag, uri.fsPath]
-    try {
-      await execFileAsync('bundle', ['exec', 'rubocop', ...args])
-      return true
-    } catch {
+    const root = this.rootFor(uri.fsPath)
+    for (const c of rubyCandidates(root, 'rubocop', args)) {
       try {
-        await execFileAsync('rubocop', args)
+        await execFileAsync(c.command, c.args, { cwd: root })
         return true
       } catch {
-        return false
+        // try the next candidate
       }
     }
+    return false
   }
 
   dispose(): void {

@@ -16,6 +16,7 @@
 
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { firstCandidate } from '../util/RubyCommand'
 
 const execFileAsync = promisify(execFile)
 
@@ -68,9 +69,7 @@ function decodeGithubWorkflowCommand(value: string): string {
 
 export class SteepProvider {
   async runCheck(workspaceRoot: string): Promise<SteepDiagnostic[]> {
-    const viaBundle = await this.tryRun('bundle', ['exec', 'steep', 'check', '--format=github'], workspaceRoot)
-    if (viaBundle) {return viaBundle}
-    return (await this.tryRun('steep', ['check', '--format=github'], workspaceRoot)) ?? []
+    return (await firstCandidate(workspaceRoot, 'steep', ['check', '--format=github'], (cmd, args) => this.tryRun(cmd, args, workspaceRoot))) ?? []
   }
 
   private async tryRun(command: string, args: string[], cwd: string): Promise<SteepDiagnostic[] | null> {
