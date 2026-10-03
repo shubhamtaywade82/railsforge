@@ -9,6 +9,7 @@ interface RailsForgeTestApi {
   getAstIndexStatuses(): Record<string, string>
   countRbsMethods(filePath: string, methodName: string): number
   getDevDocsCacheDir(filePath: string): string
+  discoverTestTree(): Promise<string[]>
 }
 
 const EXTENSION_ID = 'ShubhamTaywade.railsforge'
@@ -103,5 +104,15 @@ describe('RailsForge in a real Extension Host', function () {
     const rubocop = tasks.find(t => t.name === 'RuboCop: lint')!
     assert.ok(rubocop.execution instanceof vscode.ProcessExecution)
     assert.deepStrictEqual(rubocop.problemMatchers, ['$rubocop-railsforge'])
+  })
+
+  it('Test Explorer discovers nested RSpec groups across the workspace', async () => {
+    const tree = await api.discoverTestTree()
+    const text = tree.join('\n')
+    assert.ok(text.includes('alphas_spec.rb'), `file item missing:\n${text}`)
+    assert.ok(tree.includes('  Alphas'), `top-level describe missing:\n${text}`)
+    assert.ok(tree.includes('    #name'), `nested describe missing:\n${text}`)
+    assert.ok(tree.includes('      when blank'), `context missing:\n${text}`)
+    assert.ok(tree.includes('        is invalid'), `nested example missing:\n${text}`)
   })
 })

@@ -29,7 +29,7 @@ import { TurboFrameNavigator } from './hotwire/TurboFrameNavigator'
 import { TurboFrameDefinitionProvider } from './hotwire/TurboFrameDefinitionProvider'
 import { ViewPartialResolver } from './rails/ViewPartialResolver'
 import { ViewPartialDefinitionProvider } from './rails/ViewPartialDefinitionProvider'
-import { TestExplorerController } from './testing/TestExplorerController'
+import { TestExplorerController, debugRubyCommand } from './testing/TestExplorerController'
 import { TestCodeLensProvider } from './testing/TestCodeLensProvider'
 import { activeWorkspaceRoot, workspaceRoots, workspaceRootFor } from './workspace/activeRoot'
 import { isInside, resolveWorkspaceRoot } from './workspace/WorkspaceRoots'
@@ -118,6 +118,8 @@ export interface RailsForgeTestApi {
   countRbsMethods(filePath: string, methodName: string): number
   /** DevDocs cache directory of the project that owns `filePath`. */
   getDevDocsCacheDir(filePath: string): string
+  /** Discovers tests workspace-wide and returns the Test Explorer tree as indented labels. */
+  discoverTestTree(): Promise<string[]>
 }
 
 export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
@@ -168,6 +170,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     baseUrl: config.rubydocBaseUrl,
   })
   const testExplorer = new TestExplorerController()
+  context.subscriptions.push(testExplorer)
   const serviceExtractor = new ServiceExtractor()
   const queryExtractor = new QueryExtractor()
   const formExtractor = new FormObjectExtractor()
@@ -647,6 +650,16 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     getSchemaTableNames: () => schemaIndexer.getAllTables().map(t => t.name),
     countRbsMethods: (filePath, methodName) => rbsIndexFor(vscode.Uri.file(filePath)).lookup(methodName).length,
     getDevDocsCacheDir: filePath => devDocsProjects.get(workspaceRootFor(vscode.Uri.file(filePath)) ?? activeProject.root).cacheDir,
+    discoverTestTree: async () => {
+      await testExplorer.discoverWorkspace()
+      const lines: string[] = []
+      const walk = (item: vscode.TestItem, depth: number): void => {
+        lines.push(`${'  '.repeat(depth)}${item.label}`)
+        item.children.forEach(child => walk(child, depth + 1))
+      }
+      testExplorer.getController().items.forEach(item => walk(item, 0))
+      return lines
+    },
     getAstIndexStatuses: () => Object.fromEntries(persistentIndexes.roots().map(r => [r, persistentIndexes.state(r).status])),
   }
 }
@@ -2271,9 +2284,8 @@ function registerCommands(
       term.sendText(buildSingleTestCommand(uri, line, env))
     }),
     vscode.commands.registerCommand('railsforge.debugSingleTest', (uri: vscode.Uri, line: number) => {
-      const term = createProjectTerminal('RailsForge rdbg', uri)
-      term.show()
-      term.sendText(`rdbg -n -c -- ${buildSingleTestCommand(uri, line, env)}`)
+      const { tool, args } = singleTestInvocation(uri, line, env)
+      void debugRubyCommand(uri, tool, args)
     }),
     vscode.commands.registerCommand('railsforge.openDevDocs', () => {
       const editor = vscode.window.activeTextEditor
@@ -2655,21 +2667,24 @@ function currentShellKind(): ShellKind {
   return shellKindFromPath(vscode.env.shell)
 }
 
-function buildSingleTestCommand(uri: vscode.Uri, line: number, env: ProjectEnvironment): string {
-  const kind = currentShellKind()
+/** Tool + args for a single test (rspec, rails test, or plain minitest) at `uri:line`. */
+function singleTestInvocation(uri: vscode.Uri, line: number, env: ProjectEnvironment): { tool: string; args: string[] } {
   const isRSpec = hasPathSegment(uri.fsPath, 'spec')
     ? true
     : hasPathSegment(uri.fsPath, 'test')
       ? false
       : readConfig().testingFramework === 'rspec'
 
-  const root = workspaceRootFor(uri) ?? path.dirname(uri.fsPath)
-  if (isRSpec) {
-    return rubyTerminalCommand(root, 'rspec', [`${uri.fsPath}:${line}`], kind)
-  }
+  if (isRSpec) {return { tool: 'rspec', args: [`${uri.fsPath}:${line}`] }}
   return env.hasRails
-    ? rubyTerminalCommand(root, 'rails', ['test', `${uri.fsPath}:${line}`], kind)
-    : rubyTerminalCommand(root, 'ruby', ['-Itest', uri.fsPath], kind)
+    ? { tool: 'rails', args: ['test', `${uri.fsPath}:${line}`] }
+    : { tool: 'ruby', args: ['-Itest', uri.fsPath] }
+}
+
+function buildSingleTestCommand(uri: vscode.Uri, line: number, env: ProjectEnvironment): string {
+  const { tool, args } = singleTestInvocation(uri, line, env)
+  const root = workspaceRootFor(uri) ?? path.dirname(uri.fsPath)
+  return rubyTerminalCommand(root, tool, args, currentShellKind())
 }
 
 /** Terminal rooted at the project that owns `uri` (never an arbitrary first folder). */
