@@ -3,7 +3,8 @@ packages:
 
 allowBuilds:
   '@vscode/vsce-sign': true
-  better-sqlite3: true
+  # Ships prebuilt binaries for every platform (prebuilds/); a source build only adds a C++ toolchain requirement.
+  better-sqlite3: false
   esbuild: true
   keytar: true
   tree-sitter: true
