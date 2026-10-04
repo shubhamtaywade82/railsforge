@@ -18,6 +18,12 @@
     "vscode": "^1.96.0",
     "node": ">=20"
   },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "RailsForge runs project tooling (RuboCop, Bundler, Rails, test runners, rake) and project-defined configuration, which can execute code from the workspace. Open the folder as trusted to enable it."
+    }
+  },
   "categories": [
     "Programming Languages",
     "Linters",
@@ -54,7 +60,7 @@
     "vsce-package": "vsce package --no-dependencies --allow-missing-repository -o railsforge.vsix",
     "package": "pnpm run lint && pnpm run type-check && pnpm run compile && pnpm test && pnpm run vsce-package",
     "build:all": "pnpm run package",
-    "test:host": "tsc -p tsconfig.host.json && node out/test-host/runTest.js",
+    "test:host": "tsc -p tsconfig.host.json && vscode-test",
     "skills:fetch": "node scripts/fetch-skills.mjs"
   },
   "contributes": {
@@ -1790,6 +1796,7 @@
     "@types/vscode": "~1.96.0",
     "@typescript-eslint/eslint-plugin": "^8.67.0",
     "@typescript-eslint/parser": "^8.67.0",
+    "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^4.0.0",
     "copy-webpack-plugin": "^14.0.0",

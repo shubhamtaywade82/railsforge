@@ -4,6 +4,7 @@
     "kaiwood.endwise",
     "marcoroth.stimulus-lsp",
     "dbaeumer.vscode-eslint",
-    "esbenp.prettier-vscode"
+    "esbenp.prettier-vscode",
+    "ms-vscode.extension-test-runner"
   ]
 }

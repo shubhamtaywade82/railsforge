@@ -31,6 +31,7 @@
 - `@rails` slash commands now run distinct workflows: `/optimize` performs schema-aware N+1 static analysis, `/migrate` runs the strong_migrations checks, `/fix` includes active diagnostics, `/service` `/scaffold` `/spec` ground the prompt in existing patterns, tables and the detected test framework.
 
 ### Tests / CI
+- Extension Host tests now run through `@vscode/test-cli` (`.vscode-test.mjs`) against both the latest stable VS Code and the `engines` floor (1.96.0); the older `runTest.ts` runner is gone. The extension declares `capabilities.untrustedWorkspaces: false` explicitly, and the runtime-introspection trust/consent gate is unit-tested.
 - Real VS Code Extension Host integration tests (`pnpm run test:host`): activation, command registration, multi-root isolation.
 - Ruby LSP add-on Minitest suite runs through ruby-lsp's own add-on loader and Hover request, against the locked and latest ruby-lsp.
 
