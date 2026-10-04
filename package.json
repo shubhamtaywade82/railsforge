@@ -56,6 +56,8 @@
     "lint:fix": "eslint src --fix",
     "type-check": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
+    "test:unit": "vitest run",
+    "install:local": "pnpm run compile && pnpm run vsce-package && code --install-extension railsforge.vsix --force && cursor --install-extension railsforge.vsix --force",
     "record-cassettes": "node test/cassettes/record.mjs",
     "vsce-package": "vsce package --no-dependencies --allow-missing-repository -o railsforge.vsix",
     "package": "pnpm run lint && pnpm run type-check && pnpm run compile && pnpm test && pnpm run vsce-package",

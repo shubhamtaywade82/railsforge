@@ -10,9 +10,7 @@ vitest.config.ts
 pnpm-lock.yaml
 *.log
 .github/**
-PRD.md
-FEATURES.md
-PR_DESCRIPTION.md
+docs/**
 skills-lock.json
 .agents/**
 .claude/**

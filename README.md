@@ -222,13 +222,13 @@ RailsForge builds a graph of how *your* app fits together — route → controll
 | **RailsForge: Bump Gem Version**                             | `railsforge.bumpGemVersion`            |
 | **RailsForge: Release Gem**                                  | `railsforge.releaseGem`                |
 
-Several of these only show in the palette for the relevant project type — see [FEATURES.md §6](FEATURES.md#6-command-palette-reference).
+Several of these only show in the palette for the relevant project type — see [features.md §6](docs/features.md#6-command-palette-reference).
 
 ---
 
 ## Configuration Settings
 
-Every setting lives under `railsForge.*` and works at either the **user level** (global `settings.json`) or the **workspace level** (`.vscode/settings.json`, wins over user settings) — there's nothing extension-specific to set up for that, it's how VS Code settings scoping already works. Full reference with defaults, live-vs-reload behavior, and descriptions: [FEATURES.md §7](FEATURES.md#7-configuration-reference).
+Every setting lives under `railsForge.*` and works at either the **user level** (global `settings.json`) or the **workspace level** (`.vscode/settings.json`, wins over user settings) — there's nothing extension-specific to set up for that, it's how VS Code settings scoping already works. Full reference with defaults, live-vs-reload behavior, and descriptions: [features.md §7](docs/features.md#7-configuration-reference).
 
 ```json
 {
@@ -316,7 +316,7 @@ layer, deliberately kept dependency-light. That layer is now complemented by a
 **persistent AST index** (tree-sitter + SQLite, off the extension host thread —
 see "AST-Backed Analysis" above) that powers cross-file DRY detection, dependency
 cycle detection, guided multi-file extraction, and an MCP server. Remaining
-roadmap items are tracked in [`PRD.md`](./PRD.md); happy to scope any of them as
+roadmap items are tracked in [`prd.md`](docs/prd.md); happy to scope any of them as
 a follow-up.
 
 ### 🧬 16. AST-Backed Analysis (tree-sitter + SQLite, off-thread)
