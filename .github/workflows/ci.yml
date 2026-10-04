@@ -103,10 +103,14 @@ jobs:
           bundler-cache: true
           working-directory: ruby-lsp-addon
 
+      # setup-ruby installs in frozen/deployment mode; unfreeze so this job (only) may move ruby-lsp forward.
       - name: Use latest ruby-lsp
         if: matrix.ruby-lsp == 'latest'
         working-directory: ruby-lsp-addon
-        run: bundle update ruby-lsp
+        run: |
+          bundle config set --local frozen false
+          bundle config set --local deployment false
+          bundle update ruby-lsp
 
       - name: Ruby Syntax Check
         working-directory: ruby-lsp-addon
