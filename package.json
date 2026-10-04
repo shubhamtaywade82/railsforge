@@ -61,7 +61,9 @@
     "package": "pnpm run lint && pnpm run type-check && pnpm run compile && pnpm test && pnpm run vsce-package",
     "build:all": "pnpm run package",
     "test:host": "tsc -p tsconfig.host.json && vscode-test",
-    "skills:fetch": "node scripts/fetch-skills.mjs"
+    "skills:fetch": "node scripts/fetch-skills.mjs",
+    "test:host:stable": "tsc -p tsconfig.host.json && vscode-test --label stable",
+    "native-smoke": "node scripts/native-smoke.cjs"
   },
   "contributes": {
     "languages": [

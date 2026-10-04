@@ -1,0 +1,6 @@
+# Normalise line endings: Windows runners default to core.autocrlf=true, which would turn fixtures,
+# test expectations and the hash-verified skill pack into CRLF and break byte-exact comparisons.
+* text=auto eol=lf
+*.png binary
+*.vsix binary
+*.sqlite3 binary
