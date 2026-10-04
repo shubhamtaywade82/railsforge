@@ -8,12 +8,17 @@ const nativeSupportMocks = vi.hoisted(() => ({
 vi.mock('child_process', () => ({ execSync: nativeSupportMocks.execSync }))
 vi.mock('fs', () => ({ readFileSync: nativeSupportMocks.readFileSync }))
 
-import { isPersistentIndexSupported, getPersistentIndexSupport } from '../src/indexer/nativeSupport'
+import { isPersistentIndexSupported, getPersistentIndexSupport, resetPersistentIndexSupportCache } from '../src/indexer/nativeSupport'
 
 describe('isPersistentIndexSupported', () => {
   const originalNapi = process.versions.napi
 
+  beforeEach(() => {
+    resetPersistentIndexSupportCache()
+  })
+
   afterEach(() => {
+    resetPersistentIndexSupportCache()
     Object.defineProperty(process.versions, 'napi', { value: originalNapi, configurable: true })
   })
 
@@ -47,15 +52,18 @@ describe('isPersistentIndexSupported on Linux with a mocked process.report', () 
     nativeSupportMocks.execSync.mockImplementation(() => { throw new Error('ldd unavailable') })
     nativeSupportMocks.readFileSync.mockReset()
     nativeSupportMocks.readFileSync.mockImplementation(() => { throw new Error('libc unavailable') })
+    resetPersistentIndexSupportCache()
   })
 
   afterEach(() => {
+    resetPersistentIndexSupportCache()
     Object.defineProperty(process.versions, 'napi', { value: originalNapi, configurable: true })
     Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
     Object.defineProperty(process, 'report', { value: originalReport, configurable: true })
   })
 
   function mockGlibc(glibcVersionRuntime: string | undefined): void {
+    resetPersistentIndexSupportCache()
     Object.defineProperty(process, 'report', {
       value: { getReport: () => ({ header: { glibcVersionRuntime } }) },
       configurable: true,
@@ -78,11 +86,13 @@ describe('isPersistentIndexSupported on Linux with a mocked process.report', () 
   })
 
   it('fails closed (returns false) when process.report itself is unavailable', () => {
+    resetPersistentIndexSupportCache()
     Object.defineProperty(process, 'report', { value: undefined, configurable: true })
     expect(isPersistentIndexSupported()).toBe(false)
   })
 
   it('fails closed (returns false) when process.report.getReport throws', () => {
+    resetPersistentIndexSupportCache()
     Object.defineProperty(process, 'report', {
       value: {
         getReport: () => {
@@ -97,7 +107,11 @@ describe('isPersistentIndexSupported on Linux with a mocked process.report', () 
 
 describe('getPersistentIndexSupport reasons', () => {
   const originalNapi = process.versions.napi
+  beforeEach(() => {
+    resetPersistentIndexSupportCache()
+  })
   afterEach(() => {
+    resetPersistentIndexSupportCache()
     Object.defineProperty(process.versions, 'napi', { value: originalNapi, configurable: true })
   })
 

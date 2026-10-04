@@ -92,17 +92,26 @@ export interface PersistentIndexSupport {
   reason?: string
 }
 
+let cachedSupport: PersistentIndexSupport | undefined
+
+export function resetPersistentIndexSupportCache(): void {
+  cachedSupport = undefined
+}
+
 /**
  * Same gate as isPersistentIndexSupported, but says *why* it failed so the UI can tell the
  * user instead of silently disabling the AST features.
  */
 export function getPersistentIndexSupport(): PersistentIndexSupport {
+  if (cachedSupport) {return cachedSupport}
+
   const napiVersion = Number(process.versions.napi)
   if (!Number.isFinite(napiVersion) || napiVersion < REQUIRED_NAPI_VERSION) {
-    return {
+    cachedSupport = {
       supported: false,
       reason: `this VS Code's runtime provides N-API ${Number.isFinite(napiVersion) ? napiVersion : 'unknown'} (Node ${process.versions.node}); the SQLite module needs N-API >= ${REQUIRED_NAPI_VERSION} (Node >= 22.14). Updating VS Code to a build bundling Node 22.14+ enables it.`,
     }
+    return cachedSupport
   }
 
   // better-sqlite3 Linux prebuilt binary requires GLIBC >= 2.33. If the version can't be
@@ -112,15 +121,18 @@ export function getPersistentIndexSupport(): PersistentIndexSupport {
     const glibcStr = getLinuxGlibcVersion()
     const need = REQUIRED_LINUX_GLIBC.join('.')
     if (!glibcStr) {
-      return { supported: false, reason: `could not determine the system GLIBC version (needs >= ${need}).` }
+      cachedSupport = { supported: false, reason: `could not determine the system GLIBC version (needs >= ${need}).` }
+      return cachedSupport
     }
     const [major, minor] = glibcStr.split('.').map(Number)
     if (major < REQUIRED_LINUX_GLIBC[0] || (major === REQUIRED_LINUX_GLIBC[0] && minor < REQUIRED_LINUX_GLIBC[1])) {
-      return { supported: false, reason: `system GLIBC ${glibcStr} is older than the required ${need}.` }
+      cachedSupport = { supported: false, reason: `system GLIBC ${glibcStr} is older than the required ${need}.` }
+      return cachedSupport
     }
   }
 
-  return { supported: true }
+  cachedSupport = { supported: true }
+  return cachedSupport
 }
 
 export function isPersistentIndexSupported(): boolean {

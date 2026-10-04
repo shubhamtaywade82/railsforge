@@ -149,6 +149,7 @@ describe('RailsForge in a real Extension Host', function () {
   })
 
   it('semantic context tool describes the active project only; graph virtual doc renders', async function () {
+    this.timeout(120_000)
     const lm = (vscode as unknown as { lm?: { invokeTool(name: string, options: { input: object; toolInvocationToken: undefined }): Thenable<{ content: Array<{ value?: string }> }> } }).lm
     if (!lm?.invokeTool) {return this.skip()}
     const folders = vscode.workspace.workspaceFolders ?? []

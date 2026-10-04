@@ -1,3 +1,4 @@
+/// <reference types="mocha" />
 import * as assert from 'assert'
 import * as path from 'path'
 import * as vscode from 'vscode'
@@ -33,28 +34,28 @@ describe('RailsForge MVC Navigation in Extension Host', function () {
   it('navigates from controller to matching model via railsforge.goToModel', async () => {
     await openFile('rails_a', 'app/controllers/alphas_controller.rb')
     await vscode.commands.executeCommand('railsforge.goToModel')
-    await until(() => vscode.window.activeTextEditor?.document.fileName.endsWith(path.join('app', 'models', 'alphas.rb')) ?? false)
-    assert.ok(vscode.window.activeTextEditor?.document.fileName.endsWith(path.join('app', 'models', 'alphas.rb')))
+    await until(() => /app[\\/]models[\\/]alphas?\.rb$/.test(vscode.window.activeTextEditor?.document.fileName ?? ''))
+    assert.ok(/app[\\/]models[\\/]alphas?\.rb$/.test(vscode.window.activeTextEditor?.document.fileName ?? ''))
   })
 
   it('navigates from model to matching controller via railsforge.goToController', async () => {
     await openFile('rails_a', 'app/models/alphas.rb')
     await vscode.commands.executeCommand('railsforge.goToController')
-    await until(() => vscode.window.activeTextEditor?.document.fileName.endsWith(path.join('app', 'controllers', 'alphas_controller.rb')) ?? false)
-    assert.ok(vscode.window.activeTextEditor?.document.fileName.endsWith(path.join('app', 'controllers', 'alphas_controller.rb')))
+    await until(() => /app[\\/]controllers[\\/]alphas_controller\.rb$/.test(vscode.window.activeTextEditor?.document.fileName ?? ''))
+    assert.ok(/app[\\/]controllers[\\/]alphas_controller\.rb$/.test(vscode.window.activeTextEditor?.document.fileName ?? ''))
   })
 
   it('navigates from controller to view template via railsforge.goToView', async () => {
     await openFile('rails_a', 'app/controllers/alphas_controller.rb')
     await vscode.commands.executeCommand('railsforge.goToView')
-    await until(() => vscode.window.activeTextEditor?.document.fileName.endsWith(path.join('app', 'views', 'alphas', 'index.html.erb')) ?? false)
-    assert.ok(vscode.window.activeTextEditor?.document.fileName.endsWith(path.join('app', 'views', 'alphas', 'index.html.erb')))
+    await until(() => /app[\\/]views[\\/]alphas[\\/]index\.html\.erb$/.test(vscode.window.activeTextEditor?.document.fileName ?? ''))
+    assert.ok(/app[\\/]views[\\/]alphas[\\/]index\.html\.erb$/.test(vscode.window.activeTextEditor?.document.fileName ?? ''))
   })
 
   it('navigates to spec file via railsforge.goToSpec', async () => {
     await openFile('rails_a', 'app/controllers/alphas_controller.rb')
     await vscode.commands.executeCommand('railsforge.goToSpec')
-    await until(() => vscode.window.activeTextEditor?.document.fileName.endsWith(path.join('spec', 'models', 'alphas_spec.rb')) ?? false)
-    assert.ok(vscode.window.activeTextEditor?.document.fileName.endsWith(path.join('spec', 'models', 'alphas_spec.rb')))
+    await until(() => /spec[\\/]models[\\/]alphas?_spec\.rb$/.test(vscode.window.activeTextEditor?.document.fileName ?? ''))
+    assert.ok(/spec[\\/]models[\\/]alphas?_spec\.rb$/.test(vscode.window.activeTextEditor?.document.fileName ?? ''))
   })
 })

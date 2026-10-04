@@ -330,7 +330,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   // Speculative Fix Cache - pre-generates fixes for common RuboCop offenses
   // so they're instant when the user requests a fix.
   const speculativeFixCache = new SpeculativeFixCache(agent)
-  if (workspaceRoot) {
+  if (workspaceRoot && context.extensionMode !== vscode.ExtensionMode.Test) {
     // Deferred: AI cache warm is CPU/network-heavy, not needed until first fix request.
     setTimeout(() => void speculativeFixCache.warm(), 8000)
   }
