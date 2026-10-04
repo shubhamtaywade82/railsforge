@@ -39,7 +39,9 @@ function resolveSource() {
   const cache = path.join(root, 'node_modules', '.cache', 'railsforge-skills', pin.ref)
   if (fs.existsSync(path.join(cache, 'skill-manifest.yml'))) {return { dir: cache, ref: pin.ref }}
   fs.mkdirSync(cache, { recursive: true })
-  const git = (...a) => execFileSync('git', a, { cwd: cache, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, GIT_LFS_SKIP_SMUDGE: '1' } })
+  // -c core.autocrlf=false: Windows runners default to autocrlf=true, which would rewrite the pinned
+  // files to CRLF and fail the content-hash check.
+  const git = (...a) => execFileSync('git', ['-c', 'core.autocrlf=false', '-c', 'core.eol=lf', ...a], { cwd: cache, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, GIT_LFS_SKIP_SMUDGE: '1' } })
   git('init', '-q')
   git('remote', 'add', 'origin', `https://github.com/${pin.repo}`)
   git('fetch', '-q', '--depth', '1', 'origin', pin.ref)

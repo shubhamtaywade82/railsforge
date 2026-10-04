@@ -4,6 +4,8 @@ import * as path from 'path'
 import { describe, it, expect, afterEach } from 'vitest'
 import { ServiceExtractor } from '../src/refactor/ServiceExtractor'
 
+const native = (p: string) => p.split('/').join(path.sep)
+
 describe('ServiceExtractor', () => {
   const extractor = new ServiceExtractor()
   const root = '/path/to/my_app'
@@ -17,7 +19,7 @@ user
 `
     const res = extractor.extractService('ActivateUser', code, ['user_id'], root)
 
-    expect(res.serviceFilePath).toContain('/app/services/activate_user_service.rb')
+    expect(res.serviceFilePath).toContain(native('/app/services/activate_user_service.rb'))
     expect(res.serviceCode).toContain('class ActivateUserService < ApplicationService')
     expect(res.serviceCode).toContain('def self.call(user_id)')
     expect(res.serviceCode).toContain('attr_reader :user_id')
@@ -44,7 +46,7 @@ OrderMailer.confirmation(order).deliver_later
       methodName: 'run',
     })
 
-    expect(res.serviceFilePath).toContain('/lib/operations/activate_user_service.rb')
+    expect(res.serviceFilePath).toContain(native('/lib/operations/activate_user_service.rb'))
     expect(res.serviceCode).toContain('class ActivateUserService < Interactor')
     expect(res.serviceCode).toContain('def self.run(user_id)')
     expect(res.serviceCode).toContain('new(user_id).run')

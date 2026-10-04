@@ -1,7 +1,7 @@
 # RailsForge — Complete Feature Documentation
 
 > **All-in-one Ruby & Rails IDE extension for VS Code, Cursor, VSCodium, and Windsurf.**
-> Version: `0.1.0` · Publisher: `nemesis` · License: MIT
+> Version: `0.1.4` · Publisher: `ShubhamTaywade` · License: MIT
 
 ---
 
@@ -123,7 +123,7 @@ RailsForge activates on any of:
 
 ### F-01 ActiveRecord Schema Peek
 
-**Source:** [`rails/SchemaIndexer.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/rails/SchemaIndexer.ts), [`rails/SchemaHoverProvider.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/rails/SchemaHoverProvider.ts)
+**Source:** [`rails/SchemaIndexer.ts`](src/rails/SchemaIndexer.ts), [`rails/SchemaHoverProvider.ts`](src/rails/SchemaHoverProvider.ts)
 
 Parses `db/schema.rb` (or `db/structure.sql`) into a live in-memory index and exposes it as hover tooltips.
 
@@ -144,7 +144,7 @@ Parses `db/schema.rb` (or `db/structure.sql`) into a live in-memory index and ex
 
 ### F-02 Fast MVC & Resource Navigation
 
-**Source:** [`rails/MVCNavigator.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/rails/MVCNavigator.ts), [`rails/PolicyNavigator.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/rails/PolicyNavigator.ts)
+**Source:** [`rails/MVCNavigator.ts`](src/rails/MVCNavigator.ts), [`rails/PolicyNavigator.ts`](src/rails/PolicyNavigator.ts)
 
 One-keystroke jumping across all Rails companion files for the current resource.
 
@@ -176,7 +176,7 @@ One-keystroke jumping across all Rails companion files for the current resource.
 
 ### F-03 Route Resolver & URL Helper Autocomplete
 
-**Source:** [`rails/RoutesIndexer.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/rails/RoutesIndexer.ts)
+**Source:** [`rails/RoutesIndexer.ts`](src/rails/RoutesIndexer.ts)
 
 Real-time indexing of `config/routes.rb` with full autocompletion and navigation.
 
@@ -197,7 +197,7 @@ Real-time indexing of `config/routes.rb` with full autocompletion and navigation
 
 ### F-04 View & Partial Navigation
 
-**Source:** [`rails/ViewPartialResolver.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/rails/ViewPartialResolver.ts), [`rails/ViewPartialDefinitionProvider.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/rails/ViewPartialDefinitionProvider.ts), [`rails/ViewComponentResolver.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/rails/ViewComponentResolver.ts)
+**Source:** [`rails/ViewPartialResolver.ts`](src/rails/ViewPartialResolver.ts), [`rails/ViewPartialDefinitionProvider.ts`](src/rails/ViewPartialDefinitionProvider.ts), [`rails/ViewComponentResolver.ts`](src/rails/ViewComponentResolver.ts)
 
 `Ctrl+Click` (or `Cmd+Click`) on any quoted `render` path jumps directly to the resolved partial.
 
@@ -217,7 +217,7 @@ ViewComponent lookups (`render UserCardComponent.new(…)`) are resolved via the
 
 ### F-05 Hotwire, Stimulus & Turbo Intelligence
 
-**Source:** [`hotwire/StimulusIndexer.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/hotwire/StimulusIndexer.ts), [`hotwire/StimulusCompletionProvider.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/hotwire/StimulusCompletionProvider.ts), [`hotwire/StimulusAttributeParser.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/hotwire/StimulusAttributeParser.ts), [`hotwire/StimulusDefinitionProvider.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/hotwire/StimulusDefinitionProvider.ts), [`hotwire/TurboFrameNavigator.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/hotwire/TurboFrameNavigator.ts), [`hotwire/TurboFrameDefinitionProvider.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/hotwire/TurboFrameDefinitionProvider.ts)
+**Source:** [`hotwire/StimulusIndexer.ts`](src/hotwire/StimulusIndexer.ts), [`hotwire/StimulusCompletionProvider.ts`](src/hotwire/StimulusCompletionProvider.ts), [`hotwire/StimulusAttributeParser.ts`](src/hotwire/StimulusAttributeParser.ts), [`hotwire/StimulusDefinitionProvider.ts`](src/hotwire/StimulusDefinitionProvider.ts), [`hotwire/TurboFrameNavigator.ts`](src/hotwire/TurboFrameNavigator.ts), [`hotwire/TurboFrameDefinitionProvider.ts`](src/hotwire/TurboFrameDefinitionProvider.ts)
 
 Full IDE intelligence for Hotwire (Stimulus + Turbo) inside ERB/HAML/Slim templates.
 
@@ -240,7 +240,7 @@ Full IDE intelligence for Hotwire (Stimulus + Turbo) inside ERB/HAML/Slim templa
 
 ### F-06 Testing & FactoryBot Intelligence
 
-**Source:** [`testing/TestCodeLensProvider.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/testing/TestCodeLensProvider.ts), [`testing/TestExplorerController.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/testing/TestExplorerController.ts), [`testing/FactoryBotResolver.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/testing/FactoryBotResolver.ts)
+**Source:** [`testing/TestCodeLensProvider.ts`](src/testing/TestCodeLensProvider.ts), [`testing/TestExplorerController.ts`](src/testing/TestExplorerController.ts), [`testing/FactoryBotResolver.ts`](src/testing/FactoryBotResolver.ts)
 
 Native VS Code Test Explorer integration plus inline CodeLens for RSpec and Minitest.
 
@@ -266,7 +266,7 @@ Native VS Code Test Explorer integration plus inline CodeLens for RSpec and Mini
 
 ### F-07 Design Principles Engine
 
-**Source:** [`principles/DesignPrincipleLinter.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/principles/DesignPrincipleLinter.ts)
+**Source:** [`principles/DesignPrincipleLinter.ts`](src/principles/DesignPrincipleLinter.ts)
 
 Live diagnostics enforcing SOLID, DRY, KISS, YAGNI, and Law of Demeter — with deterministic Quick Fixes and optional AI fixes.
 
@@ -290,7 +290,7 @@ Live diagnostics enforcing SOLID, DRY, KISS, YAGNI, and Law of Demeter — with 
 
 ### F-08 Architecture & Refactoring Tools
 
-**Source:** [`refactor/ServiceExtractor.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/refactor/ServiceExtractor.ts), [`refactor/QueryExtractor.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/refactor/QueryExtractor.ts), [`refactor/FormObjectExtractor.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/refactor/FormObjectExtractor.ts), [`refactor/ValueObjectExtractor.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/refactor/ValueObjectExtractor.ts), [`refactor/DuplicateCallSiteFinder.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/refactor/DuplicateCallSiteFinder.ts), [`refactor/SpecFileGenerator.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/refactor/SpecFileGenerator.ts)
+**Source:** [`refactor/ServiceExtractor.ts`](src/refactor/ServiceExtractor.ts), [`refactor/QueryExtractor.ts`](src/refactor/QueryExtractor.ts), [`refactor/FormObjectExtractor.ts`](src/refactor/FormObjectExtractor.ts), [`refactor/ValueObjectExtractor.ts`](src/refactor/ValueObjectExtractor.ts), [`refactor/DuplicateCallSiteFinder.ts`](src/refactor/DuplicateCallSiteFinder.ts), [`refactor/SpecFileGenerator.ts`](src/refactor/SpecFileGenerator.ts)
 
 Select code in the editor and extract it to the right Rails pattern — in a **single atomic `WorkspaceEdit`** that VS Code previews as one multi-file diff.
 
@@ -316,7 +316,7 @@ Select code in the editor and extract it to the right Rails pattern — in a **s
 
 ### F-09 Living Pattern Catalog
 
-**Source:** [`patterns/ProjectPatternIndexer.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/patterns/ProjectPatternIndexer.ts), [`patterns/PatternCodeLensProvider.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/patterns/PatternCodeLensProvider.ts), [`patterns/PatternRecognitionEngine.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/patterns/PatternRecognitionEngine.ts), [`patterns/PatternDiagnosticsProvider.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/patterns/PatternDiagnosticsProvider.ts)
+**Source:** [`patterns/ProjectPatternIndexer.ts`](src/patterns/ProjectPatternIndexer.ts), [`patterns/PatternCodeLensProvider.ts`](src/patterns/PatternCodeLensProvider.ts), [`patterns/PatternRecognitionEngine.ts`](src/patterns/PatternRecognitionEngine.ts), [`patterns/PatternDiagnosticsProvider.ts`](src/patterns/PatternDiagnosticsProvider.ts)
 
 Indexes your **own project's** existing patterns so you never accidentally write a second `CreateOrderService` when one already exists.
 
@@ -337,7 +337,7 @@ Indexes your **own project's** existing patterns so you never accidentally write
 
 ### F-10 Cross-File Related Files CodeLens
 
-**Source:** [`graph/RelatedFilesIndex.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/graph/RelatedFilesIndex.ts), [`graph/RelatedCodeLensProvider.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/graph/RelatedCodeLensProvider.ts), [`graph/RelatedHoverProvider.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/graph/RelatedHoverProvider.ts), [`graph/MinimalDependencyGraph.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/graph/MinimalDependencyGraph.ts)
+**Source:** [`graph/RelatedFilesIndex.ts`](src/graph/RelatedFilesIndex.ts), [`graph/RelatedCodeLensProvider.ts`](src/graph/RelatedCodeLensProvider.ts), [`graph/RelatedHoverProvider.ts`](src/graph/RelatedHoverProvider.ts), [`graph/MinimalDependencyGraph.ts`](src/graph/MinimalDependencyGraph.ts)
 
 Eliminates the "open 5–6 files just to understand this class" loop by showing all related files inline.
 
@@ -357,13 +357,13 @@ Sourced from `MinimalDependencyGraph`'s collaborator graph.
 
 **`RailsForge: Show Related Files`** (`railsforge.showRelatedFiles`): opens a Quick Pick of everything found — services, queries, policies, callers, collaborators, and specs — each item jumps to the exact line.
 
-**Dependency diagnostics:** [`graph/DependencyDiagnosticsProvider.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/graph/DependencyDiagnosticsProvider.ts) surfaces coupling issues from the same graph as editor diagnostics.
+**Dependency diagnostics:** [`graph/DependencyDiagnosticsProvider.ts`](src/graph/DependencyDiagnosticsProvider.ts) surfaces coupling issues from the same graph as editor diagnostics.
 
 ---
 
 ### F-11 DevSecOps & Static Analysis
 
-**Source:** [`lint/RuboCopProvider.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/lint/RuboCopProvider.ts), [`lint/BrakemanProvider.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/lint/BrakemanProvider.ts), [`lint/BundlerAuditScanner.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/lint/BundlerAuditScanner.ts), [`lint/RailsDeprecationLinter.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/lint/RailsDeprecationLinter.ts)
+**Source:** [`lint/RuboCopProvider.ts`](src/lint/RuboCopProvider.ts), [`lint/BrakemanProvider.ts`](src/lint/BrakemanProvider.ts), [`lint/BundlerAuditScanner.ts`](src/lint/BundlerAuditScanner.ts), [`lint/RailsDeprecationLinter.ts`](src/lint/RailsDeprecationLinter.ts)
 
 #### RuboCop Real-Time Engine
 
@@ -398,13 +398,13 @@ Sourced from `MinimalDependencyGraph`'s collaborator graph.
 
 #### Rails Deprecation Linter
 
-- [`lint/RailsDeprecationLinter.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/lint/RailsDeprecationLinter.ts) — detects deprecated Rails APIs relative to the active Rails version (detected from `Gemfile.lock`)
+- [`lint/RailsDeprecationLinter.ts`](src/lint/RailsDeprecationLinter.ts) — detects deprecated Rails APIs relative to the active Rails version (detected from `Gemfile.lock`)
 
 ---
 
 ### F-12 Zero-Downtime Migration Safety
 
-**Source:** [`rails/MigrationDiagnostics.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/rails/MigrationDiagnostics.ts), [`rails/StrongMigrationsAnalyzer.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/rails/StrongMigrationsAnalyzer.ts)
+**Source:** [`rails/MigrationDiagnostics.ts`](src/rails/MigrationDiagnostics.ts), [`rails/StrongMigrationsAnalyzer.ts`](src/rails/StrongMigrationsAnalyzer.ts)
 
 Live linter for `db/migrate/*.rb` that warns against table-locking operations in production migrations.
 
@@ -423,7 +423,7 @@ Live linter for `db/migrate/*.rb` that warns against table-locking operations in
 
 ### F-13 Semantic Code Search
 
-**Source:** [`search/SemanticSearchIndex.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/search/SemanticSearchIndex.ts), [`search/EmbeddingClient.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/search/EmbeddingClient.ts)
+**Source:** [`search/SemanticSearchIndex.ts`](src/search/SemanticSearchIndex.ts), [`search/EmbeddingClient.ts`](src/search/EmbeddingClient.ts)
 
 Find existing code by **meaning**, not just file or class name.
 
@@ -450,7 +450,7 @@ Find existing code by **meaning**, not just file or class name.
 
 ### F-14 AST-Backed Deep Analysis
 
-**Source:** [`indexer/RubyAstParser.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/indexer/RubyAstParser.ts), [`indexer/PersistentIndexer.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/indexer/PersistentIndexer.ts), [`indexer/PersistentIndexClient.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/indexer/PersistentIndexClient.ts), [`indexer/DuplicateMethodDetector.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/indexer/DuplicateMethodDetector.ts), [`indexer/PersistentDependencyGraph.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/indexer/PersistentDependencyGraph.ts)
+**Source:** [`indexer/RubyAstParser.ts`](src/indexer/RubyAstParser.ts), [`indexer/PersistentIndexer.ts`](src/indexer/PersistentIndexer.ts), [`indexer/PersistentIndexClient.ts`](src/indexer/PersistentIndexClient.ts), [`indexer/DuplicateMethodDetector.ts`](src/indexer/DuplicateMethodDetector.ts), [`indexer/PersistentDependencyGraph.ts`](src/indexer/PersistentDependencyGraph.ts)
 
 A **second, complementary index** alongside the regex-based one — built with real Ruby AST parsing (`tree-sitter-ruby`) and persisted to `.railsforge/index.sqlite3` (gitignore it).
 
@@ -492,7 +492,7 @@ DFS cycle detection (A → B → C → A) over an AST-derived dependency graph t
 
 ### F-15 Grounded Local AI Agent (`@rails`)
 
-**Source:** [`agent/RailsAgent.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/agent/RailsAgent.ts), [`agent/RailsRAGContext.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/agent/RailsRAGContext.ts), [`chat/RailsChatParticipant.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/chat/RailsChatParticipant.ts), [`chat/RailsChatViewProvider.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/chat/RailsChatViewProvider.ts)
+**Source:** [`agent/RailsAgent.ts`](src/agent/RailsAgent.ts), [`agent/RailsRAGContext.ts`](src/agent/RailsRAGContext.ts), [`chat/RailsChatParticipant.ts`](src/chat/RailsChatParticipant.ts), [`chat/RailsChatViewProvider.ts`](src/chat/RailsChatViewProvider.ts)
 
 A `@rails` VS Code / Cursor Chat Participant backed by a local Ollama model — grounded in your actual project context.
 
@@ -535,7 +535,7 @@ Recommended models: `qwen2.5-coder:14b` (best) or `qwen2.5-coder:7b` (faster, lo
 
 ### F-16 MCP Server & Cursor Rules Export
 
-**Source:** [`mcp/server.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/mcp/server.ts), [`mcp/CursorRulesGenerator.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/mcp/CursorRulesGenerator.ts)
+**Source:** [`mcp/server.ts`](src/mcp/server.ts), [`mcp/CursorRulesGenerator.ts`](src/mcp/CursorRulesGenerator.ts)
 
 Exposes RailsForge's project intelligence to **any MCP-capable AI client** — not just the built-in `@rails` agent.
 
@@ -564,7 +564,7 @@ Writes `.cursor/rules/railsforge.mdc` containing: schema summary, route table, e
 
 ### F-17 Architecture & Health Sidebar
 
-**Source:** [`views/RailsArchitectureTreeProvider.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/views/RailsArchitectureTreeProvider.ts), [`views/PatternCatalogTreeProvider.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/views/PatternCatalogTreeProvider.ts)
+**Source:** [`views/RailsArchitectureTreeProvider.ts`](src/views/RailsArchitectureTreeProvider.ts), [`views/PatternCatalogTreeProvider.ts`](src/views/PatternCatalogTreeProvider.ts)
 
 Dedicated Activity Bar panel with three views:
 
@@ -585,7 +585,7 @@ Live read-out of the project environment:
 
 ### F-18 Version-Aware Documentation Engine
 
-**Source:** [`docs/VersionDocsEngine.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/docs/VersionDocsEngine.ts)
+**Source:** [`docs/VersionDocsEngine.ts`](src/docs/VersionDocsEngine.ts)
 
 Contextual hover documentation for core Rails DSLs — version-aware based on the active `Gemfile.lock`.
 
@@ -602,7 +602,7 @@ Contextual hover documentation for core Rails DSLs — version-aware based on th
 
 ### F-19 Standalone Ruby & Gem Support
 
-**Source:** [`environment/EnvironmentDetector.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/environment/EnvironmentDetector.ts)
+**Source:** [`environment/EnvironmentDetector.ts`](src/environment/EnvironmentDetector.ts)
 
 RailsForge activates on **any Ruby file or Gemfile** — not only full Rails applications.
 
@@ -634,7 +634,7 @@ Pattern catalog matches `services/`, `queries/`, `forms/`, `policies/`, `decorat
 
 ### F-20 Editing Aids: Endwise, ERB Tags & Gem Lens
 
-**Source:** [`editing/EndwiseProvider.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/editing/EndwiseProvider.ts), [`editing/ErbTagCompletionProvider.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/editing/ErbTagCompletionProvider.ts), [`gems/GemLensProvider.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/gems/GemLensProvider.ts), [`gems/RubyGemsClient.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/gems/RubyGemsClient.ts), [`gems/GemNameParser.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/gems/GemNameParser.ts)
+**Source:** [`editing/EndwiseProvider.ts`](src/editing/EndwiseProvider.ts), [`editing/ErbTagCompletionProvider.ts`](src/editing/ErbTagCompletionProvider.ts), [`gems/GemLensProvider.ts`](src/gems/GemLensProvider.ts), [`gems/RubyGemsClient.ts`](src/gems/RubyGemsClient.ts), [`gems/GemNameParser.ts`](src/gems/GemNameParser.ts)
 
 Three small, zero-configuration authoring aids that replace standalone marketplace extensions.
 
@@ -653,7 +653,7 @@ Three small, zero-configuration authoring aids that replace standalone marketpla
 
 ### F-21 Project-Type-Aware Tooling & Full Settings Configurability
 
-**Source:** [`config/RailsForgeConfig.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/config/RailsForgeConfig.ts), [`docs/OpenApiSkeletonGenerator.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/docs/OpenApiSkeletonGenerator.ts), [`gems/GemVersionBumper.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/gems/GemVersionBumper.ts), [`util/LruCache.ts`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/src/util/LruCache.ts)
+**Source:** [`config/RailsForgeConfig.ts`](src/config/RailsForgeConfig.ts), [`docs/OpenApiSkeletonGenerator.ts`](src/docs/OpenApiSkeletonGenerator.ts), [`gems/GemVersionBumper.ts`](src/gems/GemVersionBumper.ts), [`util/LruCache.ts`](src/util/LruCache.ts)
 
 Every `railsForge.*` setting is a real, wired-up control (not a declared-but-unused stub) — see §7 for the complete reference. This feature groups everything that makes RailsForge adapt to *which kind* of Ruby/Rails project it's in, beyond what F-19 already covers.
 
@@ -868,7 +868,7 @@ RailsForge is a **companion** to Shopify's `ruby-lsp` — not a replacement.
 
 ```json
 // .vscode/extensions.json
-{ "recommendations": ["shopify.ruby-lsp", "nemesis.railsforge"] }
+{ "recommendations": ["shopify.ruby-lsp", "ShubhamTaywade.railsforge"] }
 ```
 
 | Responsibility | Tool |
@@ -880,7 +880,7 @@ RailsForge is a **companion** to Shopify's `ruby-lsp` — not a replacement.
 | Local AI agent grounded in project | **RailsForge** |
 | MCP server exposing project context | **RailsForge** |
 
-**Optional deeper integration:** RailsForge ships a companion Ruby gem (`ruby-lsp-addon/`) — a `RubyLsp::Addon` that injects schema-aware hover into `ruby-lsp`'s own hover responses. See [`ruby-lsp-addon/README.md`](file:///home/nemesis/project/ai-workspace/ruby-rails-extension/ruby-lsp-addon/README.md).
+**Optional deeper integration:** RailsForge ships a companion Ruby gem (`ruby-lsp-addon/`) — a `RubyLsp::Addon` that injects schema-aware hover into `ruby-lsp`'s own hover responses. See [`ruby-lsp-addon/README.md`](ruby-lsp-addon/README.md).
 
 ---
 

@@ -15,6 +15,7 @@ import * as path from 'path'
 import { parseUnifiedDiff, applyUnifiedHunks } from '../patch/UnifiedDiff'
 import { diffLines, applyHunks } from '../extension'
 import { Logger } from '../util/Logger'
+import { resolveWithinRoot } from '../util/WorkspacePath'
 
 export interface ApplyDiffResult {
   applied: boolean
@@ -59,19 +60,16 @@ export function extractCodeBlocks(markdown: string): Array<{ lang: string; fileP
  * 2. A line just above the block like "# app/models/user.rb" or "File: app/models/user.rb"
  */
 export function inferTargetFile(block: { lang: string; filePath: string | null; code: string; precedingText: string }, workspaceRoot: string): string | null {
-  // 1. Explicit path from fenced header
-  if (block.filePath) {
-    const full = path.join(workspaceRoot, block.filePath)
-    return full
-  }
-  // 2. Preceding comment line like "# path/to/file.rb" or "path/to/file.rb"
+  // 1. Explicit path from fenced header; 2. preceding line like "# path/to/file.rb"
   const headerRe = /^(?:(?:#|File:)\s*)?([\w./-]+\.rb)\s*$/m
-  const match = headerRe.exec(block.precedingText)
-  if (match) {
-    const full = path.join(workspaceRoot, match[1])
-    return full
+  const hinted = block.filePath ?? headerRe.exec(block.precedingText)?.[1]
+  if (!hinted) { return null }
+  const resolved = resolveWithinRoot(workspaceRoot, hinted)
+  if (!resolved.ok) {
+    Logger.warn(`[ChatDiffApplier] Ignoring unsafe target path "${hinted}": ${resolved.reason}`)
+    return null
   }
-  return null
+  return resolved.fullPath
 }
 
 
@@ -148,10 +146,28 @@ export async function createNewFile(
     return { applied: false, message: 'No file path provided.' }
   }
 
-  const fullPath = vscode.Uri.file(path.join(workspaceRoot, target))
+  const resolved = resolveWithinRoot(workspaceRoot, target)
+  if (!resolved.ok) {
+    Logger.warn(`[ChatDiffApplier] Refused to create "${target}": ${resolved.reason}`)
+    return { applied: false, message: `Refused to write "${target}": ${resolved.reason}` }
+  }
+
+  const fullPath = vscode.Uri.file(resolved.fullPath)
+  let exists = true
+  try {
+    await vscode.workspace.fs.stat(fullPath)
+  } catch {
+    exists = false
+  }
+  if (exists) {
+    // Never silently overwrite: route through the diff preview + explicit confirmation.
+    return applyFullFileReplacement(cleaned, fullPath, 'RailsForge AI (existing file)')
+  }
+
+  await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(resolved.fullPath)))
   await vscode.workspace.fs.writeFile(fullPath, Buffer.from(cleaned, 'utf8'))
   await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(fullPath))
-  return { applied: true, message: `Created ${target}` }
+  return { applied: true, message: `Created ${resolved.relative}` }
 }
 
 /**
@@ -181,8 +197,8 @@ export async function smartApplyResponse(
     const lastRubyBlock = [...blocks].reverse().find(b => b.lang === 'ruby' || b.code.includes('class ') || b.code.includes('module '))
     if (lastRubyBlock) {
       const withContext = { ...lastRubyBlock, precedingText: '' }
-      const inferred = inferTargetFile(withContext, workspaceRoot)
-        ?? (lastRubyBlock.filePath ? path.join(workspaceRoot, lastRubyBlock.filePath) : undefined)
+      // inferTargetFile returns null for traversal/outside-root hints; fall back to prompting.
+      const inferred = inferTargetFile(withContext, workspaceRoot) ?? undefined
       return createNewFile(lastRubyBlock.code, workspaceRoot, inferred)
     }
   }

@@ -61,7 +61,10 @@
     "package": "pnpm run lint && pnpm run type-check && pnpm run compile && pnpm test && pnpm run vsce-package",
     "build:all": "pnpm run package",
     "test:host": "tsc -p tsconfig.host.json && vscode-test",
-    "skills:fetch": "node scripts/fetch-skills.mjs"
+    "skills:fetch": "node scripts/fetch-skills.mjs",
+    "test:host:stable": "tsc -p tsconfig.host.json && vscode-test --label stable",
+    "native-smoke": "node scripts/native-smoke.cjs",
+    "vsix-smoke": "tsc -p tsconfig.host.json && node scripts/vsix-smoke.mjs"
   },
   "contributes": {
     "languages": [
@@ -1797,7 +1800,7 @@
     "@typescript-eslint/eslint-plugin": "^8.71.0",
     "@typescript-eslint/parser": "^8.67.0",
     "@vscode/test-cli": "^0.0.15",
-    "@vscode/test-electron": "^2.5.2",
+    "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.0.0",
     "copy-webpack-plugin": "^14.0.0",
     "eslint": "^10.11.0",
