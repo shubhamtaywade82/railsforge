@@ -235,7 +235,12 @@ export function modelFacts(file: SourceFile): FactBatch {
 
 /** `app/views/orders/index.html.erb` -> `app/views/orders/index`; `_form.html.erb` -> partial. */
 export function viewKeyFor(filePath: string): { key: string; kind: 'view' | 'partial' } {
-  const noExt = filePath.replace(/\.[^/]+(\.[^/]+)*$/, '')
+  // Strip every extension (`.html.erb`) from the basename. Plain string ops, not a regex with nested
+  // quantifiers (those backtrack exponentially on inputs like "a....").
+  const slash = filePath.lastIndexOf('/')
+  const fileName = filePath.slice(slash + 1)
+  const firstDot = fileName.indexOf('.', 1)
+  const noExt = firstDot === -1 ? filePath : filePath.slice(0, slash + 1 + firstDot)
   const base = path.posix.basename(noExt)
   return { key: noExt, kind: base.startsWith('_') ? 'partial' : 'view' }
 }

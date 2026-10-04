@@ -133,6 +133,15 @@ describe('helpers', () => {
   it('publicMethods stops at private', () => {
     expect(publicMethods('class A\n  def a; end\n  private\n  def b; end\nend\n').map(m => m.name)).toEqual(['a'])
     expect(viewKeyFor('app/views/orders/_form.html.erb')).toEqual({ key: 'app/views/orders/_form', kind: 'partial' })
+    expect(viewKeyFor('app/views/orders/index.json.jbuilder')).toEqual({ key: 'app/views/orders/index', kind: 'view' })
+    expect(viewKeyFor('app/views/orders/show')).toEqual({ key: 'app/views/orders/show', kind: 'view' })
+    expect(viewKeyFor('app/v.x/orders/show.erb').key).toBe('app/v.x/orders/show')
+  })
+
+  it('viewKeyFor is linear on pathological input (no catastrophic backtracking)', () => {
+    const started = Date.now()
+    viewKeyFor(`app/views/${'a'.repeat(50)}${'.'.repeat(50_000)}`)
+    expect(Date.now() - started).toBeLessThan(250)
   })
 })
 
