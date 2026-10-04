@@ -75,5 +75,8 @@ describe('buildRdbgLaunchConfig', () => {
     const cfg = buildRdbgLaunchConfig('Debug', '/my app', '/my app/bin/rspec', ['/my app/spec/x_spec.rb:12'])
     expect(cfg).toMatchObject({ type: 'rdbg', request: 'launch', command: '"/my app/bin/rspec"', script: '/my app/spec/x_spec.rb:12', cwd: '/my app' })
     expect(buildRdbgLaunchConfig('D', '/p', 'bundle', ['exec', 'rspec', 'a_spec.rb:3'])).toMatchObject({ command: 'bundle exec rspec', script: 'a_spec.rb:3' })
+    // Backslashes (Windows paths) and embedded quotes are escaped, backslashes first.
+    expect(buildRdbgLaunchConfig('D', 'C:\\p', 'C:\\my app\\bin\\rspec', ['x_spec.rb']).command).toBe('"C:\\\\my app\\\\bin\\\\rspec"')
+    expect(buildRdbgLaunchConfig('D', '/p', 'a "b" c\\', ['x']).command).toBe('"a \\"b\\" c\\\\"')
   })
 })

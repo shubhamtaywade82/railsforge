@@ -17,8 +17,9 @@ export interface RdbgLaunchConfig {
   cwd: string
 }
 
+/** Double-quotes a part containing whitespace; backslashes are escaped *before* quotes so `\"` can't be forged. */
 function quoteIfNeeded(part: string): string {
-  return /\s/.test(part) ? `"${part.replace(/"/g, '\\"')}"` : part
+  return /\s/.test(part) ? `"${part.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : part
 }
 
 /**
