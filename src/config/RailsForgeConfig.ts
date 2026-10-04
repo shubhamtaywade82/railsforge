@@ -21,7 +21,7 @@ export interface GemNamespaceMapping {
   gem: string
 }
 
-export type AiProvider = 'ollama' | 'openai' | 'anthropic'
+export type AiProvider = 'ollama' | 'openai' | 'anthropic' | 'vscode-lm'
 export type ProjectTypeOverride = 'auto' | 'monolith' | 'api_only' | 'gem' | 'script'
 export type RubocopMode = 'safe' | 'unsafe'
 export type TestingFramework = 'rspec' | 'minitest'
@@ -55,6 +55,8 @@ export interface RailsForgeConfig {
   ollamaRepeatPenalty: number
   ollamaMinP: number
   aiProvider: AiProvider
+  /** Preferred model family when aiProvider is 'vscode-lm' (empty = the user's default model). */
+  aiVscodeLmFamily: string
   aiOpenaiModel: string
   aiOpenaiBaseUrl: string
   aiAnthropicModel: string
@@ -86,6 +88,17 @@ export interface RailsForgeConfig {
   typesSteepEnabled: boolean
   typesSteepScanOnSave: boolean
   typesRbsSigDir: string
+  /** Version manager used to run project tools ('auto' detects from .tool-versions/.ruby-version). */
+  /** Allow `rails runner` introspection without asking each time (it executes application code). */
+  runtimeIntrospectionEnabled: boolean
+  /** Route and inject ruby-agent-skills guidance into AI requests. */
+  skillsEnabled: boolean
+  skillsMaxPerRequest: number
+  skillsExtraPaths: string[]
+  analyzersEnabled: string[]
+  analyzersFlogThreshold: number
+  analyzersPaths: string[]
+  rubyVersionManager: 'auto' | 'none' | 'mise' | 'asdf' | 'rbenv' | 'rvm' | 'chruby'
   logLevel: LogLevelName
   logFileEnabled: boolean
 }
@@ -110,6 +123,7 @@ export function readConfig(scope?: vscode.ConfigurationScope): RailsForgeConfig 
     ollamaRepeatPenalty: cfg.get<number>('ollama.repeatPenalty', 1.15),
     ollamaMinP: cfg.get<number>('ollama.minP', 0.05),
     aiProvider: cfg.get<AiProvider>('ai.provider', 'ollama'),
+    aiVscodeLmFamily: cfg.get<string>('ai.vscodeLm.family', ''),
     aiOpenaiModel: cfg.get<string>('ai.openai.model', 'gpt-4o-mini'),
     aiOpenaiBaseUrl: cfg.get<string>('ai.openai.baseUrl', 'https://api.openai.com'),
     aiAnthropicModel: cfg.get<string>('ai.anthropic.model', 'claude-sonnet-4-5'),
@@ -141,6 +155,14 @@ export function readConfig(scope?: vscode.ConfigurationScope): RailsForgeConfig 
     typesSteepEnabled: cfg.get<boolean>('types.steepEnabled', false),
     typesSteepScanOnSave: cfg.get<boolean>('types.steepScanOnSave', false),
     typesRbsSigDir: cfg.get<string>('types.rbsSigDir', 'sig'),
+    runtimeIntrospectionEnabled: cfg.get<boolean>('runtime.introspection.enabled', false),
+    skillsEnabled: cfg.get<boolean>('skills.enabled', true),
+    skillsMaxPerRequest: cfg.get<number>('skills.maxPerRequest', 4),
+    skillsExtraPaths: cfg.get<string[]>('skills.extraPaths', []),
+    analyzersEnabled: cfg.get<string[]>('analyzers.enabled', []),
+    analyzersFlogThreshold: cfg.get<number>('analyzers.flogThreshold', 20),
+    analyzersPaths: cfg.get<string[]>('analyzers.paths', ['app', 'lib']),
+    rubyVersionManager: cfg.get<RailsForgeConfig['rubyVersionManager']>('ruby.versionManager', 'auto'),
     logLevel: cfg.get<LogLevelName>('log.level', 'info'),
     logFileEnabled: cfg.get<boolean>('log.file', false),
   }

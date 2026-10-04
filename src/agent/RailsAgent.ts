@@ -4,7 +4,7 @@
 
 import { SchemaIndexer } from '../rails/SchemaIndexer'
 import { RoutesIndexer } from '../rails/RoutesIndexer'
-import { ProjectEnvironment } from '../environment/EnvironmentDetector'
+import { ProjectEnvironment, UNKNOWN_VERSION, isKnownVersion } from '../environment/EnvironmentDetector'
 import { ProjectPatternIndexer } from '../patterns/ProjectPatternIndexer'
 
 import { OllamaClient } from '@nemesis-oss/ollama-sdk'
@@ -37,7 +37,20 @@ function safeJson(value: unknown): string {
 }
 
 /** Duplicated (not imported) from config/RailsForgeConfig on purpose — this class stays vscode-free. */
-export type AiAgentProvider = 'ollama' | 'openai' | 'anthropic'
+/**
+ * - offline: endpoint unreachable
+ * - unconfigured: cloud provider without an API key
+ * - reachable: Ollama server answered (no auth involved)
+ * - authenticated: cloud endpoint reachable and the key (and model, when listed) accepted
+ * - error: reachable/configured but unusable (bad key, missing model, HTTP error)
+ */
+export type ProviderState = 'offline' | 'unconfigured' | 'reachable' | 'authenticated' | 'error'
+export interface ProviderStatus {
+  state: ProviderState
+  detail?: string
+}
+
+export type AiAgentProvider = 'ollama' | 'openai' | 'anthropic' | 'vscode-lm'
 
 export interface RailsAgentConfig {
   ollamaHost: string
@@ -68,6 +81,25 @@ export interface RailsAgentConfig {
    */
   getApiKey?: () => Promise<string | undefined>
   /**
+   * 'vscode-lm' only: sends one system+user request through VS Code's Language Model API
+   * (`vscode.lm.selectChatModels` / `model.sendRequest`) and resolves with the full text.
+   * Injected by the extension so this class stays free of a `vscode` import.
+   */
+  vscodeLmRequest?: (systemPrompt: string, prompt: string) => Promise<string>
+  /** 'vscode-lm' only: reports whether a usable model is available. */
+  vscodeLmStatus?: () => Promise<ProviderStatus>
+  vscodeLmFamily?: string
+  /**
+   * Returns Rails application facts (semantic graph) relevant to this request, rendered as markdown
+   * ('' = nothing relevant). Injected so this class stays free of fs/vscode.
+   */
+  semanticContext?: (request: { prompt: string; fileName?: string; workspaceRoot?: string }) => string | Promise<string>
+  /**
+   * Returns engineering-skill guidance (ruby-agent-skills routed for this request), '' = none.
+   * Receives the chat command so e.g. /optimize routes to performance skills.
+   */
+  skillContext?: (request: { prompt: string; command?: string; fileName?: string; workspaceRoot?: string; diagnosticMessage?: string }) => string | Promise<string>
+  /**
    * Host-provided logging callback (wired in extension.ts to the RailsForge
    * logger) so this class stays vscode-free. 'debug' carries AI request/response
    * summaries and diff-parse results, 'trace' carries raw provider payloads,
@@ -81,6 +113,12 @@ export interface RailsAgentContext {
   fileName?: string
   selection?: string
   workspaceRoot?: string
+  /** Chat slash command (`optimize`, `fix`, ...) that produced this request, if any. */
+  command?: string
+  /** Filled by RailsAgent.run() from config.semanticContext. */
+  semanticContext?: string
+  /** Filled by RailsAgent.run() from config.skillContext. */
+  skillContext?: string
   diagnosticMessage?: string
   isFix?: boolean
 }
@@ -111,6 +149,20 @@ export class RailsAgent {
 
   async run(prompt: string, context: RailsAgentContext): Promise<RailsAgentResult> {
     const startedAt = Date.now()
+    if (context.semanticContext === undefined && this.config.semanticContext) {
+      try {
+        context = { ...context, semanticContext: await this.config.semanticContext({ prompt: `${prompt}\n${context.diagnosticMessage ?? ''}`, fileName: context.fileName, workspaceRoot: context.workspaceRoot }) }
+      } catch (err) {
+        this.log('warn', `[AI] semantic context unavailable: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
+    if (context.skillContext === undefined && this.config.skillContext) {
+      try {
+        context = { ...context, skillContext: await this.config.skillContext({ prompt, command: context.command, fileName: context.fileName, workspaceRoot: context.workspaceRoot, diagnosticMessage: context.diagnosticMessage }) }
+      } catch (err) {
+        this.log('warn', `[AI] skill context unavailable: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
     const systemPrompt = context.isFix
       ? this.buildFixSystemPrompt(context.diagnosticMessage ?? '', context)
       : this.buildSystemPrompt(context)
@@ -125,6 +177,7 @@ export class RailsAgent {
   private modelFor(provider: AiAgentProvider): string {
     if (provider === 'openai') { return this.config.openaiModel ?? 'gpt-4o-mini' }
     if (provider === 'anthropic') { return this.config.anthropicModel ?? 'claude-sonnet-4-5' }
+    if (provider === 'vscode-lm') { return this.config.vscodeLmFamily || 'default (VS Code model picker)' }
     return this.config.model
   }
 
@@ -134,6 +187,17 @@ export class RailsAgent {
 
   private async chatCompletion(systemPrompt: string, prompt: string): Promise<{ success: boolean; response: string }> {
     const provider = this.config.provider ?? 'ollama'
+
+    if (provider === 'vscode-lm') {
+      if (!this.config.vscodeLmRequest) {
+        return { success: false, response: 'The VS Code Language Model API is not available in this editor. Switch railsForge.ai.provider to ollama/openai/anthropic.' }
+      }
+      try {
+        return { success: true, response: await this.config.vscodeLmRequest(systemPrompt, prompt) }
+      } catch (err) {
+        return { success: false, response: `VS Code language model error: ${err instanceof Error ? err.message : String(err)}` }
+      }
+    }
 
     if (provider === 'anthropic') {
       const apiKey = await this.config.getApiKey?.()
@@ -544,42 +608,114 @@ private buildFixRetryInstruction(code: string, diagnosticMessage: string, previo
   }
 
   /**
-   * For Ollama, actually pings the local server. Cloud providers aren't pinged (no free,
-   * side-effect-free health endpoint) — "healthy" just means a key is configured.
+   * Real provider status. Cloud providers are probed with their side-effect-free, token-free
+   * `GET /models` endpoint, which distinguishes "key present" from "key accepted" and
+   * "endpoint reachable"; Ollama is pinged directly.
    */
-  async healthCheck(): Promise<boolean> {
+  async getProviderStatus(): Promise<ProviderStatus> {
     const provider = this.config.provider ?? 'ollama'
-    if (provider !== 'ollama') {
-      return Boolean(await this.config.getApiKey?.())
+
+    if (provider === 'ollama') {
+      try {
+        const client = new OllamaClient({ baseUrl: this.config.ollamaHost })
+        const checks = await client.healthCheck()
+        return checks.some(c => c.reachable)
+          ? { state: 'reachable' }
+          : { state: 'offline', detail: 'Ollama server not reachable' }
+      } catch (err) {
+        return { state: 'offline', detail: err instanceof Error ? err.message : String(err) }
+      }
+    }
+
+    if (provider === 'vscode-lm') {
+      return this.config.vscodeLmStatus ? this.config.vscodeLmStatus() : { state: 'error', detail: 'VS Code Language Model API unavailable' }
+    }
+
+    const apiKey = await this.config.getApiKey?.()
+    if (!apiKey) {return { state: 'unconfigured', detail: 'No API key configured' }}
+
+    const label = provider === 'anthropic' ? 'Anthropic' : 'OpenAI'
+    let url: string
+    let headers: Record<string, string>
+    let model: string
+    if (provider === 'anthropic') {
+      url = 'https://api.anthropic.com/v1/models?limit=1000'
+      headers = { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }
+      model = this.config.anthropicModel ?? 'claude-sonnet-4-5'
+    } else {
+      const baseUrl = (this.config.openaiBaseUrl ?? 'https://api.openai.com').replace(/\/$/, '')
+      if (!/^https:\/\//i.test(baseUrl) && !/^http:\/\/(localhost|127\.0\.0\.1)/i.test(baseUrl)) {
+        return { state: 'error', detail: `Invalid openaiBaseUrl "${baseUrl}" (HTTPS required)` }
+      }
+      url = `${baseUrl}/v1/models`
+      headers = { Authorization: `Bearer ${apiKey}` }
+      model = this.config.openaiModel ?? 'gpt-4o-mini'
     }
 
     try {
-      const client = new OllamaClient({ baseUrl: this.config.ollamaHost })
-      const checks = await client.healthCheck()
-      return checks.some(c => c.reachable)
-    } catch {
-      return false
+      const res = await fetch(url, { headers, signal: AbortSignal.timeout(5000) })
+      if (res.status === 401 || res.status === 403) {
+        return { state: 'error', detail: `${label} rejected the API key (${res.status})` }
+      }
+      if (!res.ok) {
+        return { state: 'error', detail: `${label} returned ${res.status} ${res.statusText}` }
+      }
+      const json = (await res.json().catch(() => ({}))) as { data?: Array<{ id?: string }> }
+      const ids = json.data?.map(m => m.id).filter((id): id is string => typeof id === 'string') ?? []
+      // Only assert the model is missing when the endpoint returned a model list at all
+      // (OpenAI-compatible proxies often don't).
+      if (ids.length > 0 && !ids.includes(model)) {
+        return { state: 'error', detail: `${label} is reachable but model "${model}" was not found` }
+      }
+      return { state: 'authenticated' }
+    } catch (err) {
+      return { state: 'offline', detail: `${label} unreachable: ${err instanceof Error ? err.message : String(err)}` }
     }
+  }
+
+  /** Back-compat boolean: true only when the provider is actually reachable (and authenticated for cloud). */
+  async healthCheck(): Promise<boolean> {
+    const { state } = await this.getProviderStatus()
+    return state === 'reachable' || state === 'authenticated'
+  }
+
+  /** Version grounding: only assert versions the project actually declares. */
+  private versionConstraintLines(rubyVer: string, railsVer: string | undefined): string[] {
+    const rubyKnown = isKnownVersion(rubyVer)
+    const railsKnown = isKnownVersion(railsVer)
+    if (rubyKnown && railsKnown) {
+      return [
+        `CRITICAL CONSTRAINT: The active project strictly uses Ruby ${rubyVer} and Rails ${railsVer}.`,
+        `Do NOT use or suggest features from newer Ruby or Rails versions. Only use standard library modules and gem APIs compatible with Ruby ${rubyVer} and Rails ${railsVer}.`,
+      ]
+    }
+    const lines = [
+      `CRITICAL CONSTRAINT: Project versions: Ruby ${rubyKnown ? rubyVer : 'UNKNOWN (not declared)'}, Rails ${railsKnown ? railsVer : 'UNKNOWN (not declared)'}.`,
+      'Do NOT assume a specific version for any UNKNOWN component and do not claim version-specific compatibility; prefer APIs that are stable across supported releases and flag anything version-dependent.',
+    ]
+    if (rubyKnown || railsKnown) {
+      lines.push(`Do NOT use or suggest features newer than the declared ${rubyKnown ? `Ruby ${rubyVer}` : `Rails ${railsVer}`}.`)
+    }
+    return lines
   }
 
   private buildSystemPrompt(context: RailsAgentContext): string {
     const tables = this.schemaIndexer.getAllTables().map(t => `${t.name} (${Array.from(t.columns.keys()).join(', ')})`)
     const routes = this.routesIndexer.getAllRoutes().slice(0, 30).map(r => `${r.verb} ${r.uriPattern} => ${r.controller}#${r.action}`)
-    const rubyVer = this.env?.rubyVersion ?? '3.3.0'
+    const rubyVer = this.env?.rubyVersion ?? UNKNOWN_VERSION
     const isRailsProject = this.env === undefined || this.env.hasRails
 
     const parts: string[] = isRailsProject
       ? [
         'You are RailsForge AI, a senior Ruby on Rails engineering assistant.',
-        `CRITICAL CONSTRAINT: The active project strictly uses Ruby ${rubyVer} and Rails ${this.env?.railsVersion ?? '7.1.0'}.`,
-        `Do NOT use or suggest features from newer Ruby or Rails versions. Only use standard library modules and gem APIs compatible with Ruby ${rubyVer} and Rails ${this.env?.railsVersion ?? '7.1.0'}.`,
+        ...this.versionConstraintLines(rubyVer, this.env?.railsVersion),
         'Always produce clean, modern, idiomatic code adhering to RuboCop-Rails standards.',
         'Follow SOLID principles, avoid fat controllers, extract business logic to Service Objects, and prevent N+1 queries.',
         'Before generating a new Service, Query, Form, Policy, or Decorator, search the "Existing Project Patterns" list below. If a close match exists, reuse or extend it instead of writing a new one from scratch, and say so explicitly.',
       ]
       : [
         'You are RailsForge AI, a senior Ruby engineering assistant.',
-        `CRITICAL CONSTRAINT: The active project is a standalone Ruby codebase (gem or script) using Ruby ${rubyVer}. It does NOT depend on Rails — do not assume ActiveRecord, ActionController, or any other Rails framework API is available unless it appears as an actual dependency below.`,
+        `CRITICAL CONSTRAINT: The active project is a standalone Ruby codebase (gem or script) using Ruby ${isKnownVersion(rubyVer) ? rubyVer : '(version not declared — do not assume one)'}. It does NOT depend on Rails — do not assume ActiveRecord, ActionController, or any other Rails framework API is available unless it appears as an actual dependency below.`,
         'Only use Ruby standard library and gem APIs that are actually declared as dependencies.',
         'Follow SOLID principles and keep classes focused on a single responsibility.',
         'Before generating new code, search the "Existing Project Patterns" list below. If a close match exists, reuse or extend it instead of writing a new one from scratch, and say so explicitly.',
@@ -588,6 +724,13 @@ private buildFixRetryInstruction(code: string, diagnosticMessage: string, previo
     const patternSummary = this.summarizePatterns()
     if (this.config.legalMode) {
       parts.push(this.legalSkillsPrompt())
+    }
+
+    if (context.semanticContext) {
+      parts.push(context.semanticContext)
+    }
+    if (context.skillContext) {
+      parts.push(context.skillContext)
     }
 
     if (patternSummary) {
@@ -627,24 +770,31 @@ private buildFixRetryInstruction(code: string, diagnosticMessage: string, previo
   }
 
   private buildFixSystemPrompt(diagnosticMessage: string, context: RailsAgentContext): string {
-    const rubyVer = this.env?.rubyVersion ?? '3.3.0'
+    const rubyVer = this.env?.rubyVersion ?? UNKNOWN_VERSION
     const isRailsProject = this.env === undefined || this.env.hasRails
 
     const parts: string[] = isRailsProject
       ? [
         'You are RailsForge AI, a senior Ruby on Rails engineering assistant.',
-        `CRITICAL CONSTRAINT: The active project strictly uses Ruby ${rubyVer} and Rails ${this.env?.railsVersion ?? '7.1.0'}.`,
+        ...this.versionConstraintLines(rubyVer, this.env?.railsVersion),
         'Follow SOLID principles, avoid fat controllers, extract business logic to Service Objects, and prevent N+1 queries.',
         'Output ONLY a minimal unified diff. No explanation, no markdown fences.',
       ]
       : [
         'You are RailsForge AI, a senior Ruby engineering assistant.',
-        `CRITICAL CONSTRAINT: The active project is a standalone Ruby codebase using Ruby ${rubyVer}. No Rails APIs unless explicitly available.`,
+        `CRITICAL CONSTRAINT: The active project is a standalone Ruby codebase using Ruby ${isKnownVersion(rubyVer) ? rubyVer : '(version not declared — do not assume one)'}. No Rails APIs unless explicitly available.`,
         'Follow SOLID principles. Output ONLY a minimal unified diff. No explanation, no markdown fences.',
       ]
 
     if (this.config.legalMode) {
       parts.push(this.legalSkillsPrompt())
+    }
+
+    if (context.semanticContext) {
+      parts.push(context.semanticContext)
+    }
+    if (context.skillContext) {
+      parts.push(context.skillContext)
     }
 
     // Only include schema tables relevant to the diagnostic (heuristic: class name in message)

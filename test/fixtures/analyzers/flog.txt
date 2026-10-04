@@ -1,0 +1,7 @@
+    42.1: flog total
+    10.5: flog/method average
+
+    17.7: Greeter#dup_a                    app/a.rb:12-14
+    17.7: Other#dup_b                      app/b.rb:2-4
+     6.5: Greeter#greet                    app/a.rb:2-10
+     0.2: Greeter#unused_method            app/a.rb:16-18

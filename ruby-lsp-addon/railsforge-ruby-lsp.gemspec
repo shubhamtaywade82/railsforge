@@ -1,6 +1,8 @@
 Gem::Specification.new do |spec|
   spec.name          = 'railsforge-ruby-lsp'
-  spec.version       = '0.1.4'
+  spec.version       = begin
+    File.read(File.join(__dir__, 'lib/ruby_lsp/railsforge/version.rb'))[/VERSION = '([^']+)'/, 1]
+  end
   spec.authors       = ['RailsForge']
   spec.summary       = 'Ruby LSP add-on that injects RailsForge schema/route awareness into ruby-lsp completion and hover.'
   spec.description   = <<~DESC
@@ -11,7 +13,7 @@ Gem::Specification.new do |spec|
     Install it alongside Shopify's ruby-lsp gem; ruby-lsp discovers and loads it
     automatically via the addon API.
   DESC
-  spec.homepage      = 'https://github.com/shubhamtaywade82/railsforge'
+  spec.homepage      = 'https://github.com/shubhamtaywade82/ruby-rails-extension'
   spec.license       = 'MIT'
   spec.required_ruby_version = '>= 3.0'
 

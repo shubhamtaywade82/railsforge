@@ -3,6 +3,7 @@
  */
 
 import * as vscode from 'vscode'
+import { activeWorkspaceRoot } from '../workspace/activeRoot'
 import { ServiceExtractor } from './ServiceExtractor'
 import { QueryExtractor } from './QueryExtractor'
 import { FormObjectExtractor } from './FormObjectExtractor'
@@ -28,7 +29,7 @@ export class RefactoringMenuProvider {
 
     const selection = editor.selection
     const selectedText = editor.document.getText(selection)
-    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+    const root = activeWorkspaceRoot()
 
     if (!root) {
       vscode.window.showErrorMessage('No workspace folder open.')

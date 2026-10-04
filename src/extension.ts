@@ -29,9 +29,27 @@ import { TurboFrameNavigator } from './hotwire/TurboFrameNavigator'
 import { TurboFrameDefinitionProvider } from './hotwire/TurboFrameDefinitionProvider'
 import { ViewPartialResolver } from './rails/ViewPartialResolver'
 import { ViewPartialDefinitionProvider } from './rails/ViewPartialDefinitionProvider'
-import { TestExplorerController } from './testing/TestExplorerController'
+import { TestExplorerController, debugRubyCommand } from './testing/TestExplorerController'
 import { TestCodeLensProvider } from './testing/TestCodeLensProvider'
-import { EnvironmentDetector, ProjectEnvironment } from './environment/EnvironmentDetector'
+import { activeWorkspaceRoot, workspaceRoots, workspaceRootFor } from './workspace/activeRoot'
+import { isInside, resolveWorkspaceRoot } from './workspace/WorkspaceRoots'
+import { RubyAnalyzersProvider, AnalyzerRunResult } from './lint/RubyAnalyzersProvider'
+import { ANALYZER_IDS, AnalyzerId } from './lint/AnalyzerParsers'
+import { LmApiLike, registerRailsLanguageModelTools } from './ai/RailsLanguageModelTools'
+import { ToolContext } from './mcp/tools/ToolContext'
+import { buildSemanticContext, selectSeeds } from './semantic/RailsContextBuilder'
+import { routeSkills } from './skills/SkillRouter'
+import { buildSkillContext } from './skills/SkillContextBuilder'
+import { ProjectState } from './util/ProjectState'
+import { VIRTUAL_DOC_KINDS, VIRTUAL_DOC_SCHEME, VirtualDocKind } from './views/VirtualDocs'
+import { VirtualDocsProvider, virtualDocUri } from './views/VirtualDocsProvider'
+import { showRuntimeSnapshot } from './rails/RuntimeIntrospectionService'
+import { RAILSFORGE_TASK_TYPE, RailsTaskProvider } from './tasks/RailsTaskProvider'
+import { GENERATORS, GeneratorMode, buildGeneratorArgs, parseAttributes, parseGeneratorOutput, validateGeneratorName } from './rails/RailsGenerators'
+import { firstCandidate, projectVersionManager, setVersionManagerSettingProvider, rubyCandidates, rubyTerminalCommand } from './util/RubyCommand'
+import { ShellKind, shellKindFromPath, hasPathSegment } from './util/ShellCommand'
+import { patchFileMatches } from './patch/PatchPaths'
+import { EnvironmentDetector, ProjectEnvironment, isKnownVersion } from './environment/EnvironmentDetector'
 import { RailsDeprecationLinter } from './lint/RailsDeprecationLinter'
 import { DesignPrincipleLinter } from './principles/DesignPrincipleLinter'
 import { VersionDocsEngine } from './docs/VersionDocsEngine'
@@ -55,6 +73,9 @@ import { RailsChatParticipant } from './chat/RailsChatParticipant'
 import { RailsChatViewProvider } from './chat/RailsChatViewProvider'
 import { smartApplyResponse } from './chat/ChatDiffApplier'
 import { PersistentIndexManager } from './indexer/PersistentIndexManager'
+import { PerRootRegistry } from './workspace/PerRootRegistry'
+import { DevDocsProject } from './docs/DevDocsProject'
+import { PersistentIndexRegistry, IndexState } from './indexer/PersistentIndexRegistry'
 import { findDuplicateCallSites } from './refactor/DuplicateCallSiteFinder'
 import { specFilePathFor, buildRspecSkeleton } from './refactor/SpecFileGenerator'
 import { buildCursorRulesContent, buildSystemPromptMarkdown } from './mcp/CursorRulesGenerator'
@@ -64,7 +85,7 @@ import { EndwiseProvider } from './editing/EndwiseProvider'
 import { ErbTagCompletionProvider } from './editing/ErbTagCompletionProvider'
 import { GemLensProvider } from './gems/GemLensProvider'
 import { RubyGemsClient } from './gems/RubyGemsClient'
-import { readConfig, buildExcludeGlob, isExcludedPath, onConfigChanged, RailsForgeConfig } from './config/RailsForgeConfig'
+import { readConfig, buildExcludeGlob, isExcludedPath, onConfigChanged, RailsForgeConfig, AiProvider } from './config/RailsForgeConfig'
 import { buildOpenApiSkeleton } from './docs/OpenApiSkeletonGenerator'
 import { ApiDockClient } from './docs/ApiDockClient'
 import { ApiDockMethodIndex } from './docs/ApiDockMethodIndex'
@@ -98,7 +119,24 @@ function applyLogSettings(config: RailsForgeConfig, workspaceRoot: string): void
   Logger.setLogFile(config.logFileEnabled && workspaceRoot ? path.join(workspaceRoot, '.railsforge', 'railsforge.log') : undefined)
 }
 
-export function activate(context: vscode.ExtensionContext): void {
+/** Read-only state exposed to the Extension Host integration tests (`extension.exports`). */
+export interface RailsForgeTestApi {
+  getActiveProjectRoot(): string
+  getSchemaTableNames(): string[]
+  /** AST index status keyed by workspace root (only roots that were activated). */
+  getAstIndexStatuses(): Record<string, string>
+  /** Number of RBS signatures for `methodName` in the project that owns `filePath`. */
+  countRbsMethods(filePath: string, methodName: string): number
+  /** DevDocs cache directory of the project that owns `filePath`. */
+  getDevDocsCacheDir(filePath: string): string
+  /** Discovers tests workspace-wide and returns the Test Explorer tree as indented labels. */
+  discoverTestTree(): Promise<string[]>
+}
+
+export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
+  projectState = new ProjectState(context.workspaceState)
+  skillsPackDir = path.join(context.extensionPath, 'dist', 'skills')
+  setVersionManagerSettingProvider(() => readConfig().rubyVersionManager)
   Logger.init(context)
   const config = readConfig()
   Logger.setLevel(config.logLevel)
@@ -145,7 +183,10 @@ export function activate(context: vscode.ExtensionContext): void {
     timeoutMs: config.rubydocRequestTimeoutMs,
     baseUrl: config.rubydocBaseUrl,
   })
+  const analyzers = new RubyAnalyzersProvider()
+  context.subscriptions.push(analyzers)
   const testExplorer = new TestExplorerController()
+  context.subscriptions.push(testExplorer)
   const serviceExtractor = new ServiceExtractor()
   const queryExtractor = new QueryExtractor()
   const formExtractor = new FormObjectExtractor()
@@ -159,7 +200,9 @@ export function activate(context: vscode.ExtensionContext): void {
   )
   const envDetector = new EnvironmentDetector()
 
-  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? ''
+  const workspaceRoot = activeWorkspaceRoot() ?? ''
+  // Root the shared (root-bound) indexers currently reflect; swapped by switchActiveProject().
+  const activeProject = { root: workspaceRoot }
   const env: ProjectEnvironment = envDetector.detectEnvironment(workspaceRoot)
   if (config.projectTypeOverride !== 'auto') {
     env.projectType = config.projectTypeOverride
@@ -167,28 +210,36 @@ export function activate(context: vscode.ExtensionContext): void {
 
   applyLogSettings(config, workspaceRoot)
 
-  // Offline DevDocs cache: workspace-local (not globalStorageUri) so the standalone MCP
-  // server can find it too — same rationale as PersistentIndexManager's .railsforge/index.sqlite3.
-  const devDocsCacheDir = path.join(workspaceRoot, '.railsforge', 'devdocs')
-  const devDocsFetcher = new DevDocsFetcher({
-    cacheDir: devDocsCacheDir,
-    timeoutMs: config.devdocsFetchTimeoutMs,
-    baseUrl: config.devdocsDataBaseUrl,
+  // Offline DevDocs + RBS signatures are per project: each workspace root has its own
+  // cache directory / sig index, keyed by root, created lazily and dropped with its folder.
+  const devDocsProjects = new PerRootRegistry<DevDocsProject>(root => new DevDocsProject(root, {
+    createFetcher: cacheDir => new DevDocsFetcher({
+      cacheDir,
+      timeoutMs: readConfig().devdocsFetchTimeoutMs,
+      baseUrl: readConfig().devdocsDataBaseUrl,
+    }),
+    slugsFor: projectRoot => {
+      const cfg = readConfig()
+      const projectEnv = projectRoot === activeProject.root ? env : envDetector.detectEnvironment(projectRoot)
+      const slugs = [cfg.devdocsRubySlug || (isKnownVersion(projectEnv.rubyVersion) ? toDevDocsSlug('ruby', projectEnv.rubyVersion) : 'ruby')]
+      if (projectEnv.hasRails) {
+        slugs.push(cfg.devdocsRailsSlug || (isKnownVersion(projectEnv.railsVersion) ? toDevDocsSlug('rails', projectEnv.railsVersion) : 'rails'))
+      }
+      return slugs
+    },
+  }))
+  const devDocsIndexFor = (uri: vscode.Uri): DevDocsOfflineIndex =>
+    devDocsProjects.get(workspaceRootFor(uri) ?? activeProject.root).index
+  // Parsed on first use of a root (RBS sig dirs are small), so a hover in any root is correct.
+  const rbsIndexes = new PerRootRegistry<RBSIndex>(root => {
+    const index = new RBSIndex()
+    index.loadFromWorkspace(root, readConfig().typesRbsSigDir)
+    return index
   })
-  const devDocsSlugs = [config.devdocsRubySlug || toDevDocsSlug('ruby', env.rubyVersion)]
-  if (env.hasRails) {
-    devDocsSlugs.push(config.devdocsRailsSlug || toDevDocsSlug('rails', env.railsVersion))
-  }
-  // Empty until the background download (kicked off below, once workspaceRoot is confirmed
-  // non-empty) finishes — DevDocsHoverProvider reads through this holder (same "mutable
-  // holder swapped once ready" idiom as `persistentIndex` below) so hovers work immediately
-  // once the first activation's downloads land, without needing a window reload.
-  const devDocsIndexHolder: { index: DevDocsOfflineIndex } = { index: new DevDocsOfflineIndex(devDocsCacheDir, []) }
-
-  const rbsIndex = new RBSIndex()
+  const rbsIndexFor = (uri: vscode.Uri): RBSIndex => rbsIndexes.get(workspaceRootFor(uri) ?? activeProject.root)
   if (workspaceRoot) {
     // Deferred: RBS sig directory walk uses sync I/O; yield to event loop first.
-    setTimeout(() => rbsIndex.loadFromWorkspace(workspaceRoot, config.typesRbsSigDir), 800)
+    setTimeout(() => rbsIndexes.get(workspaceRoot), 800)
   }
   const steepProvider = new SteepProvider()
   const steepDiagnostics = vscode.languages.createDiagnosticCollection('steep')
@@ -226,6 +277,28 @@ export function activate(context: vscode.ExtensionContext): void {
     ollamaRepeatPenalty: cfg.ollamaRepeatPenalty,
     ollamaMinP: cfg.ollamaMinP,
     getApiKey: async () => context.secrets.get(aiApiKeySecretKey(readConfig().aiProvider)),
+    vscodeLmFamily: cfg.aiVscodeLmFamily,
+    skillContext: ({ prompt, command, fileName, workspaceRoot: root, diagnosticMessage }) => {
+      const settings = readConfig()
+      if (!settings.skillsEnabled) {return ''}
+      const projectRoot = root ?? (fileName ? workspaceRootFor(vscode.Uri.file(fileName)) : undefined)
+      if (!projectRoot) {return ''}
+      const toolContext = semanticContexts.get(projectRoot)
+      const registry = toolContext.getSkillRegistry()
+      if (!registry.catalog) {return ''}
+      const kinds = [...new Set(selectSeeds(toolContext.getSemanticGraph(), { prompt: `${prompt}\n${diagnosticMessage ?? ''}`, filePath: fileName, maxSeeds: 8 }).map(e => e.kind))]
+      const input = { prompt, command, entityKinds: kinds, context: diagnosticMessage }
+      const routed = routeSkills(registry.catalog, input, { maxSkills: settings.skillsMaxPerRequest })
+      Logger.debug(`[skills] ${routed.map(r => `${r.id}(${r.role})`).join(', ') || 'none'}`)
+      return buildSkillContext(registry, routed, input, { maxChars: 5000 })
+    },
+    semanticContext: ({ prompt, fileName, workspaceRoot: root }) => {
+      const projectRoot = root ?? (fileName ? workspaceRootFor(vscode.Uri.file(fileName)) : undefined)
+      if (!projectRoot) {return ''}
+      return buildSemanticContext(semanticContexts.get(projectRoot).getSemanticGraph(), { filePath: fileName, prompt, maxChars: 3500 })
+    },
+    vscodeLmRequest: (system, prompt) => requestViaVsCodeLm(system, prompt, readConfig().aiVscodeLmFamily, readConfig().aiTimeoutMs),
+    vscodeLmStatus: () => vscodeLmStatus(readConfig().aiVscodeLmFamily),
     log: (level: 'debug' | 'trace' | 'warn', message: string) => {
       if (level === 'debug') { Logger.debug(message) }
       else if (level === 'trace') { Logger.trace(message) }
@@ -276,28 +349,35 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Phase 12: persistent AST/SQLite index (tree-sitter + better-sqlite3, off-thread).
   // Powers Phase 8 (cross-file duplicate methods) and Phase 11 (dependency cycles) below.
-  // Fails soft: commands check persistentIndex.manager and report "still indexing /
-  // unavailable" rather than the extension crashing if native modules can't load.
-  // Deferred 5s: heaviest startup cost (tree-sitter + SQLite + full scan); core features
-  // (hovers, navigation, linting) work fine without it.
-  const persistentIndex: { manager: PersistentIndexManager | null } = { manager: null }
+  // One index per workspace root (multi-root), started lazily when a root becomes the active
+  // project. Fails soft: commands report the precise state (starting / unsupported + reason /
+  // failed) rather than the extension crashing if native modules can't load, and an
+  // unsupported runtime is surfaced to the user once instead of silently disabling the feature.
+  // Initial root deferred 5s: heaviest startup cost (tree-sitter + SQLite + full scan); core
+  // features (hovers, navigation, linting) work fine without it.
+  const persistentIndexes = new PersistentIndexRegistry<PersistentIndexManager>(
+    root => PersistentIndexManager.activate(context, root),
+    (root, state) => {
+      architectureTreeProvider.refresh(env)
+      if (state.status === 'unsupported') {
+        void notifyAstIndexUnavailable(context, state.reason, true)
+      } else if (state.status === 'failed') {
+        void notifyAstIndexUnavailable(context, `${path.basename(root)}: ${state.reason}`, false)
+      }
+    },
+  )
+  context.subscriptions.push(persistentIndexes)
   if (workspaceRoot) {
-    setTimeout(() => {
-      void PersistentIndexManager.activate(context, workspaceRoot).then(manager => {
-        persistentIndex.manager = manager
-      })
-    }, 5000)
+    setTimeout(() => void persistentIndexes.ensure(workspaceRoot), 5000)
   }
 
   // Offline DevDocs: downloads (or reuses an already-cached) docset in the background,
-  // then swaps devDocsIndexHolder.index so DevDocsHoverProvider picks it up without a
-  // window reload. Silent on failure/offline — APIDock/RubyDoc's network-backed hovers
+  // then swaps that project's index so DevDocsHoverProvider picks it up without a
+  // window reload (per root: a root's docs load when it first becomes the active project). Silent on failure/offline — APIDock/RubyDoc's network-backed hovers
   // and the live `railsforge.openDevDocs` webview keep working regardless.
   // Deferred 5s: network I/O that can safely wait until core features are up.
   if (workspaceRoot && config.devdocsOfflineEnabled) {
-    setTimeout(() => {
-      void refreshDevDocsCache(devDocsFetcher, devDocsCacheDir, devDocsSlugs, devDocsIndexHolder, false)
-    }, 5000)
+    setTimeout(() => void devDocsProjects.get(workspaceRoot).refresh(false), 5000)
   }
 
   // 2. Initial Indexing & Live Workspace Analysis
@@ -327,10 +407,10 @@ export function activate(context: vscode.ExtensionContext): void {
     }, 2000)
 
     // File watchers are cheap to register, do immediately.
-    watchProjectFiles(context, workspaceRoot, schemaIndexer, routesIndexer, migrationDiagnostics)
+    watchProjectFiles(context, () => activeProject.root, schemaIndexer, routesIndexer, migrationDiagnostics, (root, kind) => { semanticContexts.get(root).invalidateSemanticGraph(); virtualDocs.refresh(root, [kind, 'graph']) })
     watchPatternFiles(context, projectPatternIndexer, patternCodeLensProvider, dependencyGraph, dependencyDiagnostics, relatedCodeLensProvider, semanticSearchIndex)
     watchSpecFiles(context, relatedFilesIndex, relatedCodeLensProvider)
-    watchStimulusControllers(context, stimulusIndexer)
+    watchStimulusControllers(context, stimulusIndexer, () => activeProject.root)
     watchTurboFrameTemplates(context, turboFrameNavigator)
   }
 
@@ -340,6 +420,8 @@ export function activate(context: vscode.ExtensionContext): void {
     schemaIndexer,
     routesIndexer,
     stimulusIndexer,
+    () => describeAstIndex(persistentIndexes.state(activeProject.root)),
+    () => describeToolchain(activeProject.root),
   )
   const rakeTaskIndexer = new RakeTaskIndexer()
   const rakeTaskTreeProvider = new RakeTaskTreeProvider(rakeTaskIndexer, workspaceRoot)
@@ -351,6 +433,59 @@ export function activate(context: vscode.ExtensionContext): void {
   )
   void vscode.commands.executeCommand('setContext', 'railsforge.hasRakefile', workspaceRoot && fs.existsSync(path.join(workspaceRoot, 'Rakefile')))
 
+  // Multi-root: schema/routes/env/stimulus/factories/rake are per-project. They are
+  // shared singletons injected into many providers, so rather than rewiring each one we
+  // re-point them (in place) at whichever workspace folder owns the active editor.
+  const switchActiveProject = (newRoot: string): void => {
+    if (!newRoot || newRoot === activeProject.root) {return}
+    Logger.info(`[workspace] Active project: ${activeProject.root} -> ${newRoot}`)
+    activeProject.root = newRoot
+
+    const fresh = envDetector.detectEnvironment(newRoot)
+    const override = readConfig().projectTypeOverride
+    if (override !== 'auto') {fresh.projectType = override}
+    Object.assign(env, fresh)
+    void vscode.commands.executeCommand('setContext', 'railsforge.projectType', env.projectType)
+    void vscode.commands.executeCommand('setContext', 'railsforge.isRailsApp', env.projectType === 'monolith' || env.projectType === 'api_only')
+    void vscode.commands.executeCommand('setContext', 'railsforge.hasViews', env.projectType === 'monolith')
+    void vscode.commands.executeCommand('setContext', 'railsforge.hasHotwire', env.hasHotwire)
+    void vscode.commands.executeCommand('setContext', 'railsforge.hasPundit', env.hasPundit)
+    void vscode.commands.executeCommand('setContext', 'railsforge.hasViewComponent', env.hasViewComponent)
+    void vscode.commands.executeCommand('setContext', 'railsforge.hasRakefile', fs.existsSync(path.join(newRoot, 'Rakefile')))
+
+    void loadSchema(newRoot, schemaIndexer)
+    void loadRoutes(newRoot, routesIndexer)
+    stimulusIndexer.clear()
+    loadStimulusControllers(newRoot, stimulusIndexer)
+    factoryBotResolver.indexFactories(newRoot)
+    rakeTaskTreeProvider.setRoot(newRoot)
+    void persistentIndexes.ensure(newRoot)
+    rbsIndexes.get(newRoot)
+    if (readConfig().devdocsOfflineEnabled) {void devDocsProjects.get(newRoot).refresh(false)}
+    architectureTreeProvider.refresh(env)
+  }
+  const syncActiveProject = (uri: vscode.Uri | undefined): void => {
+    const root = resolveWorkspaceRoot(uri?.fsPath, workspaceRoots())
+    if (root) {switchActiveProject(root)}
+  }
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(editor => syncActiveProject(editor?.document.uri)),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      // Tear down the AST index (worker + watchers) of any folder that was removed.
+      const open = new Set(workspaceRoots())
+      for (const root of persistentIndexes.roots()) {
+        if (!open.has(root)) {persistentIndexes.release(root)}
+      }
+      devDocsProjects.retainOnly(open)
+      rbsIndexes.retainOnly(open)
+      // Active project's folder was removed: fall back to whatever now owns the editor / first folder.
+      if (!workspaceRoots().includes(activeProject.root)) {
+        const next = activeWorkspaceRoot()
+        if (next) {switchActiveProject(next)}
+      }
+    }),
+  )
+
 
   // 3. Register Providers
   context.subscriptions.push(
@@ -359,14 +494,14 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.languages.registerHoverProvider({ language: 'ruby', scheme: 'file' }, new GemLensProvider(rubyGemsClient)),
     vscode.languages.registerHoverProvider(
       { language: 'ruby', scheme: 'file' },
-      new DevDocsHoverProvider(devDocsIndexHolder, () => readConfig().devdocsOfflineEnabled),
+      new DevDocsHoverProvider(devDocsIndexFor, () => readConfig().devdocsOfflineEnabled),
     ),
     vscode.languages.registerHoverProvider(
       { language: 'ruby', scheme: 'file' },
       new ApiDockHoverProvider(apiDockClient, apiDockMethodIndex, () => readConfig().apidockEnabled),
     ),
-    vscode.languages.registerHoverProvider({ language: 'ruby', scheme: 'file' }, new RBSHoverProvider(rbsIndex)),
-    vscode.languages.registerDefinitionProvider({ language: 'ruby', scheme: 'file' }, new RBSDefinitionProvider(rbsIndex)),
+    vscode.languages.registerHoverProvider({ language: 'ruby', scheme: 'file' }, new RBSHoverProvider(rbsIndexFor)),
+    vscode.languages.registerDefinitionProvider({ language: 'ruby', scheme: 'file' }, new RBSDefinitionProvider(rbsIndexFor)),
     vscode.languages.registerDefinitionProvider({ language: 'ruby', scheme: 'file' }, factoryBotResolver),
     vscode.languages.registerDefinitionProvider(['erb', 'haml', 'slim', 'html'], new StimulusDefinitionProvider(stimulusIndexer)),
     vscode.languages.registerDefinitionProvider(['erb', 'haml', 'slim', 'html', 'ruby'], new TurboFrameDefinitionProvider(turboFrameNavigator)),
@@ -464,7 +599,8 @@ export function activate(context: vscode.ExtensionContext): void {
       const now = Date.now()
       if (now - lastBrakemanScanOnSave >= 30_000) {
         lastBrakemanScanOnSave = now
-        void brakemanProvider.runScan(workspaceRoot).then(report => {
+        const scanRoot = workspaceRootFor(doc.uri) ?? workspaceRoot
+        void brakemanProvider.runScan(scanRoot).then(report => {
           if (report.warnings.length === 0) {return}
           void vscode.window
             .showWarningMessage(`RailsForge: Brakeman found ${report.warnings.length} security warning(s).`, 'Show Report')
@@ -483,7 +619,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const now = Date.now()
       if (now - lastSteepScanOnSave >= 30_000) {
         lastSteepScanOnSave = now
-        void updateSteepDiagnostics(steepProvider, steepDiagnostics, workspaceRoot)
+        void updateSteepDiagnostics(steepProvider, steepDiagnostics, workspaceRootFor(doc.uri) ?? workspaceRoot)
       }
     }
   }, null, context.subscriptions)
@@ -509,30 +645,60 @@ export function activate(context: vscode.ExtensionContext): void {
     principleLinter,
     relatedFilesIndex,
     dependencyGraph,
-    persistentIndex,
+    persistentIndexes,
+    analyzers,
     schemaIndexer,
     env,
     semanticSearchIndex,
     rubyDocProvider,
-    devDocsFetcher,
-    devDocsCacheDir,
+    devDocsProjects,
     speculativeFixCache,
-    devDocsSlugs,
-    devDocsIndexHolder,
     rakeTaskTreeProvider,
-    rbsIndex,
+    rbsIndexes,
     steepProvider,
     steepDiagnostics,
     getAgentConfig,
   )
 
   // 5. Register Chat Participant
-  RailsChatParticipant.getInstance().register(context, agent, schemaIndexer, routesIndexer)
+  RailsChatParticipant.getInstance().register(
+    context,
+    agent,
+    schemaIndexer,
+    routesIndexer,
+    () => env.testFramework,
+    () => projectPatternIndexer.getAllPatterns().map(p => `${p.type}/${p.name}`),
+  )
 
   // 6. Suggest the ruby-lsp add-on when ruby-lsp is present but the gem isn't
   if (workspaceRoot) {
     void suggestRubyLspAddon(context, workspaceRoot)
   }
+
+  registerAgentIntegrations(context)
+
+  // Read-only project overview documents (railsforge:/routes.md?root=…) and the empty-state view.
+  const virtualDocs = new VirtualDocsProvider(semanticContexts)
+  context.subscriptions.push(
+    virtualDocs,
+    vscode.workspace.registerTextDocumentContentProvider(VIRTUAL_DOC_SCHEME, virtualDocs),
+    vscode.window.registerTreeDataProvider('railsforge.gettingStarted', {
+      getTreeItem: item => item,
+      getChildren: () => [],
+    } satisfies vscode.TreeDataProvider<vscode.TreeItem>),
+    vscode.commands.registerCommand('railsforge.openVirtualDoc', async (preselected?: VirtualDocKind) => {
+      const root = activeWorkspaceRoot()
+      if (!root) {return}
+      const kind = preselected ?? (await vscode.window.showQuickPick(
+        VIRTUAL_DOC_KINDS.map(k => ({ label: k, description: `railsforge:/${k}.md` })),
+        { placeHolder: 'Open which project overview?' },
+      ))?.label as VirtualDocKind | undefined
+      if (!kind) {return}
+      const doc = await vscode.workspace.openTextDocument(virtualDocUri(kind, root))
+      await vscode.window.showTextDocument(doc, { preview: true })
+    }),
+  )
+  context.subscriptions.push(vscode.tasks.registerTaskProvider(RAILSFORGE_TASK_TYPE, new RailsTaskProvider()))
 
   // 6. Status Bar
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)
@@ -540,6 +706,24 @@ export function activate(context: vscode.ExtensionContext): void {
   statusBar.tooltip = 'RailsForge: Active'
   statusBar.show()
   context.subscriptions.push(statusBar)
+
+  return {
+    getActiveProjectRoot: () => activeProject.root,
+    getSchemaTableNames: () => schemaIndexer.getAllTables().map(t => t.name),
+    countRbsMethods: (filePath, methodName) => rbsIndexFor(vscode.Uri.file(filePath)).lookup(methodName).length,
+    getDevDocsCacheDir: filePath => devDocsProjects.get(workspaceRootFor(vscode.Uri.file(filePath)) ?? activeProject.root).cacheDir,
+    discoverTestTree: async () => {
+      await testExplorer.discoverWorkspace()
+      const lines: string[] = []
+      const walk = (item: vscode.TestItem, depth: number): void => {
+        lines.push(`${'  '.repeat(depth)}${item.label}`)
+        item.children.forEach(child => walk(child, depth + 1))
+      }
+      testExplorer.getController().items.forEach(item => walk(item, 0))
+      return lines
+    },
+    getAstIndexStatuses: () => Object.fromEntries(persistentIndexes.roots().map(r => [r, persistentIndexes.state(r).status])),
+  }
 }
 
 async function suggestRubyLspAddon(context: vscode.ExtensionContext, root: string): Promise<void> {
@@ -560,32 +744,103 @@ async function suggestRubyLspAddon(context: vscode.ExtensionContext, root: strin
     "Don't show again",
   )
   if (choice === 'Show Instructions') {
-    void vscode.env.openExternal(vscode.Uri.parse('https://github.com/shubhamtaywade82/railsforge/tree/main/ruby-lsp-addon'))
+    void vscode.env.openExternal(vscode.Uri.parse('https://github.com/shubhamtaywade82/ruby-rails-extension/tree/master/ruby-lsp-addon'))
   }
   if (choice) {
     void context.globalState.update(dismissedKey, true)
   }
 }
 
-function loadStimulusControllers(root: string, indexer: StimulusIndexer): void {
-  const controllersDir = path.join(root, 'app', 'javascript', 'controllers')
-  if (fs.existsSync(controllersDir)) {
-    const files = fs.readdirSync(controllersDir)
-    for (const f of files) {
-      if (f.endsWith('_controller.js') || f.endsWith('_controller.ts')) {
-        const full = path.join(controllersDir, f)
-        if (isExcludedByConfig(full)) {continue}
-        const code = fs.readFileSync(full, 'utf8')
-        indexer.parseControllerCode(full, code)
-      }
-    }
+/** One-line description of how project tools are launched (version manager + binstub preference). */
+function describeToolchain(root: string): string {
+  const manager = projectVersionManager(root)
+  const launcher = fs.existsSync(path.join(root, 'bin', 'rails')) ? 'bin/ stubs' : fs.existsSync(path.join(root, 'Gemfile')) ? 'bundle exec' : 'bare tools'
+  return `${manager === 'none' ? 'no version manager' : manager} · ${launcher}`
+}
+
+function describeAstIndex(state: IndexState<PersistentIndexManager>): string {
+  switch (state.status) {
+    case 'ready': return 'Ready ✓'
+    case 'starting': return 'Indexing…'
+    case 'unsupported': return `Unavailable — ${state.reason}`
+    case 'failed': return `Failed — ${state.reason}`
+    case 'idle': return 'Not started'
   }
 }
 
-function watchStimulusControllers(context: vscode.ExtensionContext, indexer: StimulusIndexer): void {
+let astNoticeShownThisSession = false
+
+/**
+ * Tells the user the AST features are off and why (the native SQLite module can't load on
+ * this VS Code runtime), instead of failing silently. The runtime-wide "unsupported" case is
+ * shown once per session and can be dismissed permanently; per-root failures always show.
+ */
+async function notifyAstIndexUnavailable(context: vscode.ExtensionContext, reason: string, runtimeWide: boolean): Promise<void> {
+  const dismissedKey = 'railsforge.dismissedAstUnavailableNotice'
+  if (runtimeWide) {
+    if (astNoticeShownThisSession || context.globalState.get<boolean>(dismissedKey)) {return}
+    astNoticeShownThisSession = true
+  }
+  const message = runtimeWide
+    ? `RailsForge: the AST index is unavailable — ${reason} "Find Duplicate Methods" and "Show Dependency Cycles" are disabled; all other RailsForge features work normally.`
+    : `RailsForge: the AST index failed to start (${reason}). "Find Duplicate Methods" and "Show Dependency Cycles" are disabled for this project.`
+  const choice = await vscode.window.showWarningMessage(message, 'Show Log', ...(runtimeWide ? ["Don't show again"] : []))
+  if (choice === 'Show Log') {Logger.show(false)}
+  if (choice === "Don't show again") {await context.globalState.update(dismissedKey, true)}
+}
+
+/** Ready AST index for the active project, or null after telling the user exactly why not. */
+function requireAstIndex(registry: PersistentIndexRegistry<PersistentIndexManager>): PersistentIndexManager | null {
+  const root = activeWorkspaceRoot()
+  if (!root) {
+    vscode.window.showWarningMessage('RailsForge: Open a Ruby project to use the AST index.')
+    return null
+  }
+  const state = registry.state(root)
+  switch (state.status) {
+    case 'ready':
+      return state.manager
+    case 'starting':
+      vscode.window.showInformationMessage('RailsForge: The AST index is still indexing this project — try again shortly.')
+      return null
+    case 'unsupported':
+      vscode.window.showWarningMessage(`RailsForge: AST features are unavailable — ${state.reason}`)
+      return null
+    case 'failed':
+      vscode.window.showWarningMessage(`RailsForge: The AST index failed to start (${state.reason}). See the RailsForge output log.`, 'Retry')
+        .then(choice => { if (choice === 'Retry') {void registry.ensure(root)} })
+      return null
+    case 'idle':
+      void registry.ensure(root)
+      vscode.window.showInformationMessage('RailsForge: Starting the AST index for this project — try again shortly.')
+      return null
+  }
+}
+
+function loadStimulusControllers(root: string, indexer: StimulusIndexer): void {
+  const controllersDir = path.join(root, 'app', 'javascript', 'controllers')
+  if (!fs.existsSync(controllersDir)) {return}
+  // Recursive, matching the watcher glob — nested controllers (admin/foo_controller.js)
+  // must be indexed at startup, not only after their first edit.
+  const walk = (dir: string): void => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        if (entry.name !== 'node_modules') {walk(full)}
+      } else if (/_controller\.[jt]s$/.test(entry.name) && !isExcludedByConfig(full)) {
+        try {
+          indexer.parseControllerCode(full, fs.readFileSync(full, 'utf8'))
+        } catch { /* skip unreadable */ }
+      }
+    }
+  }
+  walk(controllersDir)
+}
+
+function watchStimulusControllers(context: vscode.ExtensionContext, indexer: StimulusIndexer, getRoot: () => string): void {
   const watcher = vscode.workspace.createFileSystemWatcher('**/app/javascript/controllers/**/*_controller.{js,ts}')
   const reindex = async (uri: vscode.Uri): Promise<void> => {
-    if (isExcludedByConfig(uri.fsPath)) {return}
+    if (isExcludedByConfig(uri.fsPath) || !isInside(getRoot(), uri.fsPath)) {return}
     try {
       if (fs.existsSync(uri.fsPath)) {
         const code = await fs.promises.readFile(uri.fsPath, 'utf8')
@@ -595,11 +850,55 @@ function watchStimulusControllers(context: vscode.ExtensionContext, indexer: Sti
   }
   watcher.onDidChange(uri => void reindex(uri))
   watcher.onDidCreate(uri => void reindex(uri))
+  watcher.onDidDelete(uri => indexer.removeFile(uri.fsPath))
   context.subscriptions.push(watcher)
 }
 
+type VsCodeLmApi = { selectChatModels?: (selector?: { family?: string }) => Thenable<vscode.LanguageModelChat[]> }
+
+async function selectVsCodeLmModel(family: string): Promise<vscode.LanguageModelChat | undefined> {
+  const lm = (vscode as unknown as { lm?: VsCodeLmApi }).lm
+  if (typeof lm?.selectChatModels !== 'function') {return undefined}
+  const models = await lm.selectChatModels(family ? { family } : undefined)
+  return models[0]
+}
+
+/** One system+user request through VS Code's Language Model API (the user is asked for consent on first use). */
+async function requestViaVsCodeLm(system: string, prompt: string, family: string, timeoutMs: number): Promise<string> {
+  const model = await selectVsCodeLmModel(family)
+  if (!model) {
+    throw new Error(family
+      ? `No VS Code language model matches family "${family}". Install/sign in to a model provider or change railsForge.ai.vscodeLm.family.`
+      : 'No VS Code language model is available. Sign in to Copilot or install a Language Model provider extension.')
+  }
+  const source = new vscode.CancellationTokenSource()
+  const timer = setTimeout(() => source.cancel(), timeoutMs)
+  try {
+    // The Language Model API has no system role: fold the system prompt into the first user message.
+    const messages = [vscode.LanguageModelChatMessage.User(`${system}\n\n---\n\n${prompt}`)]
+    const response = await model.sendRequest(messages, { justification: 'RailsForge needs a model to answer your Rails question.' }, source.token)
+    let text = ''
+    for await (const chunk of response.text) {text += chunk}
+    return text
+  } finally {
+    clearTimeout(timer)
+    source.dispose()
+  }
+}
+
+async function vscodeLmStatus(family: string): Promise<{ state: 'authenticated' | 'error'; detail?: string }> {
+  try {
+    const model = await selectVsCodeLmModel(family)
+    return model
+      ? { state: 'authenticated', detail: `${model.name} (${model.vendor})` }
+      : { state: 'error', detail: family ? `No model for family "${family}"` : 'No VS Code language model available' }
+  } catch (err) {
+    return { state: 'error', detail: err instanceof Error ? err.message : String(err) }
+  }
+}
+
 /** SecretStorage key for a given AI provider's API key — never the same key across providers, so switching providers doesn't require re-entering the other one's key. */
-function aiApiKeySecretKey(provider: 'ollama' | 'openai' | 'anthropic'): string {
+function aiApiKeySecretKey(provider: AiProvider): string {
   return `railsForge.aiApiKey.${provider}`
 }
 
@@ -871,24 +1170,6 @@ function registerMcpServer(root: string, mcpServerPath: string): void {
   fs.writeFileSync(mcpConfigPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8')
 }
 
-async function refreshDevDocsCache(
-  fetcher: DevDocsFetcher,
-  cacheDir: string,
-  slugs: string[],
-  holder: { index: DevDocsOfflineIndex },
-  forceRefresh: boolean,
-): Promise<boolean[]> {
-  const results = await Promise.all(slugs.map(slug => fetcher.ensureDocset(slug, forceRefresh)))
-  holder.index = new DevDocsOfflineIndex(cacheDir, slugs)
-  if (results.some(Boolean)) {
-    Logger.info(`RailsForge: offline DevDocs cache ready for ${slugs.filter((_, i) => results[i]).join(', ')}.`)
-  }
-  if (results.some(ok => !ok)) {
-    Logger.warn(`RailsForge: could not download offline DevDocs data for ${slugs.filter((_, i) => !results[i]).join(', ')} (offline, or docset unavailable at that slug).`)
-  }
-  return results
-}
-
 async function updateSteepDiagnostics(
   steepProvider: SteepProvider,
   collection: vscode.DiagnosticCollection,
@@ -927,7 +1208,8 @@ async function loadSchema(root: string, indexer: SchemaIndexer): Promise<void> {
     const content = await fs.promises.readFile(schemaPath, 'utf8')
     indexer.parseSchema(content)
   } catch {
-    // db/schema.rb does not exist — not a Rails project with schema
+    // db/schema.rb does not exist — drop any state from a previously active project
+    indexer.parseSchema('')
   }
 }
 
@@ -937,7 +1219,8 @@ async function loadRoutes(root: string, indexer: RoutesIndexer): Promise<void> {
     const content = await fs.promises.readFile(routesPath, 'utf8')
     indexer.parseRoutesDsl(content)
   } catch {
-    // config/routes.rb does not exist
+    // config/routes.rb does not exist — drop any state from a previously active project
+    indexer.parseRoutesDsl('')
   }
 }
 
@@ -1162,34 +1445,56 @@ async function verifyOffenseResolved(
 
 function watchProjectFiles(
   context: vscode.ExtensionContext,
-  root: string,
+  getRoot: () => string,
   schemaIndexer: SchemaIndexer,
   routesIndexer: RoutesIndexer,
   migrationDiagnostics: MigrationDiagnostics,
+  onIndexChanged?: (root: string, kind: 'schema' | 'routes') => void,
 ): void {
+  // Only react to files inside the workspace root this indexer set was built for
+  // (a multi-root window delivers events for every folder).
+  const inRoot = (uri: vscode.Uri): boolean => isInside(getRoot(), uri.fsPath)
+
   if (readConfig().schemaAutoIndex) {
     const schemaWatcher = vscode.workspace.createFileSystemWatcher('**/db/schema.rb')
-    schemaWatcher.onDidChange(uri => {
-      if (isExcludedByConfig(uri.fsPath)) {return}
-      loadSchema(root, schemaIndexer)
+    const refresh = (uri: vscode.Uri): void => {
+      if (!inRoot(uri) || isExcludedByConfig(uri.fsPath)) {return}
+      void loadSchema(getRoot(), schemaIndexer).then(() => onIndexChanged?.(getRoot(), 'schema'))
+    }
+    schemaWatcher.onDidChange(refresh)
+    schemaWatcher.onDidCreate(refresh)
+    schemaWatcher.onDidDelete(uri => {
+      if (!inRoot(uri)) {return}
+      schemaIndexer.parseSchema('')
+      onIndexChanged?.(getRoot(), 'schema')
     })
     context.subscriptions.push(schemaWatcher)
   }
 
   if (readConfig().routesAutoIndex) {
     const routesWatcher = vscode.workspace.createFileSystemWatcher('**/config/routes.rb')
-    routesWatcher.onDidChange(uri => {
-      if (isExcludedByConfig(uri.fsPath)) {return}
-      loadRoutes(root, routesIndexer)
+    const refresh = (uri: vscode.Uri): void => {
+      if (!inRoot(uri) || isExcludedByConfig(uri.fsPath)) {return}
+      void loadRoutes(getRoot(), routesIndexer).then(() => onIndexChanged?.(getRoot(), 'routes'))
+    }
+    routesWatcher.onDidChange(refresh)
+    routesWatcher.onDidCreate(refresh)
+    routesWatcher.onDidDelete(uri => {
+      if (!inRoot(uri)) {return}
+      routesIndexer.parseRoutesDsl('')
+      onIndexChanged?.(getRoot(), 'routes')
     })
     context.subscriptions.push(routesWatcher)
   }
 
   const migrationWatcher = vscode.workspace.createFileSystemWatcher('**/db/migrate/*.rb')
-  migrationWatcher.onDidChange(uri => {
-    if (isExcludedByConfig(uri.fsPath)) {return}
-    void vscode.workspace.openTextDocument(uri).then(doc => migrationDiagnostics.updateDiagnostics(doc))
-  })
+  const analyzeMigration = (uri: vscode.Uri): void => {
+    if (!inRoot(uri) || isExcludedByConfig(uri.fsPath)) {return}
+    void vscode.workspace.openTextDocument(uri).then(doc => migrationDiagnostics.updateDiagnostics(doc), () => undefined)
+  }
+  migrationWatcher.onDidChange(analyzeMigration)
+  migrationWatcher.onDidCreate(analyzeMigration)
+  migrationWatcher.onDidDelete(uri => migrationDiagnostics.clearFile(uri))
   context.subscriptions.push(migrationWatcher)
 }
 
@@ -1213,18 +1518,16 @@ function registerCommands(
   principleLinter: DesignPrincipleLinter,
   relatedFilesIndex: RelatedFilesIndex,
   dependencyGraph: MinimalDependencyGraph,
-  persistentIndex: { manager: PersistentIndexManager | null },
+  persistentIndexes: PersistentIndexRegistry<PersistentIndexManager>,
+  analyzers: RubyAnalyzersProvider,
   schemaIndexer: SchemaIndexer,
   env: ProjectEnvironment,
   semanticSearchIndex: SemanticSearchIndex,
   rubyDocProvider: RubyDocProvider,
-  devDocsFetcher: DevDocsFetcher,
-  devDocsCacheDir: string,
+  devDocsProjects: PerRootRegistry<DevDocsProject>,
   speculativeFixCache: SpeculativeFixCache,
-  devDocsSlugs: string[],
-  devDocsIndexHolder: { index: DevDocsOfflineIndex },
   rakeTaskTreeProvider: RakeTaskTreeProvider,
-  rbsIndex: RBSIndex,
+  rbsIndexes: PerRootRegistry<RBSIndex>,
   steepProvider: SteepProvider,
   steepDiagnostics: vscode.DiagnosticCollection,
   getAgentConfig: (cfg?: RailsForgeConfig) => RailsAgentConfig,
@@ -1235,11 +1538,8 @@ function registerCommands(
       void vscode.window.showInformationMessage('RailsForge: Workspace performance settings (file watcher and search exclusions) applied successfully.')
     }),
     vscode.commands.registerCommand('railsforge.showDependencyCycles', async () => {
-      const manager = persistentIndex.manager
-      if (!manager) {
-        vscode.window.showWarningMessage('RailsForge: The AST index is still starting up (or unavailable on this platform) — try again shortly.')
-        return
-      }
+      const manager = requireAstIndex(persistentIndexes)
+      if (!manager) {return}
       const cycles = manager.dependencyGraph.findCycles()
       if (cycles.length === 0) {
         vscode.window.showInformationMessage('RailsForge: No circular dependencies found among indexed services/queries/policies.')
@@ -1253,11 +1553,8 @@ function registerCommands(
       await vscode.window.showTextDocument(doc)
     }),
     vscode.commands.registerCommand('railsforge.findDuplicateMethods', async () => {
-      const manager = persistentIndex.manager
-      if (!manager) {
-        vscode.window.showWarningMessage('RailsForge: The AST index is still starting up (or unavailable on this platform) — try again shortly.')
-        return
-      }
+      const manager = requireAstIndex(persistentIndexes)
+      if (!manager) {return}
       const duplicates = manager.duplicateDetector.findDuplicates()
       if (duplicates.length === 0) {
         vscode.window.showInformationMessage('RailsForge: No near-duplicate methods found.')
@@ -1279,7 +1576,7 @@ function registerCommands(
     }),
     vscode.commands.registerCommand('railsforge.setAiApiKey', async () => {
       let provider = readConfig().aiProvider
-      if (provider === 'ollama') {
+      if (provider === 'ollama' || provider === 'vscode-lm') {
         const choice = await vscode.window.showQuickPick(
           [
             { label: '$(cloud) OpenAI / Compatible', description: 'OpenAI, OpenRouter, MiniMax, Groq, DeepSeek', provider: 'openai' as const },
@@ -1311,7 +1608,7 @@ function registerCommands(
       vscode.window.showInformationMessage(`RailsForge: ${providerLabel} API key saved securely.`)
     }),
     vscode.commands.registerCommand('railsforge.generateApiDocs', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {
         vscode.window.showWarningMessage('RailsForge: No workspace folder open.')
         return
@@ -1335,7 +1632,7 @@ function registerCommands(
       )
     }),
     vscode.commands.registerCommand('railsforge.bumpGemVersion', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {
         vscode.window.showWarningMessage('RailsForge: No workspace folder open.')
         return
@@ -1381,28 +1678,28 @@ function registerCommands(
       vscode.window.showInformationMessage(`RailsForge: Bumped version to ${newVersion} in ${vscode.workspace.asRelativePath(targetUri)}.`)
     }),
     vscode.commands.registerCommand('railsforge.releaseGem', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {
         vscode.window.showWarningMessage('RailsForge: No workspace folder open.')
         return
       }
 
       const choice = await vscode.window.showWarningMessage(
-        'This runs "bundle exec rake release", which builds the gem, creates and pushes a git tag, and publishes it to RubyGems.org. This cannot be undone. Continue?',
+        'This runs "rake release" (through your project\'s Ruby toolchain), which builds the gem, creates and pushes a git tag, and publishes it to RubyGems.org. This cannot be undone. Continue?',
         { modal: true },
-        'Run bundle exec rake release',
+        'Run rake release',
       )
-      if (choice !== 'Run bundle exec rake release') {return}
+      if (choice !== 'Run rake release') {return}
 
       const term = vscode.window.createTerminal({ name: 'RailsForge Release', cwd: root })
       term.show()
-      term.sendText('bundle exec rake release')
+      term.sendText(rubyTerminalCommand(root, 'rake', ['release'], currentShellKind()))
     }),
     vscode.commands.registerCommand('railsforge.showLogs', () => {
       Logger.show()
     }),
     vscode.commands.registerCommand('railsforge.exportCursorRules', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {
         vscode.window.showWarningMessage('RailsForge: No workspace folder open.')
         return
@@ -1551,8 +1848,8 @@ function registerCommands(
             if (proposal.type === 'patch') {
               // Apply hunks for this file only; hunks for other files (multi-file
               // fixes) are reported and skipped.
-              const targetName = path.basename(document.uri.fsPath)
-              const relevant = proposal.hunks.filter(h => h.file === null || path.basename(h.file) === targetName)
+              const docRoot = vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath ?? path.dirname(document.uri.fsPath)
+              const relevant = proposal.hunks.filter(h => h.file === null || patchFileMatches(h.file, document.uri.fsPath, docRoot))
               if (relevant.length === 0) {
                 vscode.window.showInformationMessage('RailsForge: AI fix only targeted other files — nothing applied to this one.')
                 return null
@@ -1685,7 +1982,7 @@ function registerCommands(
               fileName: document.fileName,
               fileContent: document.getText(),
               selection: code,
-              workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+              workspaceRoot: activeWorkspaceRoot(),
             }, feedback)
 
             if (!proposal) {
@@ -1946,7 +2243,7 @@ function registerCommands(
       }
     }),
     vscode.commands.registerCommand('railsforge.runBrakeman', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {return}
       const report = await brakeman.runScan(root)
       const formatted = brakeman.formatMarkdownReport(report)
@@ -1954,7 +2251,7 @@ function registerCommands(
       await vscode.window.showTextDocument(doc)
     }),
     vscode.commands.registerCommand('railsforge.runBundleAudit', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {return}
       const report = await bundlerAuditScanner.runAudit(root)
       const formatted = bundlerAuditScanner.formatReport(report)
@@ -1984,7 +2281,7 @@ function registerCommands(
       }
       const name = await vscode.window.showInputBox({ prompt: 'Enter Service Object Name (e.g. ProcessOrder)' })
       if (!name) {return}
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? ''
+      const root = activeWorkspaceRoot() ?? ''
       const freeVars = serviceExtractor.detectFreeVariables(selection)
       const guidelines = loadEffectiveServiceObjectGuidelines(root, projectPatternIndexer)
       const res = serviceExtractor.extractService(name, selection, freeVars, root, guidelines)
@@ -1993,9 +2290,13 @@ function registerCommands(
       // selected range in the original file changes, plus the new service file — nothing
       // else in the controller/model is touched (unless the developer opts into replacing
       // other exact duplicates of this same selection, below).
+      if (fs.existsSync(res.serviceFilePath)) {
+        vscode.window.showErrorMessage(`RailsForge: ${path.relative(root, res.serviceFilePath)} already exists — choose a different name. Nothing was changed.`)
+        return
+      }
       const edit = new vscode.WorkspaceEdit()
       const serviceUri = vscode.Uri.file(res.serviceFilePath)
-      edit.createFile(serviceUri, { ignoreIfExists: true })
+      edit.createFile(serviceUri, { overwrite: false, ignoreIfExists: false })
       edit.insert(serviceUri, new vscode.Position(0, 0), res.serviceCode)
       edit.replace(editor.document.uri, editor.selection, res.replacementCall)
 
@@ -2013,7 +2314,7 @@ function registerCommands(
     vscode.commands.registerCommand('railsforge.generateServiceObject', async () => {
       const name = await vscode.window.showInputBox({ prompt: 'Enter Service Object Name (e.g. ProcessOrder)' })
       if (!name) {return}
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? ''
+      const root = activeWorkspaceRoot() ?? ''
       const guidelines = loadEffectiveServiceObjectGuidelines(root, projectPatternIndexer)
       const res = serviceExtractor.extractService(name, '# TODO: implement', [], root, guidelines)
 
@@ -2037,12 +2338,16 @@ function registerCommands(
       if (!name) {return}
       const model = await vscode.window.showInputBox({ prompt: 'Enter Base Model Name (e.g. User)' })
       if (!model) {return}
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? ''
+      const root = activeWorkspaceRoot() ?? ''
       const res = queryExtractor.extractQuery(name, model, selection, [], root)
 
+      if (fs.existsSync(res.queryFilePath)) {
+        vscode.window.showErrorMessage(`RailsForge: ${path.relative(root, res.queryFilePath)} already exists — choose a different name. Nothing was changed.`)
+        return
+      }
       const edit = new vscode.WorkspaceEdit()
       const queryUri = vscode.Uri.file(res.queryFilePath)
-      edit.createFile(queryUri, { ignoreIfExists: true })
+      edit.createFile(queryUri, { overwrite: false, ignoreIfExists: false })
       edit.insert(queryUri, new vscode.Position(0, 0), res.queryCode)
       edit.replace(editor.document.uri, editor.selection, res.replacementCall)
 
@@ -2059,7 +2364,7 @@ function registerCommands(
     }),
     vscode.commands.registerCommand('railsforge.goToPolicy', () => {
       const editor = vscode.window.activeTextEditor
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!editor || !root) {return}
       const model = path.basename(editor.document.fileName, '.rb').replace(/(_controller|_spec)$/, '')
       const policyPath = policyNavigator.resolvePolicyPath(model, root)
@@ -2070,7 +2375,7 @@ function registerCommands(
       }
     }),
     vscode.commands.registerCommand('railsforge.goToComponent', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {return}
       const name = await vscode.window.showInputBox({ prompt: 'Enter Component Name (e.g. UserCardComponent)' })
       if (!name) {return}
@@ -2083,14 +2388,13 @@ function registerCommands(
       }
     }),
     vscode.commands.registerCommand('railsforge.runSingleTest', (uri: vscode.Uri, line: number) => {
-      const term = vscode.window.createTerminal('RailsForge Test')
+      const term = createProjectTerminal('RailsForge Test', uri)
       term.show()
       term.sendText(buildSingleTestCommand(uri, line, env))
     }),
     vscode.commands.registerCommand('railsforge.debugSingleTest', (uri: vscode.Uri, line: number) => {
-      const term = vscode.window.createTerminal('RailsForge rdbg')
-      term.show()
-      term.sendText(`rdbg -n -c -- ${buildSingleTestCommand(uri, line, env)}`)
+      const { tool, args } = singleTestInvocation(uri, line, env)
+      void debugRubyCommand(uri, tool, args)
     }),
     vscode.commands.registerCommand('railsforge.openDevDocs', () => {
       const editor = vscode.window.activeTextEditor
@@ -2110,7 +2414,7 @@ function registerCommands(
         return
       }
 
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {
         vscode.window.showWarningMessage('RailsForge: Open a workspace folder to look up gem documentation.')
         return
@@ -2151,33 +2455,54 @@ function registerCommands(
       await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'RailsForge: Downloading offline DevDocs data…' },
         async () => {
-          const results = await refreshDevDocsCache(devDocsFetcher, devDocsCacheDir, devDocsSlugs, devDocsIndexHolder, true)
+          const root = activeWorkspaceRoot()
+          if (!root) {
+            vscode.window.showWarningMessage('RailsForge: Open a Ruby project to update its offline DevDocs cache.')
+            return
+          }
+          const project = devDocsProjects.get(root)
+          const results = await project.refresh(true)
           if (results.every(Boolean)) {
-            vscode.window.showInformationMessage(`RailsForge: Offline DevDocs cache updated (${devDocsSlugs.join(', ')}).`)
+            vscode.window.showInformationMessage(`RailsForge: Offline DevDocs cache updated (${project.slugs.join(', ')}).`)
           } else {
-            vscode.window.showWarningMessage(`RailsForge: Could not download ${devDocsSlugs.filter((_, i) => !results[i]).join(', ')} — check your network connection. Previously cached data (if any) is unchanged.`)
+            vscode.window.showWarningMessage(`RailsForge: Could not download ${project.slugs.filter((_, i) => !results[i]).join(', ')} — check your network connection. Previously cached data (if any) is unchanged.`)
           }
         },
       )
     }),
+    vscode.commands.registerCommand('railsforge.showRuntimeIntrospection', async () => {
+      const root = activeWorkspaceRoot()
+      if (root) {await showRuntimeSnapshot(root, false)}
+    }),
+    vscode.commands.registerCommand('railsforge.refreshRuntimeIntrospection', async () => {
+      const root = activeWorkspaceRoot()
+      if (root) {await showRuntimeSnapshot(root, true)}
+    }),
+    vscode.commands.registerCommand('railsforge.runAnalyzers', () => runCodeAnalyzers(analyzers)),
+    vscode.commands.registerCommand('railsforge.clearAnalyzers', () => analyzers.clear()),
+    vscode.commands.registerCommand('railsforge.generate', () => runRailsGenerator('generate', rubocop)),
+    vscode.commands.registerCommand('railsforge.destroyGenerated', () => runRailsGenerator('destroy', rubocop)),
     vscode.commands.registerCommand('railsforge.runRakeTask', (taskName: string) => {
       if (!taskName) {return}
-      const term = vscode.window.createTerminal('RailsForge Rake')
+      const term = createProjectTerminal('RailsForge Rake')
       term.show()
-      term.sendText(`bundle exec rake ${shellQuote(taskName)}`)
+      term.sendText(rubyTerminalCommand(activeWorkspaceRoot() ?? '', 'rake', [taskName], currentShellKind()))
     }),
     vscode.commands.registerCommand('railsforge.refreshRakeTasks', () => {
       rakeTaskTreeProvider.refresh()
     }),
     vscode.commands.registerCommand('railsforge.openRailsConsole', () => {
-      const term = vscode.window.createTerminal('RailsForge Console')
+      const term = createProjectTerminal('RailsForge Console')
       term.show()
+      const consoleRoot = activeWorkspaceRoot() ?? ''
+      const kind = currentShellKind()
       if (env.hasRails) {
-        term.sendText('bundle exec rails console')
+        term.sendText(rubyTerminalCommand(consoleRoot, 'rails', ['console'], kind))
       } else if (env.hasPry) {
-        term.sendText('bundle exec pry')
+        term.sendText(rubyTerminalCommand(consoleRoot, 'pry', [], kind))
       } else {
-        term.sendText('bundle exec irb || irb')
+        const irb = rubyTerminalCommand(consoleRoot, 'irb', [], kind)
+        term.sendText(kind === 'powershell' ? irb : `${irb} || irb`)
       }
     }),
     vscode.commands.registerCommand('railsforge.evaluateInREPL', () => {
@@ -2194,7 +2519,7 @@ function registerCommands(
       term.sendText(code, true)
     }),
     vscode.commands.registerCommand('railsforge.applyRubocopStyleGuide', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {
         vscode.window.showWarningMessage('RailsForge: Open a workspace folder first.')
         return
@@ -2222,7 +2547,7 @@ function registerCommands(
       )
     }),
     vscode.commands.registerCommand('railsforge.runSteepCheck', async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!root) {return}
 
       await vscode.window.withProgress(
@@ -2239,7 +2564,7 @@ function registerCommands(
     }),
     vscode.commands.registerCommand('railsforge.generateRBS', async () => {
       const editor = vscode.window.activeTextEditor
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+      const root = activeWorkspaceRoot()
       if (!editor || !root) {
         vscode.window.showWarningMessage('RailsForge: Open a Ruby file to generate RBS signatures for it.')
         return
@@ -2258,18 +2583,20 @@ function registerCommands(
       // -> `greeter.rbs`, `app/models/x.rb` -> `models/x.rbs`) rather than preserving the
       // full relative path, which would make `generatedPath` below wrong.
       const rbsArgs = ['prototype', 'rb', `--out-dir=${outDir}`, '--base-dir=.', relativePath]
-      try {
-        await execFileAsync('bundle', ['exec', 'rbs', ...rbsArgs], { cwd: root })
-      } catch {
+      const ranRbs = await firstCandidate(root, 'rbs', rbsArgs, async (cmd, args) => {
         try {
-          await execFileAsync('rbs', rbsArgs, { cwd: root })
+          await execFileAsync(cmd, args, { cwd: root })
+          return true
         } catch {
-          vscode.window.showErrorMessage('RailsForge: Could not run `rbs prototype rb` — is the rbs gem installed (bundle add rbs --group development)?')
-          return
+          return null
         }
+      })
+      if (!ranRbs) {
+        vscode.window.showErrorMessage('RailsForge: Could not run `rbs prototype rb` — is the rbs gem installed (bundle add rbs --group development)?')
+        return
       }
 
-      rbsIndex.loadFromWorkspace(root, sigDir)
+      rbsIndexes.get(root).loadFromWorkspace(root, sigDir)
       const generatedPath = path.join(outDir, `${relativePath.replace(/\.rb$/, '')}.rbs`)
       if (fs.existsSync(generatedPath)) {
         const doc = await vscode.workspace.openTextDocument(generatedPath)
@@ -2283,9 +2610,9 @@ function registerCommands(
     vscode.commands.registerCommand(
       'railsforge.applyChatResponse',
       async (responseText: string, uriString: string, command: string, selection: string) => {
-        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
-        if (!workspaceRoot) { return }
         const targetUri = vscode.Uri.parse(uriString)
+        const workspaceRoot = workspaceRootFor(targetUri)
+        if (!workspaceRoot) { return }
         const result = await smartApplyResponse(responseText, {
           workspaceRoot,
           activeFileUri: targetUri,
@@ -2355,34 +2682,242 @@ function formatRubyDocEntry(entry: RubyDocEntry): string {
  * no universal line-based selection.
  */
 /**
- * POSIX single-quote escaping for a string embedded in a shell command line sent via
- * `Terminal.sendText` — VS Code's Terminal API only accepts a command string, not
- * execFile-style argv, so this is the safe way to embed a file path (which can contain
- * arbitrary characters in an untrusted workspace) without it being interpreted by the shell.
+ * Agent-native integrations, each feature-detected (the engine floor is ^1.96, but these
+ * APIs only exist on newer hosts / forks): Language Model tools for agent mode and a native
+ * MCP server definition provider for the bundled RailsForge MCP server.
  */
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`
+function registerAgentIntegrations(context: vscode.ExtensionContext): void {
+  const lm = (vscode as unknown as { lm?: { registerTool?: unknown; registerMcpServerDefinitionProvider?: unknown } }).lm
+
+  if (typeof lm?.registerTool === 'function') {
+    const toolDisposables = registerRailsLanguageModelTools({
+      lm: vscode.lm as unknown as LmApiLike,
+      createContext: root => semanticContexts.get(root),
+      getRoot: () => activeWorkspaceRoot(),
+      toResult: text => new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(text)]),
+      log: message => Logger.debug(message),
+    })
+    context.subscriptions.push(...toolDisposables)
+    Logger.info(`Registered ${toolDisposables.length - 1} RailsForge Language Model tools.`)
+  } else {
+    Logger.debug('vscode.lm.registerTool is unavailable in this host; skipping Language Model tools.')
+  }
+
+  const serverPath = path.join(context.extensionPath, 'dist', 'mcp', 'server.js')
+  const McpStdio = (vscode as unknown as { McpStdioServerDefinition?: new (label: string, command: string, args?: string[], env?: Record<string, string | number | null>, version?: string) => unknown }).McpStdioServerDefinition
+  if (typeof lm?.registerMcpServerDefinitionProvider === 'function' && McpStdio && fs.existsSync(serverPath)) {
+    const changed = new vscode.EventEmitter<void>()
+    context.subscriptions.push(changed, onConfigChanged(() => changed.fire()))
+    const provider = {
+      onDidChangeMcpServerDefinitions: changed.event,
+      provideMcpServerDefinitions: () => {
+        if (!readConfig().mcpEnabled) {return []}
+        // One server per workspace root: each reads its own schema/routes/index.
+        return workspaceRoots().map(root => new McpStdio(
+          `RailsForge (${path.basename(root)})`,
+          'node',
+          [serverPath],
+          { RAILSFORGE_WORKSPACE_ROOT: root },
+          context.extension.packageJSON.version as string,
+        ))
+      },
+    }
+    context.subscriptions.push(
+      (lm.registerMcpServerDefinitionProvider as (id: string, p: unknown) => vscode.Disposable)('railsforge.mcp', provider),
+    )
+    Logger.info('Registered the RailsForge MCP server definition provider.')
+  } else {
+    Logger.debug('MCP server definition provider API unavailable (older host) or server bundle missing; the .cursor/mcp.json writer remains.')
+  }
 }
 
-function buildSingleTestCommand(uri: vscode.Uri, line: number, env: ProjectEnvironment): string {
-  const isRSpec = uri.fsPath.includes('/spec/')
+/** One tool context (and cached semantic graph) per workspace root; shared by the agent and virtual docs. */
+let skillsPackDir: string | undefined
+const semanticContexts = new PerRootRegistry<ToolContext>(root => new ToolContext(root, skillsPackDir, readConfig().skillsExtraPaths))
+
+/** Per-workspace UI memory (last analyzers / generator), initialised in activate(). */
+let projectState: ProjectState | undefined
+
+/** Runs the configured (or user-picked) analyzers over the active project and publishes findings. */
+async function runCodeAnalyzers(provider: RubyAnalyzersProvider): Promise<void> {
+  const root = activeWorkspaceRoot()
+  if (!root) {
+    vscode.window.showWarningMessage('RailsForge: Open a Ruby project to run analyzers.')
+    return
+  }
+  const cfg = readConfig()
+  let ids = cfg.analyzersEnabled.filter((x): x is AnalyzerId => (ANALYZER_IDS as readonly string[]).includes(x))
+  if (ids.length === 0) {
+    const picked = await vscode.window.showQuickPick(
+      ANALYZER_IDS.map(id => ({ label: id, picked: (projectState?.get<string[]>('lastAnalyzers', ['reek', 'flog']) ?? ['reek', 'flog']).includes(id) })),
+      { canPickMany: true, placeHolder: 'Analyzers to run (they must be in your Gemfile; set railsForge.analyzers.enabled to skip this prompt)' },
+    )
+    if (!picked || picked.length === 0) {return}
+    ids = picked.map(p => p.label as AnalyzerId)
+    void projectState?.set('lastAnalyzers', ids)
+  }
+
+  const results = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: `RailsForge: running ${ids.join(', ')}…`, cancellable: true },
+    async (_progress, token) => {
+      const abort = new AbortController()
+      token.onCancellationRequested(() => abort.abort())
+      const out: AnalyzerRunResult[] = []
+      for (const id of ids) {
+        if (token.isCancellationRequested) {break}
+        out.push(await provider.runAnalyzer(root, id, cfg.analyzersPaths, cfg.analyzersFlogThreshold, abort.signal))
+      }
+      return out
+    },
+  )
+
+  const total = provider.publish(root, results)
+  const summary = results.map(r => r.status === 'ok' ? `${r.id}: ${r.findings.length}` : `${r.id}: ${r.status}`).join(' · ')
+  const unavailable = results.filter(r => r.status === 'unavailable').map(r => r.id)
+  Logger.info(`[analyzers] ${summary}`)
+  for (const r of results.filter(x => x.status !== 'ok' && x.detail)) {Logger.warn(`[analyzers] ${r.id} ${r.status}: ${r.detail}`)}
+  vscode.window.showInformationMessage(
+    `RailsForge: ${total} finding(s) in Problems — ${summary}${unavailable.length > 0 ? `. Not installed: ${unavailable.join(', ')} (bundle add … --group development).` : ''}`,
+  )
+}
+
+interface GeneratorRunResult {
+  ok: boolean
+  output: string
+}
+
+/** Runs `rails <args>` through the project toolchain, returning combined output even on failure. */
+async function execRails(root: string, args: string[]): Promise<GeneratorRunResult> {
+  for (const c of rubyCandidates(root, 'rails', args)) {
+    try {
+      const { stdout, stderr } = await execFileAsync(c.command, c.args, { cwd: root, maxBuffer: 10 * 1024 * 1024, timeout: 120_000 })
+      return { ok: true, output: `${stdout}${stderr}` }
+    } catch (err: unknown) {
+      const e = err as { code?: string; stdout?: string; stderr?: string; message?: string }
+      if (e.code === 'ENOENT') {continue}
+      return { ok: false, output: `${e.stdout ?? ''}${e.stderr ?? ''}` || (e.message ?? 'rails failed') }
+    }
+  }
+  return { ok: false, output: 'Could not launch `rails` (no bin/rails, bundler or rails executable found).' }
+}
+
+/** `rails generate` / `rails destroy` driven from the UI: validated input, argv execution, parsed result. */
+async function runRailsGenerator(mode: GeneratorMode, rubocop: RuboCopProvider): Promise<void> {
+  const root = activeWorkspaceRoot()
+  if (!root || !fs.existsSync(path.join(root, 'config', 'application.rb'))) {
+    vscode.window.showWarningMessage('RailsForge: Open a Rails application to use the generators.')
+    return
+  }
+
+  // Most recently used generator first, so the common repeat (model, model, model…) is one Enter.
+  const lastKind = projectState?.get<string>('lastGenerator', '')
+  const ordered = [...GENERATORS].sort((a, b) => Number(b.id === lastKind) - Number(a.id === lastKind))
+  const kind = await vscode.window.showQuickPick(
+    ordered.map(g => ({ label: g.label, description: g.id === lastKind ? `${g.description} · last used` : g.description, generator: g })),
+    { placeHolder: mode === 'generate' ? 'Rails generator to run' : 'Generator to destroy (removes the files it created)' },
+  )
+  if (!kind) {return}
+  void projectState?.set('lastGenerator', kind.generator.id)
+
+  const name = await vscode.window.showInputBox({ prompt: kind.generator.namePrompt, validateInput: validateGeneratorName })
+  if (!name) {return}
+
+  let attributes: string[] = []
+  if (kind.generator.takesAttributes && mode === 'generate') {
+    const raw = await vscode.window.showInputBox({
+      prompt: 'Attributes / actions (space separated, optional) — e.g. name:string email:string:index',
+      validateInput: value => {
+        const parsed = parseAttributes(value)
+        return 'error' in parsed ? parsed.error : undefined
+      },
+    })
+    if (raw === undefined) {return}
+    const parsed = parseAttributes(raw)
+    if ('error' in parsed) {return}
+    attributes = parsed.attributes
+  }
+
+  const args = buildGeneratorArgs(mode, kind.generator.id, name, attributes)
+  if (mode === 'destroy') {
+    const confirm = await vscode.window.showWarningMessage(
+      `This runs "rails ${args.join(' ')}" and deletes the files that generator created. Continue?`,
+      { modal: true },
+      'Destroy',
+    )
+    if (confirm !== 'Destroy') {return}
+  }
+
+  const result = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: `RailsForge: rails ${args.slice(0, 3).join(' ')}…` },
+    () => execRails(root, args),
+  )
+  Logger.info(`[generator] rails ${args.join(' ')} -> ${result.ok ? 'ok' : 'failed'}\n${result.output}`)
+  if (!result.ok) {
+    const choice = await vscode.window.showErrorMessage(`RailsForge: rails ${args[0]} ${args[1]} failed.`, 'Show Log')
+    if (choice === 'Show Log') {Logger.show(false)}
+    return
+  }
+
+  const parsed = parseGeneratorOutput(result.output)
+  if (parsed.conflicts.length > 0) {
+    vscode.window.showWarningMessage(`RailsForge: ${parsed.conflicts.length} file(s) already existed and were not overwritten: ${parsed.conflicts.join(', ')}`)
+  }
+  if (mode === 'destroy') {
+    vscode.window.showInformationMessage(`RailsForge: removed ${parsed.removed.length} file(s).`)
+    return
+  }
+
+  const files = parsed.created.map(f => path.join(root, f)).filter(f => fs.existsSync(f))
+  if (files.length === 0) {
+    vscode.window.showInformationMessage('RailsForge: generator finished — no new files were created.')
+    return
+  }
+  const preferred = files.find(f => !/[\\/]db[\\/]migrate[\\/]/.test(f)) ?? files[0]
+  await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(preferred))
+
+  const rubyFiles = files.filter(f => f.endsWith('.rb'))
+  const choice = await vscode.window.showInformationMessage(
+    `RailsForge: created ${files.length} file(s).`,
+    ...(rubyFiles.length > 0 ? ['Run RuboCop autocorrect on new files'] : []),
+  )
+  if (choice) {
+    const results = await Promise.all(rubyFiles.map(f => rubocop.autoCorrectFile(vscode.Uri.file(f))))
+    vscode.window.showInformationMessage(`RailsForge: RuboCop autocorrected ${results.filter(Boolean).length}/${rubyFiles.length} file(s).`)
+  }
+}
+
+function currentShellKind(): ShellKind {
+  return shellKindFromPath(vscode.env.shell)
+}
+
+/** Tool + args for a single test (rspec, rails test, or plain minitest) at `uri:line`. */
+function singleTestInvocation(uri: vscode.Uri, line: number, env: ProjectEnvironment): { tool: string; args: string[] } {
+  const isRSpec = hasPathSegment(uri.fsPath, 'spec')
     ? true
-    : uri.fsPath.includes('/test/')
+    : hasPathSegment(uri.fsPath, 'test')
       ? false
       : readConfig().testingFramework === 'rspec'
 
-  const path = shellQuote(uri.fsPath)
-  if (isRSpec) {
-    return `bundle exec rspec ${shellQuote(`${uri.fsPath}:${line}`)}`
-  }
+  if (isRSpec) {return { tool: 'rspec', args: [`${uri.fsPath}:${line}`] }}
   return env.hasRails
-    ? `bundle exec rails test ${shellQuote(`${uri.fsPath}:${line}`)}`
-    : `bundle exec ruby -Itest ${path}`
+    ? { tool: 'rails', args: ['test', `${uri.fsPath}:${line}`] }
+    : { tool: 'ruby', args: ['-Itest', uri.fsPath] }
+}
+
+function buildSingleTestCommand(uri: vscode.Uri, line: number, env: ProjectEnvironment): string {
+  const { tool, args } = singleTestInvocation(uri, line, env)
+  const root = workspaceRootFor(uri) ?? path.dirname(uri.fsPath)
+  return rubyTerminalCommand(root, tool, args, currentShellKind())
+}
+
+/** Terminal rooted at the project that owns `uri` (never an arbitrary first folder). */
+function createProjectTerminal(name: string, uri?: vscode.Uri): vscode.Terminal {
+  return vscode.window.createTerminal({ name, cwd: workspaceRootFor(uri) })
 }
 
 function navigateCompanion(mvc: MVCNavigator, targetType: string): void {
   const editor = vscode.window.activeTextEditor
-  const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+  const root = activeWorkspaceRoot()
   if (!editor || !root) {return}
 
   const paths = mvc.getCompanionPaths(editor.document.fileName, root)
@@ -2403,7 +2938,7 @@ function navigateCompanion(mvc: MVCNavigator, targetType: string): void {
  */
 async function navigateToView(mvc: MVCNavigator): Promise<void> {
   const editor = vscode.window.activeTextEditor
-  const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+  const root = activeWorkspaceRoot()
   if (!editor || !root) {return}
 
   const viewDir = mvc.getCompanionPaths(editor.document.fileName, root).viewDir

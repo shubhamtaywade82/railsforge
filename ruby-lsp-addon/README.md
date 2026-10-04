@@ -22,11 +22,14 @@ require living inside the language server process.
   to ruby-lsp's own Hover response when you hover an attribute read on an
   ActiveRecord model (e.g. `user.email` inside `app/models/user.rb`).
 
-This is intentionally the smallest possible slice: proof that RailsForge can
-extend ruby-lsp in place, rather than asking users to run two overlapping
-language intelligence tools. Route-aware completion, association-aware
-hover, and go-to-definition for path helpers are natural follow-ups on this
-same scaffold.
+- **Completion** — route helpers (`posts_pa` → `posts_path`, read statically from
+  `config/routes.rb`: resources/resource with only/except, namespace, nesting,
+  member/collection, `as:`, root) and the current model's schema columns.
+- **Go to definition** — a route helper call jumps to its declaration in
+  `config/routes.rb`; `render 'users/form'` jumps to `app/views/users/_form.*`.
+
+All of it is additive: it extends ruby-lsp's own responses in place instead of
+asking you to run two overlapping language tools, and it never runs application code.
 
 ## Install
 

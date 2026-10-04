@@ -17,7 +17,7 @@ import * as path from 'path'
 import { PersistentIndexClient } from './PersistentIndexClient'
 import { PersistentDependencyGraph } from './PersistentDependencyGraph'
 import { DuplicateMethodDetector } from './DuplicateMethodDetector'
-import { isPersistentIndexSupported, getLinuxGlibcVersion } from './nativeSupport'
+import { getPersistentIndexSupport } from './nativeSupport'
 import { readConfig, buildExcludeGlob } from '../config/RailsForgeConfig'
 import { Logger } from '../util/Logger'
 
@@ -31,9 +31,15 @@ function resolveExcludeGlob(): string {
   return buildExcludeGlob([...readConfig().excludePatterns, ...ALWAYS_EXCLUDED]) ?? `{${ALWAYS_EXCLUDED.join(',')}}`
 }
 
+export type PersistentIndexResult =
+  | { status: 'ready'; manager: PersistentIndexManager }
+  | { status: 'unsupported'; reason: string }
+  | { status: 'failed'; reason: string }
+
 export class PersistentIndexManager implements vscode.Disposable {
   readonly dependencyGraph: PersistentDependencyGraph
   readonly duplicateDetector: DuplicateMethodDetector
+  private readonly disposables: vscode.Disposable[] = []
 
   private constructor(
     private client: PersistentIndexClient,
@@ -43,17 +49,21 @@ export class PersistentIndexManager implements vscode.Disposable {
     this.duplicateDetector = new DuplicateMethodDetector(client.getDb())
   }
 
-  static async activate(context: vscode.ExtensionContext, workspaceRoot: string): Promise<PersistentIndexManager | null> {
-    if (!workspaceRoot) {return null}
-
+  /**
+   * Starts the index for ONE workspace root (its own SQLite file, worker and watchers).
+   * Never throws: the outcome says whether it is ready, unsupported on this runtime
+   * (with the reason) or failed, so callers can tell the user instead of going silent.
+   */
+  static async activate(context: vscode.ExtensionContext, workspaceRoot: string): Promise<PersistentIndexResult> {
     // Must run before anything in this call touches better-sqlite3, directly or
     // transitively (see database.ts's doc comment) — on an unsupported runtime,
     // loading that native module aborts the whole process, which no try/catch below
     // can protect against.
-    if (!isPersistentIndexSupported()) {
-      const glibc = process.platform === 'linux' ? ` (GLIBC: ${getLinuxGlibcVersion() ?? 'unknown'})` : ''
-      Logger.warn(`RailsForge: persistent AST SQLite index requires Node N-API >= 10 and Linux GLIBC >= 2.33${glibc}. AST cache (Phase 8/11/13/14) is skipped; all core RailsForge features remain fully active.`)
-      return null
+    const support = getPersistentIndexSupport()
+    if (!support.supported) {
+      const reason = support.reason ?? 'unsupported runtime'
+      Logger.warn(`RailsForge: persistent AST index unavailable — ${reason} AST features (duplicate methods, dependency cycles) are skipped; all core RailsForge features remain fully active.`)
+      return { status: 'unsupported', reason }
     }
 
     try {
@@ -69,21 +79,25 @@ export class PersistentIndexManager implements vscode.Disposable {
 
       const client = await PersistentIndexClient.create(workerPath, dbPath)
       const manager = new PersistentIndexManager(client, workspaceRoot)
-      context.subscriptions.push(manager)
 
       await manager.scanWorkspace()
-      manager.watch(context)
+      manager.watch()
 
-      return manager
+      return { status: 'ready', manager }
     } catch (err) {
       // Native module unavailable, worker failed to start, etc. — degrade, don't break activation.
-      Logger.error('RailsForge: persistent AST index unavailable, Phase 8/11/13/14 features disabled.', err)
-      return null
+      Logger.error(`RailsForge: persistent AST index failed to start for ${workspaceRoot}.`, err)
+      return { status: 'failed', reason: err instanceof Error ? err.message : String(err) }
     }
   }
 
+  get root(): string {
+    return this.workspaceRoot
+  }
+
   private async scanWorkspace(): Promise<void> {
-    const files = await vscode.workspace.findFiles(INDEXED_GLOB, resolveExcludeGlob())
+    // Scoped to this manager's root: in a multi-root workspace each root has its own index.
+    const files = await vscode.workspace.findFiles(new vscode.RelativePattern(this.workspaceRoot, INDEXED_GLOB), resolveExcludeGlob())
     for (const file of files) {
       try {
         const content = await fs.promises.readFile(file.fsPath, 'utf8')
@@ -94,8 +108,9 @@ export class PersistentIndexManager implements vscode.Disposable {
     }
   }
 
-  private watch(context: vscode.ExtensionContext): void {
-    const watcher = vscode.workspace.createFileSystemWatcher(`**/${INDEXED_GLOB}`)
+  private watch(): void {
+    const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(this.workspaceRoot, INDEXED_GLOB))
+    this.disposables.push(watcher)
     const reindex = async (uri: vscode.Uri): Promise<void> => {
       try {
         if (fs.existsSync(uri.fsPath)) {
@@ -111,10 +126,11 @@ export class PersistentIndexManager implements vscode.Disposable {
     watcher.onDidChange(reindex)
     watcher.onDidCreate(reindex)
     watcher.onDidDelete(uri => void this.client.removeFile(uri.fsPath))
-    context.subscriptions.push(watcher)
   }
 
   dispose(): void {
+    for (const d of this.disposables) {d.dispose()}
+    this.disposables.length = 0
     this.client.dispose()
   }
 }

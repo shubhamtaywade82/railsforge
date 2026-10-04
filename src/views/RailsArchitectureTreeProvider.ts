@@ -28,6 +28,8 @@ export class RailsArchitectureTreeProvider implements vscode.TreeDataProvider<Ar
     private schemaIndexer: SchemaIndexer,
     private routesIndexer: RoutesIndexer,
     private stimulusIndexer: StimulusIndexer,
+    private getAstIndexStatus: () => string = () => 'Not started',
+    private getToolchain: () => string = () => 'unknown',
   ) {}
 
   refresh(env: ProjectEnvironment): void {
@@ -78,6 +80,12 @@ export class RailsArchitectureTreeProvider implements vscode.TreeDataProvider<Ar
         new vscode.ThemeIcon('database'),
       ),
       new ArchitectureItem(
+        'Code Analysis (AST index)',
+        vscode.TreeItemCollapsibleState.None,
+        this.getAstIndexStatus(),
+        new vscode.ThemeIcon('symbol-structure'),
+      ),
+      new ArchitectureItem(
         'Routes & Hotwire',
         vscode.TreeItemCollapsibleState.Collapsed,
         `${this.routesIndexer.getAllRoutes().length} Routes | ${this.stimulusIndexer.getAllControllers().length} Controllers`,
@@ -89,6 +97,7 @@ export class RailsArchitectureTreeProvider implements vscode.TreeDataProvider<Ar
   private getEnvironmentItems(): ArchitectureItem[] {
     return [
       new ArchitectureItem(`Ruby: ${this.env.rubyVersion}`, vscode.TreeItemCollapsibleState.None),
+      new ArchitectureItem(`Toolchain: ${this.getToolchain()}`, vscode.TreeItemCollapsibleState.None),
       new ArchitectureItem(`Rails: ${this.env.hasRails ? this.env.railsVersion : 'Not detected (standalone Ruby project)'}`, vscode.TreeItemCollapsibleState.None),
       new ArchitectureItem(`Project Type: ${formatProjectType(this.env.projectType)}`, vscode.TreeItemCollapsibleState.None),
       new ArchitectureItem(`Hotwire / Turbo: ${this.env.hasHotwire ? 'Active ✓' : 'Inactive ✗'}`, vscode.TreeItemCollapsibleState.None),

@@ -9,8 +9,12 @@ export class MigrationDiagnostics implements vscode.CodeActionProvider {
   private diagnosticCollection = vscode.languages.createDiagnosticCollection('railsforge-migrations')
   private analyzer = new StrongMigrationsAnalyzer()
 
+  clearFile(uri: vscode.Uri): void {
+    this.diagnosticCollection.delete(uri)
+  }
+
   updateDiagnostics(document: vscode.TextDocument): void {
-    if (!document.fileName.includes('/db/migrate/')) {
+    if (!document.fileName.replace(/\\/g, '/').includes('/db/migrate/')) {
       this.diagnosticCollection.delete(document.uri)
       return
     }

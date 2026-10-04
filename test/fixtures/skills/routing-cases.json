@@ -1,0 +1,325 @@
+[
+ {
+  "id": "password-recovery-not-authorization",
+  "prompt": "Add an expiring, single-use password reset flow with enumeration-safe responses and replay protection.\n",
+  "primary_skills": [
+   "rails-authentication"
+  ],
+  "secondary_skills": [
+   "rails-security-engineering",
+   "rails-test-engineering"
+  ],
+  "boundary": "authentication-vs-authorization"
+ },
+ {
+  "id": "tenant-scoped-resource-access",
+  "prompt": "Restrict invoice lookup to resources belonging to the authenticated user's tenant and prevent cross-tenant access.\n",
+  "primary_skills": [
+   "rails-authorization"
+  ],
+  "secondary_skills": [
+   "rails-active-record",
+   "rails-security-engineering",
+   "rails-test-engineering"
+  ],
+  "boundary": "authorization-vs-persistence"
+ },
+ {
+  "id": "delayed-resource-authorization",
+  "prompt": "A queued job deletes a resource after a delay; authorization must still be enforced when the job executes.\n",
+  "primary_skills": [
+   "rails-cross-boundary-authorization-security"
+  ],
+  "secondary_skills": [
+   "rails-authorization",
+   "rails-active-job",
+   "rails-test-engineering"
+  ],
+  "boundary": "authorization-vs-background-execution"
+ },
+ {
+  "id": "realtime-subscription-authorization",
+  "prompt": "Prevent an authenticated user from subscribing to another tenant's Action Cable stream and define reconnect behavior.\n",
+  "primary_skills": [
+   "rails-action-cable"
+  ],
+  "secondary_skills": [
+   "rails-authorization",
+   "rails-cross-boundary-authorization-security",
+   "rails-test-engineering"
+  ],
+  "boundary": "realtime-vs-authorization"
+ },
+ {
+  "id": "signed-webhook-ingress",
+  "prompt": "Receive a provider webhook, verify its signature, reject replayed or malformed requests, and only then process the event.\n",
+  "primary_skills": [
+   "rails-api-integration"
+  ],
+  "secondary_skills": [
+   "rails-security-engineering",
+   "rails-observability",
+   "rails-test-engineering"
+  ],
+  "boundary": "api-vs-security"
+ },
+ {
+  "id": "api-version-compatibility",
+  "prompt": "Add an API v2 response while keeping existing v1 clients compatible.\n",
+  "primary_skills": [
+   "rails-api-integration"
+  ],
+  "secondary_skills": [
+   "rails-action-controller",
+   "rails-serialization-globalid-engineering",
+   "rails-test-engineering"
+  ],
+  "boundary": "api-vs-controller"
+ },
+ {
+  "id": "conditional-model-invariant",
+  "prompt": "Add a validation that applies only in a named lifecycle context and remains consistent with the database invariant.\n",
+  "primary_skills": [
+   "rails-validations"
+  ],
+  "secondary_skills": [
+   "rails-active-record",
+   "rails-database-engineering",
+   "rails-test-engineering"
+  ],
+  "boundary": "validation-vs-database"
+ },
+ {
+  "id": "n-plus-one-query-regression",
+  "prompt": "Diagnose and fix a slow Rails endpoint caused by repeated association queries without changing the endpoint contract.\n",
+  "primary_skills": [
+   "rails-performance"
+  ],
+  "secondary_skills": [
+   "rails-active-record",
+   "ruby-performance",
+   "rails-test-engineering"
+  ],
+  "boundary": "performance-vs-persistence"
+ },
+ {
+  "id": "autoloading-constant-mismatch",
+  "prompt": "Fix a Zeitwerk::NameError caused by a file-to-constant mismatch while preserving reload and eager-load behavior.\n",
+  "primary_skills": [
+   "rails-zeitwerk"
+  ],
+  "secondary_skills": [
+   "ruby-runtime-compatibility",
+   "rails-test-engineering"
+  ],
+  "boundary": "loading-vs-runtime"
+ },
+ {
+  "id": "route-shadowing-regression",
+  "prompt": "Add a nested route without allowing an existing literal route to be shadowed by resourceful routing.\n",
+  "primary_skills": [
+   "rails-routing"
+  ],
+  "secondary_skills": [
+   "rails-action-controller",
+   "rails-test-engineering"
+  ],
+  "boundary": "routing-vs-controller"
+ },
+ {
+  "id": "boot-time-provider-dependency",
+  "prompt": "Add an initializer that depends on an external provider while preserving boot failure semantics, reload behavior, and readiness signaling.\n",
+  "primary_skills": [
+   "rails-initialization-configuration-engineering"
+  ],
+  "secondary_skills": [
+   "rails-production-runtime",
+   "rails-reliability-engineering",
+   "rails-test-engineering"
+  ],
+  "boundary": "initialization-vs-runtime"
+ },
+ {
+  "id": "tenant-aware-authorization-cache",
+  "prompt": "Cache an authorization decision without allowing one user's or tenant's decision to leak to another request.\n",
+  "primary_skills": [
+   "rails-caching"
+  ],
+  "secondary_skills": [
+   "rails-authorization",
+   "rails-security-engineering",
+   "rails-test-engineering"
+  ],
+  "boundary": "caching-vs-authorization"
+ },
+ {
+  "id": "engine-namespace-boundary",
+  "prompt": "Mount a Rails engine with isolated constants and routes without leaking host application authorization assumptions into the engine.\n",
+  "primary_skills": [
+   "rails-engines-railties-engineering"
+  ],
+  "secondary_skills": [
+   "rails-routing",
+   "rails-zeitwerk",
+   "rails-authorization",
+   "rails-test-engineering"
+  ],
+  "boundary": "engine-vs-host-routing"
+ },
+ {
+  "id": "credential-key-rotation",
+  "prompt": "Rotate Rails encryption keys while preserving deployment compatibility, secret handling, recovery, and verification of existing encrypted data.\n",
+  "primary_skills": [
+   "rails-encryption-credentials-engineering"
+  ],
+  "secondary_skills": [
+   "rails-security-engineering",
+   "rails-reliability-engineering",
+   "rails-production-runtime",
+   "rails-test-engineering"
+  ],
+  "boundary": "encryption-vs-operations"
+ },
+ {
+  "id": "react-form-rails-validation-errors",
+  "prompt": "The React order form posts to the Rails API; when Rails rejects the order, show each validation error next to the matching field and keep errors that belong to no field visible.\n",
+  "primary_skills": [
+   "rails-react-integration"
+  ],
+  "secondary_skills": [
+   "rails-validations",
+   "react-component-engineering"
+  ],
+  "boundary": "client-form-vs-server-validation"
+ },
+ {
+  "id": "react-fetch-csrf-failure",
+  "prompt": "Submitting a React form inside the Rails app fails with InvalidAuthenticityToken; fix it without weakening forgery protection.\n",
+  "primary_skills": [
+   "rails-react-integration"
+  ],
+  "secondary_skills": [
+   "rails-security",
+   "rails-authentication"
+  ],
+  "boundary": "csrf-vs-authentication"
+ },
+ {
+  "id": "rails-json-contract-change-with-react-client",
+  "prompt": "Rename total_cents to amount_cents in the orders JSON API that the React dashboard consumes, without breaking the dashboard.\n",
+  "primary_skills": [
+   "rails-api-integration"
+  ],
+  "secondary_skills": [
+   "rails-react-integration"
+  ],
+  "boundary": "server-contract-vs-client-consumer"
+ },
+ {
+  "id": "react-filter-render-performance",
+  "prompt": "A React filter panel re-renders the entire results list on every keystroke and typing lags; make it responsive.\n",
+  "primary_skills": [
+   "react-accessibility-performance"
+  ],
+  "secondary_skills": [
+   "react-state-effects"
+  ],
+  "boundary": "render-performance-vs-state-ownership"
+ },
+ {
+  "id": "branch-review-standards-and-spec",
+  "prompt": "Review this branch against main: check it follows the repository's conventions and does everything issue 214 asked for, without scope creep. Do not change the code.\n",
+  "primary_skills": [
+   "change-review"
+  ],
+  "secondary_skills": [
+   "ruby-clean-code",
+   "rubocop"
+  ],
+  "boundary": "change-review-vs-minimality-review"
+ },
+ {
+  "id": "diff-simplification-review",
+  "prompt": "Review this diff only for what can be deleted or simplified: unused flexibility, one-use abstractions, and pass-through wrappers.\n",
+  "primary_skills": [
+   "stack-minimality-review"
+  ],
+  "secondary_skills": [
+   "ruby-api-design"
+  ],
+  "boundary": "minimality-review-vs-change-review"
+ },
+ {
+  "id": "spec-then-tickets-not-wayfinder",
+  "prompt": "We agreed partial refunds in this conversation; write it up as a spec with test seams and publish it to our local planning tracker.\n",
+  "primary_skills": [
+   "planning-spec"
+  ],
+  "secondary_skills": [
+   "planning-tracker"
+  ],
+  "boundary": "spec-vs-wayfinding"
+ },
+ {
+  "id": "multi-session-effort-needs-a-map",
+  "prompt": "Moving billing into its own Rails engine is too big for one session and we do not yet know the order of the decisions; plan it so several sessions can pick up the next decision.\n",
+  "primary_skills": [
+   "planning-wayfinder"
+  ],
+  "secondary_skills": [
+   "planning-interview",
+   "planning-tracker"
+  ],
+  "boundary": "wayfinding-vs-ticket-breakdown"
+ },
+ {
+  "id": "schema-design-before-migration",
+  "prompt": "Design the tables for subscriptions with plan changes over time, where invoices must keep the price that applied when they were issued and plan names must be unique per account.\n",
+  "primary_skills": [
+   "rails-data-modeling"
+  ],
+  "secondary_skills": [
+   "rails-associations",
+   "rails-database-engineering"
+  ],
+  "boundary": "data-modeling-vs-database-engineering"
+ },
+ {
+  "id": "ruby-toolchain-vs-runtime-compatibility",
+  "prompt": "Prepare a Ruby repository whose runtime declarations and local executables may disagree. Determine the actual Ruby, RubyGems, and Bundler provenance before changing dependencies or version constraints.\n",
+  "primary_skills": [
+   "ruby-toolchain"
+  ],
+  "secondary_skills": [
+   "ruby-runtime-compatibility",
+   "ruby-debugging"
+  ],
+  "boundary": "toolchain-vs-runtime-compatibility"
+ },
+ {
+  "id": "rails-new-vs-generators",
+  "prompt": "Create a new Rails application with an API-only shape and PostgreSQL, then add a resource to it using the appropriate Rails command. Distinguish application bootstrap from in-app generators.\n",
+  "primary_skills": [
+   "rails-application-bootstrap"
+  ],
+  "secondary_skills": [
+   "rails-generators",
+   "ruby-toolchain",
+   "ruby-runtime-compatibility"
+  ],
+  "boundary": "application-bootstrap-vs-generators"
+ },
+ {
+  "id": "gem-authoring-vs-dependency-installation",
+  "prompt": "Create a reusable Ruby gem, define its gemspec and public require path, then build and smoke-test the packaged artifact without publishing it. Keep this distinct from merely adding a gem dependency to an application.\n",
+  "primary_skills": [
+   "ruby-gem-development"
+  ],
+  "secondary_skills": [
+   "ruby-toolchain",
+   "ruby-gems-io-services",
+   "ruby-tdd-refactoring"
+  ],
+  "boundary": "gem-authoring-vs-dependency-installation"
+ }
+]

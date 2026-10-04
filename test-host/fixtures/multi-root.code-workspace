@@ -1,0 +1,4 @@
+{
+  "folders": [{ "path": "rails_a" }, { "path": "rails_b" }],
+  "settings": { "railsForge.performance.autoOptimizeWorkspace": false }
+}

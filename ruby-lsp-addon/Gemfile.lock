@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    railsforge-ruby-lsp (0.1.0)
+    railsforge-ruby-lsp (0.2.0)
       ruby-lsp (>= 0.19)
 
 GEM
@@ -9,7 +9,9 @@ GEM
   specs:
     language_server-protocol (3.17.0.6)
     logger (1.7.0)
+    minitest (5.27.0)
     prism (1.9.0)
+    rake (13.4.2)
     rbs (3.6.1)
       logger
     ruby-lsp (0.26.11)
@@ -22,13 +24,17 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
+  minitest (~> 5.25)
   railsforge-ruby-lsp!
+  rake (~> 13.0)
 
 CHECKSUMS
   language_server-protocol (3.17.0.6) sha256=5ef2c0c138f8267e1bc631d3328347d354f96724b0af22f2c79516120443b7f0
   logger (1.7.0) sha256=196edec7cc44b66cfb40f9755ce11b392f21f7967696af15d274dde7edff0203
+  minitest (5.27.0) sha256=2d3b17f8a36fe7801c1adcffdbc38233b938eb0b4966e97a6739055a45fa77d5
   prism (1.9.0) sha256=7b530c6a9f92c24300014919c9dcbc055bf4cdf51ec30aed099b06cd6674ef85
-  railsforge-ruby-lsp (0.1.0)
+  railsforge-ruby-lsp (0.2.0)
+  rake (13.4.2) sha256=cb825b2bd5f1f8e91ca37bddb4b9aaf345551b4731da62949be002fa89283701
   rbs (3.6.1) sha256=ed7273d018556844583d1785ac54194e67eec594d68e317d57fa90ad035532c0
   ruby-lsp (0.26.11) sha256=4cc8f1587237ff8c9031680b5491df901a82559eeaa1ae96863ffe700b32583d
 

@@ -44,11 +44,27 @@ jobs:
       - name: Run TypeScript Type Check
         run: pnpm run type-check
 
+      # Fetches the pinned ruby-agent-skills commit and verifies its content hash (skills-pin.json);
+      # REQUIRE makes a network/hash failure fail CI instead of silently shipping without skills.
       - name: Compile Extension (Webpack)
         run: pnpm run compile
+        env:
+          RAILSFORGE_REQUIRE_SKILLS: '1'
+
+      # The standalone MCP server runs outside VS Code; a stray `import 'vscode'` anywhere in
+      # its import graph would crash it at startup, so guard the built bundle.
+      - name: Check the MCP server bundle has no vscode dependency
+        run: "! grep -q 'require(\"vscode\")' dist/mcp/server.js"
 
       - name: Run Vitest Unit Tests
         run: pnpm test
+
+      # Boots a real VS Code Extension Host (Electron under xvfb) with the webpack build
+      # and a two-folder multi-root workspace: checks activate(), that every contributed
+      # command is registered, and per-folder schema isolation. One Node version is enough.
+      - name: Run Extension Host Integration Tests
+        if: matrix.node-version == '22.x'
+        run: xvfb-run -a pnpm run test:host
 
       - name: Build VSIX Package
         run: pnpm run vsce-package
@@ -66,11 +82,15 @@ jobs:
           retention-days: 14
 
   ruby-addon:
-    name: Ruby LSP Add-on Sanity Check
+    name: Ruby LSP Add-on (ruby-lsp ${{ matrix.ruby-lsp }})
     runs-on: ubuntu-latest
-    # ruby-lsp-addon/ has no test suite (it's a small, pure-Ruby ruby-lsp add-on) —
-    # this job exists so a syntax error or a broken gemspec doesn't slip through
-    # entirely unnoticed, not to substitute for real gem tests if any get added later.
+    # Runs the add-on's Minitest suite through ruby-lsp's own add-on loader and Hover
+    # request. ruby-lsp labels its add-on API experimental, so besides the locked
+    # version we also test against the newest release to catch API drift early.
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby-lsp: [locked, latest]
 
     steps:
       - name: Checkout Repository
@@ -80,7 +100,17 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.3'
-          bundler-cache: false
+          bundler-cache: true
+          working-directory: ruby-lsp-addon
+
+      # setup-ruby installs in frozen/deployment mode; unfreeze so this job (only) may move ruby-lsp forward.
+      - name: Use latest ruby-lsp
+        if: matrix.ruby-lsp == 'latest'
+        working-directory: ruby-lsp-addon
+        run: |
+          bundle config set --local frozen false
+          bundle config set --local deployment false
+          bundle update ruby-lsp
 
       - name: Ruby Syntax Check
         working-directory: ruby-lsp-addon
@@ -89,3 +119,7 @@ jobs:
       - name: Build Gem
         working-directory: ruby-lsp-addon
         run: gem build railsforge-ruby-lsp.gemspec
+
+      - name: Run Add-on Tests (against real ruby-lsp)
+        working-directory: ruby-lsp-addon
+        run: bundle exec rake test

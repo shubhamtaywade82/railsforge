@@ -9,16 +9,18 @@ import * as vscode from 'vscode'
 import { RBSIndex } from './RBSIndex'
 
 export class RBSHoverProvider implements vscode.HoverProvider {
-  constructor(private index: RBSIndex) {}
+  /** Resolves the index for the project that owns the hovered document (multi-root safe). */
+  constructor(private indexFor: (uri: vscode.Uri) => RBSIndex) {}
 
   provideHover(document: vscode.TextDocument, position: vscode.Position): vscode.ProviderResult<vscode.Hover> {
-    if (this.index.isEmpty) {return null}
+    const index = this.indexFor(document.uri)
+    if (index.isEmpty) {return null}
 
     const range = document.getWordRangeAtPosition(position, /[A-Za-z_][A-Za-z0-9_]*[?!]?/)
     if (!range) {return null}
 
     const word = document.getText(range)
-    const matches = this.index.lookup(word)
+    const matches = index.lookup(word)
     if (matches.length === 0) {return null}
 
     const md = new vscode.MarkdownString()

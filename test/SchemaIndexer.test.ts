@@ -37,3 +37,32 @@ end
     expect(userCols.length).toBe(6)
   })
 })
+
+describe('SchemaIndexer indexes and foreign keys', () => {
+  it('fills indexes (with uniqueness) and foreign keys declared after the tables', () => {
+    const schema = new SchemaIndexer()
+    schema.parseSchema([
+      'ActiveRecord::Schema.define(version: 1) do',
+      '  create_table "orders", force: :cascade do |t|',
+      '    t.integer "user_id", null: false',
+      '    t.string "number"',
+      '    t.index ["number"], name: "index_orders_on_number", unique: true',
+      '    t.index ["user_id", "created_at"], name: "idx"',
+      '  end',
+      '  create_table "users", force: :cascade do |t|',
+      '    t.string "email"',
+      '  end',
+      '  add_foreign_key "orders", "users"',
+      '  add_foreign_key "orders", "users", column: "approver_id"',
+      'end',
+    ].join('\n'))
+    const orders = schema.getTable('orders')!
+    expect(orders.indexes).toEqual(['number (unique)', 'user_id, created_at'])
+    expect(orders.foreignKeys).toEqual([
+      { toTable: 'users', column: 'user_id' },
+      { toTable: 'users', column: 'approver_id' },
+    ])
+    expect(schema.getTable('users')!.foreignKeys).toEqual([])
+    expect(orders.columns.has('user_id')).toBe(true)
+  })
+})

@@ -9,6 +9,7 @@
  */
 
 import * as vscode from 'vscode'
+import { activeWorkspaceRoot } from '../workspace/activeRoot'
 import { RailsAgent } from '../agent/RailsAgent'
 import { SchemaIndexer } from '../rails/SchemaIndexer'
 import { RoutesIndexer } from '../rails/RoutesIndexer'
@@ -65,11 +66,12 @@ export class RailsChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async postStatus(): Promise<void> {
-    const isOnline = await this.agent.healthCheck()
+    const status = await this.agent.getProviderStatus()
+    const isOnline = status.state === 'reachable' || status.state === 'authenticated'
     const editor = vscode.window.activeTextEditor
     const currentFile = editor ? vscode.workspace.asRelativePath(editor.document.uri) : 'No file open'
     void this.view?.webview.postMessage({
-      type: 'statusUpdate', isOnline, currentFile,
+      type: 'statusUpdate', isOnline, providerState: status.state, providerDetail: status.detail ?? '', currentFile,
       tablesCount: this.schemaIndexer.getAllTables().length,
       routesCount: this.routesIndexer.getAllRoutes().length,
     })
@@ -122,7 +124,7 @@ export class RailsChatViewProvider implements vscode.WebviewViewProvider {
 
     const result = await this.agent.run(cleanPrompt, {
       fileContent: groundedContent, fileName, selection,
-      workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+      workspaceRoot: activeWorkspaceRoot(),
     })
 
     if (!result.success) { Logger.warn(`[Chat] error: ${result.response}`) }
@@ -139,7 +141,7 @@ export class RailsChatViewProvider implements vscode.WebviewViewProvider {
    * - replaceFile: preview full-file replacement, apply to active file
    */
   private async applyCode(code: string, mode: WebviewMessage['mode'], fileName?: string): Promise<void> {
-    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+    const root = activeWorkspaceRoot()
 
     // Create mode: write a new file
     if (mode === 'create') {
@@ -443,7 +445,9 @@ export class RailsChatViewProvider implements vscode.WebviewViewProvider {
       const msg = event.data;
       if (msg.type==='statusUpdate') {
         statusPill.className = 'status-pill ' + (msg.isOnline ? '' : 'offline');
-        statusText.textContent = msg.isOnline ? 'Ollama Online' : 'Offline';
+        var labels = { reachable: 'Ollama Online', authenticated: 'Provider Ready', unconfigured: 'No API key', error: 'Provider Error', offline: 'Offline' };
+        statusText.textContent = labels[msg.providerState] || (msg.isOnline ? 'Online' : 'Offline');
+        statusPill.title = msg.providerDetail || '';
         activeFileLbl.textContent = msg.currentFile;
       } else if (msg.type==='appendMessage') {
         appendMessage(msg.sender, msg.text);

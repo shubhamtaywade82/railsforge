@@ -18,6 +18,12 @@
     "vscode": "^1.96.0",
     "node": ">=20"
   },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "RailsForge runs project tooling (RuboCop, Bundler, Rails, test runners, rake) and project-defined configuration, which can execute code from the workspace. Open the folder as trusted to enable it."
+    }
+  },
   "categories": [
     "Programming Languages",
     "Linters",
@@ -44,7 +50,7 @@
   "main": "./dist/extension.js",
   "scripts": {
     "vscode:prepublish": "pnpm run compile",
-    "compile": "webpack --mode production",
+    "compile": "node scripts/fetch-skills.mjs && webpack --mode production",
     "watch": "webpack --watch --mode development",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
@@ -53,7 +59,9 @@
     "record-cassettes": "node test/cassettes/record.mjs",
     "vsce-package": "vsce package --no-dependencies --allow-missing-repository -o railsforge.vsix",
     "package": "pnpm run lint && pnpm run type-check && pnpm run compile && pnpm test && pnpm run vsce-package",
-    "build:all": "pnpm run package"
+    "build:all": "pnpm run package",
+    "test:host": "tsc -p tsconfig.host.json && vscode-test",
+    "skills:fetch": "node scripts/fetch-skills.mjs"
   },
   "contributes": {
     "languages": [
@@ -222,15 +230,22 @@
           "enum": [
             "ollama",
             "openai",
-            "anthropic"
+            "anthropic",
+            "vscode-lm"
           ],
           "enumDescriptions": [
             "Local, private, free — uses railsForge.ollama.host/model (default)",
             "Cloud — requires an API key set via 'RailsForge: Set AI Provider API Key'",
-            "Cloud — requires an API key set via 'RailsForge: Set AI Provider API Key'"
+            "Cloud — requires an API key set via 'RailsForge: Set AI Provider API Key'",
+            "VS Code's own model picker (Copilot or any installed Language Model provider, e.g. an Ollama provider) — no API key stored by RailsForge; VS Code asks for consent"
           ],
           "default": "ollama",
           "description": "Backend for the @rails AI agent and chat participant. Cloud providers send your code/prompts to that provider's API — only switch away from 'ollama' if you're fine with that. Requires a window reload to take effect."
+        },
+        "railsForge.ai.vscodeLm.family": {
+          "type": "string",
+          "default": "",
+          "description": "Preferred model family (e.g. 'gpt-4o', 'claude-sonnet') when railsForge.ai.provider is 'vscode-lm'. Empty uses the first available model."
         },
         "railsForge.ai.openai.model": {
           "type": "string",
@@ -451,6 +466,76 @@
           "default": false,
           "description": "Automatically re-run Steep in the background on Ruby file save when railsForge.types.steepEnabled is true. Debounced (like brakeman.scanOnSave) since Steep checks the whole configured target, not just the saved file."
         },
+        "railsForge.skills.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Route each AI request to the most relevant ruby-agent-skills (bundled, pinned release) and inject their rules into the prompt. The same skills are available to agent mode via the railsforge_get_skill / railsforge_route_skills tools."
+        },
+        "railsForge.skills.maxPerRequest": {
+          "type": "number",
+          "default": 4,
+          "minimum": 1,
+          "maximum": 8,
+          "description": "Maximum domain skills injected per request (cross-cutting skills such as ruby-clean-code are added on top)."
+        },
+        "railsForge.skills.extraPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Extra directories of skills (`<dir>/<skill-id>/SKILL.md`) merged with the bundled pack. The project's own `.agents/skills` is always read, and overrides a bundled skill with the same id."
+        },
+        "railsForge.analyzers.enabled": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "reek",
+              "flog",
+              "flay",
+              "debride",
+              "standard"
+            ]
+          },
+          "default": [],
+          "description": "Analyzers run by 'RailsForge: Run Code Analyzers' (findings go to the Problems panel). They must be in your bundle (bundle add <name> --group development). Empty = ask each time."
+        },
+        "railsForge.analyzers.flogThreshold": {
+          "type": "number",
+          "default": 20,
+          "description": "Flog complexity score at or above which a method is reported."
+        },
+        "railsForge.analyzers.paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "app",
+            "lib"
+          ],
+          "description": "Project-relative paths the analyzers scan."
+        },
+        "railsForge.runtime.introspection.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Allow RailsForge to run `rails runner` to read the application's real models, associations, validations, callbacks, routes and middleware. **This boots your app and executes its initializers.** When off, RailsForge asks before each run. Never runs in untrusted workspaces."
+        },
+        "railsForge.ruby.versionManager": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "none",
+            "mise",
+            "asdf",
+            "rbenv",
+            "rvm",
+            "chruby"
+          ],
+          "default": "auto",
+          "description": "Version manager used to run project tools (RuboCop, Rails, RSpec, Brakeman, ...) so the project's Ruby is used even when VS Code was launched without shell init. 'auto' detects it from .tool-versions / mise.toml / .ruby-version and only wraps when the manager is installed; 'none' runs tools directly."
+        },
         "railsForge.types.rbsSigDir": {
           "type": "string",
           "default": "sig",
@@ -525,6 +610,11 @@
           "id": "railsforge.rakeTasksView",
           "name": "Rake Tasks",
           "when": "railsforge.hasRakefile"
+        },
+        {
+          "id": "railsforge.gettingStarted",
+          "name": "Getting Started",
+          "when": "!railsforge.isRailsApp"
         }
       ]
     },
@@ -680,6 +770,36 @@
         "category": "RailsForge"
       },
       {
+        "command": "railsforge.showRuntimeIntrospection",
+        "title": "RailsForge: Show Rails Runtime Introspection",
+        "category": "RailsForge"
+      },
+      {
+        "command": "railsforge.refreshRuntimeIntrospection",
+        "title": "RailsForge: Refresh Rails Runtime Introspection (boots the app)",
+        "category": "RailsForge"
+      },
+      {
+        "command": "railsforge.runAnalyzers",
+        "title": "RailsForge: Run Code Analyzers (Reek, Flog, Flay, Debride, Standard)",
+        "category": "RailsForge"
+      },
+      {
+        "command": "railsforge.clearAnalyzers",
+        "title": "RailsForge: Clear Code Analyzer Findings",
+        "category": "RailsForge"
+      },
+      {
+        "command": "railsforge.generate",
+        "title": "RailsForge: Rails Generate…",
+        "category": "RailsForge"
+      },
+      {
+        "command": "railsforge.destroyGenerated",
+        "title": "RailsForge: Rails Destroy…",
+        "category": "RailsForge"
+      },
+      {
         "command": "railsforge.showSchemaPeek",
         "title": "RailsForge: Peek Model Schema",
         "category": "RailsForge"
@@ -735,6 +855,11 @@
         "title": "RailsForge: Apply Chat Response (diff/create/replace)",
         "category": "RailsForge",
         "enablement": "railsforge.aiProvider"
+      },
+      {
+        "command": "railsforge.openVirtualDoc",
+        "title": "RailsForge: Open Project Overview (routes, schema, runtime, toolchain)",
+        "category": "RailsForge"
       }
     ],
     "menus": {
@@ -792,6 +917,22 @@
           "when": "railsforge.isRailsApp"
         },
         {
+          "command": "railsforge.showRuntimeIntrospection",
+          "when": "railsforge.isRailsApp"
+        },
+        {
+          "command": "railsforge.refreshRuntimeIntrospection",
+          "when": "railsforge.isRailsApp"
+        },
+        {
+          "command": "railsforge.generate",
+          "when": "railsforge.isRailsApp"
+        },
+        {
+          "command": "railsforge.destroyGenerated",
+          "when": "railsforge.isRailsApp"
+        },
+        {
           "command": "railsforge.goToPolicy",
           "when": "railsforge.hasPundit"
         },
@@ -818,6 +959,10 @@
         {
           "command": "railsforge.generateRBS",
           "when": "railsforge.projectType != 'script'"
+        },
+        {
+          "command": "railsforge.openVirtualDoc",
+          "when": "workbenchState != empty"
         }
       ],
       "view/title": [
@@ -825,6 +970,67 @@
           "command": "railsforge.refreshRakeTasks",
           "when": "view == railsforge.rakeTasksView",
           "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "submenu": "railsforge.editorSubmenu",
+          "when": "resourceLangId == ruby || resourceLangId == erb",
+          "group": "navigation@9"
+        }
+      ],
+      "railsforge.editorSubmenu": [
+        {
+          "command": "railsforge.extractService",
+          "when": "editorHasSelection && resourceLangId == ruby && railsforge.isRailsApp",
+          "group": "1_refactor@1"
+        },
+        {
+          "command": "railsforge.extractQuery",
+          "when": "editorHasSelection && resourceLangId == ruby && railsforge.isRailsApp",
+          "group": "1_refactor@2"
+        },
+        {
+          "command": "railsforge.refactorSelection",
+          "when": "editorHasSelection && resourceLangId == ruby",
+          "group": "1_refactor@3"
+        },
+        {
+          "command": "railsforge.goToSpec",
+          "when": "resourceLangId == ruby",
+          "group": "2_navigate@1"
+        },
+        {
+          "command": "railsforge.goToView",
+          "when": "railsforge.hasViews",
+          "group": "2_navigate@2"
+        },
+        {
+          "command": "railsforge.showRelatedFiles",
+          "when": "resourceLangId == ruby",
+          "group": "2_navigate@3"
+        },
+        {
+          "command": "railsforge.runAnalyzers",
+          "when": "resourceLangId == ruby",
+          "group": "3_analyze@1"
+        },
+        {
+          "command": "railsforge.runBrakeman",
+          "when": "railsforge.isRailsApp",
+          "group": "3_analyze@2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "railsforge.generate",
+          "when": "explorerResourceIsFolder && railsforge.isRailsApp",
+          "group": "z_railsforge@1"
+        },
+        {
+          "command": "railsforge.openVirtualDoc",
+          "when": "explorerResourceIsRoot",
+          "group": "z_railsforge@2"
         }
       ]
     },
@@ -871,19 +1077,733 @@
         "mac": "cmd+alt+r e",
         "when": "editorTextFocus"
       }
+    ],
+    "taskDefinitions": [
+      {
+        "type": "railsforge",
+        "required": [
+          "task"
+        ],
+        "properties": {
+          "task": {
+            "type": "string",
+            "description": "Preset id (test, rubocop, brakeman, db:migrate, db:rollback, db:prepare, db:seed, routes) or one of rake / rails / rspec / rubocop together with args."
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Arguments for rake / rails / rspec / rubocop tasks (passed as argv, not through a shell)."
+          }
+        }
+      }
+    ],
+    "problemMatchers": [
+      {
+        "name": "rubocop-railsforge",
+        "label": "RuboCop (emacs format)",
+        "owner": "rubocop",
+        "source": "RuboCop",
+        "severity": "warning",
+        "fileLocation": [
+          "relative",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^(.+?):(\\d+):(\\d+):\\s+[CWEFR]:\\s+(?:\\[Correctable\\]\\s+)?(.+)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "message": 4
+        }
+      },
+      {
+        "name": "rspec-railsforge",
+        "label": "RSpec failures",
+        "owner": "rspec",
+        "source": "RSpec",
+        "severity": "error",
+        "fileLocation": [
+          "relative",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^rspec (\\.?/?[^:\\s]+\\.rb):(\\d+) # (.+)$",
+          "file": 1,
+          "line": 2,
+          "message": 3
+        }
+      },
+      {
+        "name": "minitest-railsforge",
+        "label": "Minitest failures",
+        "owner": "minitest",
+        "source": "Minitest",
+        "severity": "error",
+        "fileLocation": [
+          "relative",
+          "${workspaceFolder}"
+        ],
+        "pattern": {
+          "regexp": "^(\\S+#\\S+) \\[(.+?\\.rb):(\\d+)\\]:$",
+          "message": 1,
+          "file": 2,
+          "line": 3
+        }
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "railsforge_get_schema",
+        "displayName": "Get ActiveRecord schema",
+        "toolReferenceName": "get_schema",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Returns database columns for a model (or all tables if no model is given), from db/schema.rb.",
+        "userDescription": "Get ActiveRecord schema",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "model": {
+              "description": "Model class name, e.g. \"User\"",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_list_routes",
+        "displayName": "List Rails routes",
+        "toolReferenceName": "list_routes",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Lists routes, optionally filtered by a search string matched against verb/path/controller#action.",
+        "userDescription": "List Rails routes",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "filter": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_list_patterns",
+        "displayName": "List project patterns",
+        "toolReferenceName": "list_patterns",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Lists this project's own Service/Query/Form/Policy/Decorator/Concern classes, optionally filtered by type.",
+        "userDescription": "List project patterns",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "service",
+                "query",
+                "form",
+                "policy",
+                "decorator",
+                "concern"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_find_similar_pattern",
+        "displayName": "Find similar existing pattern",
+        "toolReferenceName": "find_similar_pattern",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Given a proposed class name (e.g. \"CreateOrderService\"), finds the closest existing Service/Query/etc. in this project — use before generating new code.",
+        "userDescription": "Find similar existing pattern",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_get_dependencies",
+        "displayName": "Get dependencies/callers",
+        "toolReferenceName": "get_dependencies",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Returns collaborators (what this class depends on) and callers (what depends on this class), from the persistent AST index. Requires the workspace to have been opened in VS Code with RailsForge at least once.",
+        "userDescription": "Get dependencies/callers",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_find_duplicate_methods",
+        "displayName": "Find near-duplicate methods",
+        "toolReferenceName": "find_duplicate_methods",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Checks the codebase for near-duplicate method bodies (candidates for extracting a shared concern/method) — call this before generating a new method, to avoid writing a redundant duplicate of existing logic. Requires the persistent AST index.",
+        "userDescription": "Find near-duplicate methods",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_get_method_notes",
+        "displayName": "Get APIDock method notes",
+        "toolReferenceName": "get_method_notes",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Fetches apidock.com's community notes and doc summary for a Ruby/Rails/RSpec method — call this before generating code that uses an unfamiliar method, to ground it in real-world gotchas (skipped validations/callbacks, deprecated behavior, surprising defaults) that official docs often miss. This is APIDock only (community notes); for the official signature/description of a Ruby core or Rails framework method, prefer get_offline_docs instead — it's instant (no network call) when the docset is cached.",
+        "userDescription": "Get APIDock method notes",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "method_name": {
+              "type": "string",
+              "description": "Method name, e.g. \"update_attribute\""
+            },
+            "class_name": {
+              "type": "string",
+              "description": "Class or module name, e.g. \"ActiveRecord::Base\""
+            }
+          },
+          "required": [
+            "method_name",
+            "class_name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_get_gem_documentation",
+        "displayName": "Get gem documentation (rubydoc.info)",
+        "toolReferenceName": "get_gem_documentation",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Fetches YARD documentation (signature, description, params, return type) for a class/method in one of this project's dependency gems, at the exact version locked in Gemfile.lock — use this before generating code that calls into a gem (Pundit, Sidekiq, dry-rb, etc.) whose API isn't in RailsForge's own indexed patterns.",
+        "userDescription": "Get gem documentation (rubydoc.info)",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "gem_name": {
+              "description": "Gem name as it appears in Gemfile.lock, e.g. \"pundit\". Omitted: resolved from class_name's top-level namespace.",
+              "type": "string"
+            },
+            "class_name": {
+              "type": "string",
+              "description": "Class or module name, e.g. \"Pundit\" or \"Sidekiq::Client\""
+            },
+            "method_name": {
+              "type": "string",
+              "description": "Method name, e.g. \"authorize\""
+            },
+            "version": {
+              "description": "Exact gem version. Omitted: read from this project's Gemfile.lock.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "class_name",
+            "method_name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_get_offline_docs",
+        "displayName": "Get offline DevDocs documentation",
+        "toolReferenceName": "get_offline_docs",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Looks up a Ruby/Rails method or class in this project's locally cached DevDocs data (.railsforge/devdocs/, downloaded by the extension on activation) — instant, no network call, no tokens spent fetching a web page. Prefer this over get_method_notes/get_gem_documentation when you just need the official signature/description for a Ruby core or Rails framework method; use those for community gotchas or gem-specific (non-Rails) APIs instead.",
+        "userDescription": "Get offline DevDocs documentation",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "symbol_name": {
+              "type": "string",
+              "description": "Bare method name (e.g. \"update_attribute\") or class/module name (e.g. \"ActiveRecord::Base\")"
+            }
+          },
+          "required": [
+            "symbol_name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_get_rbs_signature",
+        "displayName": "Get RBS type signature",
+        "toolReferenceName": "get_rbs_signature",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Returns the RBS (Ruby type signature) declaration for a method, from this project's sig/ directory, if one exists. Use this to check a method's declared parameter/return types before calling it or writing code against it.",
+        "userDescription": "Get RBS type signature",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "method_name": {
+              "type": "string",
+              "description": "Method name, e.g. \"authorize\""
+            },
+            "class_name": {
+              "description": "Class/module name to disambiguate when the same method name is declared on multiple classes",
+              "type": "string"
+            }
+          },
+          "required": [
+            "method_name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_list_rake_tasks",
+        "displayName": "List Rake tasks",
+        "toolReferenceName": "list_rake_tasks",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Lists this project's Rake tasks (name, namespace, description) via `rake -T` — use before suggesting a shell command, to check whether a task for it already exists (e.g. db:migrate, a custom deploy/report task) rather than proposing a new script.",
+        "userDescription": "List Rake tasks",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "filter": {
+              "description": "Only return tasks whose name contains this substring",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_suggest_learning_resource",
+        "displayName": "Suggest a learning resource for a design smell",
+        "toolReferenceName": "suggest_learning_resource",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Given one of RailsForge's own design-principle diagnostic ids (SRP-FAT-CLASS, DEMETER-VIOLATION, KISS-METAPROGRAMMING, YAGNI-UNUSED-PRIVATE — as seen in this project's \"RailsForge Principles\" diagnostics), returns a specific book/chapter recommendation for further reading.",
+        "userDescription": "Suggest a learning resource for a design smell",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "diagnostic_id": {
+              "type": "string",
+              "enum": [
+                "SRP-FAT-CLASS",
+                "DEMETER-VIOLATION",
+                "KISS-METAPROGRAMMING",
+                "YAGNI-UNUSED-PRIVATE"
+              ]
+            }
+          },
+          "required": [
+            "diagnostic_id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_get_project_guidelines",
+        "displayName": "Get project architecture guidelines",
+        "toolReferenceName": "get_project_guidelines",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Returns this project's actual conventions — from .railsforge.yml if the team wrote one, otherwise learned from the codebase's own existing Service Objects (majority base class + entry-point method name, only when the codebase actually agrees on one) — so an AI agent generates a Service Object matching this repo's real pattern (e.g. `Interactor`/`run`) instead of assuming the generic Rails-generator default (`ApplicationService`/`call`). Call this before generating a new Service Object.",
+        "userDescription": "Get project architecture guidelines",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_get_example_file",
+        "displayName": "Get a representative example file for a pattern type",
+        "toolReferenceName": "get_example_file",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Returns the full content of this project's most complete existing Service/Query/Form/Policy/Decorator/Concern, so an AI agent can learn the repo's real style (naming, error handling, how it structures the class) by example instead of guessing. Call this alongside get_project_guidelines before generating a new file of the same pattern type.",
+        "userDescription": "Get a representative example file for a pattern type",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "pattern_type": {
+              "type": "string",
+              "enum": [
+                "service",
+                "query",
+                "form",
+                "policy",
+                "decorator",
+                "concern"
+              ]
+            }
+          },
+          "required": [
+            "pattern_type"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_get_semantic_context",
+        "displayName": "Get Rails application context (semantic graph)",
+        "toolReferenceName": "get_semantic_context",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Returns how the parts of THIS Rails app connect for a file or topic: controller actions with their routes and views, models with table/columns/indexes/foreign keys, associations, validations, callbacks, scopes, related services/policies/specs/migrations and who calls whom. Call this FIRST when asked to change or debug a controller, model, service or query, so the change fits the real structure (e.g. before fixing an N+1 in OrdersController#index). Pass a file path and/or class names/controller#action in query.",
+        "userDescription": "Get Rails application context (semantic graph)",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "file": {
+              "description": "Project-relative or absolute path of the file being worked on",
+              "type": "string"
+            },
+            "query": {
+              "description": "Free text naming classes/tables/actions, e.g. \"N+1 in OrdersController#index\"",
+              "type": "string"
+            },
+            "max_chars": {
+              "type": "integer",
+              "minimum": 500,
+              "maximum": 20000
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_list_skills",
+        "displayName": "List engineering skills (ruby-agent-skills)",
+        "toolReferenceName": "list_skills",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Lists the Ruby/Rails engineering skills available (id, family, one-line description) from the pinned ruby-agent-skills pack plus any project skills in .agents/skills. Use route_skills to pick for a task rather than reading the whole list.",
+        "userDescription": "List engineering skills (ruby-agent-skills)",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "family": {
+              "description": "Only skills of this family, e.g. \"rails\", \"ruby\", \"design\", \"security\"",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_route_skills",
+        "displayName": "Pick the engineering skills for a task",
+        "toolReferenceName": "route_skills",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Given a task description (and optionally the file you are working on), returns the smallest set of ruby-agent-skills that apply — primary, secondary and always-on cross-cutting skills — with the reasons, plus relevant pattern names. Call this at the START of a Ruby/Rails change, then read the skills with get_skill. Uses the semantic graph of this project so a task touching a controller or migration routes accordingly.",
+        "userDescription": "Pick the engineering skills for a task",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "task": {
+              "type": "string",
+              "description": "What the user wants, in their words, e.g. \"fix an N+1 in OrdersController#index\""
+            },
+            "file": {
+              "description": "Active file path, if any",
+              "type": "string"
+            },
+            "max_skills": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            }
+          },
+          "required": [
+            "task"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_get_skill",
+        "displayName": "Read an engineering skill",
+        "toolReferenceName": "get_skill",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Returns a ruby-agent-skills skill: by default its description plus the decision rules, invariants, failure modes and verification steps (compact); with `full` the whole SKILL.md; with `reference` one of its reference files; with `pattern` an implementation pattern (e.g. \"service-object\"). Retired skill ids are resolved automatically.",
+        "userDescription": "Read an engineering skill",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "description": "Skill id, e.g. \"rails-active-record\"",
+              "type": "string"
+            },
+            "full": {
+              "type": "boolean"
+            },
+            "reference": {
+              "description": "Reference file name from the skill, e.g. \"loading-and-performance.md\"",
+              "type": "string"
+            },
+            "pattern": {
+              "description": "Pattern id, e.g. \"service-object\"",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_get_runtime_introspection",
+        "displayName": "Get Rails runtime introspection",
+        "toolReferenceName": "get_runtime_introspection",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Returns what the RUNNING Rails app knows — real ActiveRecord associations, validations, callbacks, routes and middleware — from the cached `rails runner` snapshot (.railsforge/runtime.json). More accurate than static parsing for metaprogrammed models. Only available after the developer ran \"RailsForge: Refresh Rails Runtime Introspection\" (it boots the app, so it is never run automatically).",
+        "userDescription": "Get Rails runtime introspection",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "model": {
+              "description": "Only this model (e.g. \"User\"); omitted: a summary of every model plus routes",
+              "type": "string"
+            },
+            "format": {
+              "type": "string",
+              "enum": [
+                "json",
+                "markdown"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    ],
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "railsforge.mcp",
+        "label": "RailsForge (Rails project context)"
+      }
+    ],
+    "viewsWelcome": [
+      {
+        "view": "railsforge.rakeTasksView",
+        "contents": "No Rake tasks were found. Rake may not be installed in this project's bundle, or the Rakefile defines no described tasks.\n[Refresh](command:railsforge.refreshRakeTasks)\n[Show Logs](command:railsforge.showLogs)"
+      },
+      {
+        "view": "railsforge.gettingStarted",
+        "contents": "RailsForge did not detect a Rails application in the active project (it looks for config/application.rb and `rails` in Gemfile.lock). Ruby, gem and script projects still get RuboCop, tests, analyzers and the AI tools.\n[Run Code Analyzers](command:railsforge.runAnalyzers)\n[Open Ruby Console](command:railsforge.openRailsConsole)\n[Show Toolchain](command:railsforge.openVirtualDoc?%5B%22toolchain%22%5D)",
+        "when": "workbenchState != empty"
+      },
+      {
+        "view": "railsforge.gettingStarted",
+        "contents": "Open a Ruby or Rails project folder to get started.\n[Open Folder](command:workbench.action.files.openFolder)",
+        "when": "workbenchState == empty"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "railsforge.editorSubmenu",
+        "label": "RailsForge"
+      }
+    ],
+    "chatSkills": [
+      {
+        "path": "./dist/skills/skills/rails-active-record/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-action-controller/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-routing/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-associations/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-validations/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-test-engineering/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-database-engineering/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-data-modeling/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-performance/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-security-engineering/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-authorization/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-authentication/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-active-job/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-hotwire/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/rails-architecture/SKILL.md",
+        "when": "railsforge.isRailsApp"
+      },
+      {
+        "path": "./dist/skills/skills/ruby-clean-code/SKILL.md"
+      },
+      {
+        "path": "./dist/skills/skills/ruby-tdd-refactoring/SKILL.md"
+      },
+      {
+        "path": "./dist/skills/skills/ruby-service-objects/SKILL.md"
+      },
+      {
+        "path": "./dist/skills/skills/ruby-debugging/SKILL.md"
+      },
+      {
+        "path": "./dist/skills/skills/stack-minimality/SKILL.md"
+      }
     ]
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^26.6.3",
-    "@types/vscode": "~1.138.0",
+    "@types/vscode": "~1.96.0",
     "@typescript-eslint/eslint-plugin": "^8.71.0",
     "@typescript-eslint/parser": "^8.67.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^4.0.0",
     "copy-webpack-plugin": "^14.0.0",
     "eslint": "^10.11.0",
+    "mocha": "^11.8.0",
     "ts-loader": "^9.5.1",
-    "typescript": "^7.0.2",
+    "typescript": "^6.0.3",
     "vitest": "^5.0.3",
     "webpack": "^5.111.1",
     "webpack-cli": "^7.2.3"

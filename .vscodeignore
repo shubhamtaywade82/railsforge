@@ -22,3 +22,6 @@ examples/**
 .railsforge/**
 .ruby-lsp/**
 package-lock.json
+test-host/**
+tsconfig.host.json
+out/**

@@ -4,6 +4,7 @@
 
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { firstCandidate } from '../util/RubyCommand'
 
 const execFileAsync = promisify(execFile)
 
@@ -23,9 +24,8 @@ export interface BundlerAuditReport {
 
 export class BundlerAuditScanner {
   async runAudit(workspaceRoot: string): Promise<BundlerAuditReport> {
-    const viaBundle = await this.tryAudit('bundle', ['exec', 'bundle-audit', 'check', '--format', 'json'], workspaceRoot)
-    if (viaBundle) {return viaBundle}
-    return (await this.tryAudit('bundle-audit', ['check', '--format', 'json'], workspaceRoot)) ?? {
+    const report = await firstCandidate(workspaceRoot, 'bundle-audit', ['check', '--format', 'json'], (cmd, args) => this.tryAudit(cmd, args, workspaceRoot))
+    return report ?? {
       vulnerabilities: [],
       unpatchedGems: 0,
     }

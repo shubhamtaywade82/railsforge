@@ -174,18 +174,38 @@ describe('RailsAgent provider dispatch', () => {
     expect(systemPrompt).toContain('do not present them as legal advice')
   })
 
-  it('healthCheck reports true for a cloud provider only when a key is configured, without calling fetch', async () => {
-    // No response-shape to validate here (healthCheck only checks res.ok for Ollama,
-    // and doesn't call fetch at all for cloud providers), so a plain spy is enough.
-    const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
+  describe('getProviderStatus (cloud)', () => {
+    const jsonRes = (status: number, body: unknown): Response =>
+      new Response(JSON.stringify(body), { status, statusText: status === 200 ? 'OK' : 'ERR' })
 
-    const withKey = buildAgent({ provider: 'anthropic', getApiKey: async () => 'key' })
-    const withoutKey = buildAgent({ provider: 'anthropic', getApiKey: async () => undefined })
+    it('is unconfigured without a key and never calls fetch', async () => {
+      const fetchMock = vi.fn()
+      vi.stubGlobal('fetch', fetchMock)
+      const status = await buildAgent({ provider: 'anthropic', getApiKey: async () => undefined }).getProviderStatus()
+      expect(status.state).toBe('unconfigured')
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
 
-    expect(await withKey.healthCheck()).toBe(true)
-    expect(await withoutKey.healthCheck()).toBe(false)
-    expect(fetchMock).not.toHaveBeenCalled()
+    it('is authenticated only when the endpoint accepts the key and lists the model', async () => {
+      vi.stubGlobal('fetch', vi.fn(async () => jsonRes(200, { data: [{ id: 'claude-sonnet-4-5' }] })))
+      const agent = buildAgent({ provider: 'anthropic', getApiKey: async () => 'k' })
+      expect((await agent.getProviderStatus()).state).toBe('authenticated')
+      expect(await agent.healthCheck()).toBe(true)
+    })
+
+    it('reports a rejected key, a missing model, and an unreachable endpoint distinctly', async () => {
+      const agent = buildAgent({ provider: 'openai', openaiModel: 'gpt-x', getApiKey: async () => 'k' })
+
+      vi.stubGlobal('fetch', vi.fn(async () => jsonRes(401, {})))
+      expect(await agent.getProviderStatus()).toMatchObject({ state: 'error', detail: expect.stringContaining('rejected') })
+
+      vi.stubGlobal('fetch', vi.fn(async () => jsonRes(200, { data: [{ id: 'gpt-4o' }] })))
+      expect(await agent.getProviderStatus()).toMatchObject({ state: 'error', detail: expect.stringContaining('gpt-x') })
+
+      vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ENOTFOUND') }))
+      expect((await agent.getProviderStatus()).state).toBe('offline')
+      expect(await agent.healthCheck()).toBe(false)
+    })
   })
 
   it(
@@ -382,5 +402,74 @@ describe('RailsAgent provider dispatch', () => {
       .find(m => m.role === 'user')?.content
     expect(prompt).toContain('unexpected end-of-input')
     expect(prompt).toContain('Return a corrected minimal unified diff')
+  })
+})
+
+describe('RailsAgent vscode-lm provider', () => {
+  it('sends the system and user prompts through the injected VS Code LM request', async () => {
+    const vscodeLmRequest = vi.fn(async (_system: string, _prompt: string) => 'model answer')
+    const agent = buildAgent({ provider: 'vscode-lm', vscodeLmRequest })
+    const result = await agent.run('what is a scope?', {})
+    expect(result).toMatchObject({ success: true, response: 'model answer' })
+    expect(vscodeLmRequest).toHaveBeenCalledTimes(1)
+    expect(vscodeLmRequest.mock.calls[0][0]).toContain('RailsForge AI')
+    expect(vscodeLmRequest.mock.calls[0][1]).toBe('what is a scope?')
+  })
+
+  it('reports model errors and a missing LM API as failures, not exceptions', async () => {
+    const failing = buildAgent({ provider: 'vscode-lm', vscodeLmRequest: async () => { throw new Error('consent denied') } })
+    expect(await failing.run('x', {})).toMatchObject({ success: false, response: expect.stringContaining('consent denied') })
+    const unavailable = buildAgent({ provider: 'vscode-lm' })
+    expect(await unavailable.run('x', {})).toMatchObject({ success: false, response: expect.stringContaining('not available') })
+  })
+
+  it('delegates status to the injected check', async () => {
+    const agent = buildAgent({ provider: 'vscode-lm', vscodeLmStatus: async () => ({ state: 'authenticated', detail: 'GPT (copilot)' }) })
+    expect(await agent.getProviderStatus()).toEqual({ state: 'authenticated', detail: 'GPT (copilot)' })
+    expect(await agent.healthCheck()).toBe(true)
+    expect((await buildAgent({ provider: 'vscode-lm' }).getProviderStatus()).state).toBe('error')
+  })
+})
+
+describe('RailsAgent semantic context', () => {
+  it('injects the graph facts into the system prompt (chat and fix) and tolerates failures', async () => {
+    const seen: string[] = []
+    const agent = buildAgent({
+      provider: 'vscode-lm',
+      vscodeLmRequest: async (system) => { seen.push(system); return 'ok' },
+      semanticContext: ({ prompt }) => (prompt.includes('Order') ? '## Rails application facts\n### Order — model' : ''),
+    })
+    await agent.run('speed up Order', { fileName: 'app/models/order.rb' })
+    expect(seen[0]).toContain('### Order — model')
+
+    await agent.run('unrelated', {})
+    expect(seen[1]).not.toContain('Rails application facts')
+
+    await agent.run('fix Order', { isFix: true, diagnosticMessage: 'Style/X in Order', fileContent: 'class Order; end' })
+    expect(seen[2]).toContain('### Order — model')
+
+    const throwing = buildAgent({ provider: 'vscode-lm', vscodeLmRequest: async () => 'fine', semanticContext: () => { throw new Error('graph exploded') } })
+    expect(await throwing.run('x', {})).toMatchObject({ success: true, response: 'fine' })
+  })
+})
+
+describe('RailsAgent skill context', () => {
+  it('passes the chat command through and injects skill guidance into chat and fix prompts', async () => {
+    const seen: string[] = []
+    const requests: Array<{ command?: string; prompt: string }> = []
+    const agent = buildAgent({
+      provider: 'vscode-lm',
+      vscodeLmRequest: async system => { seen.push(system); return 'ok' },
+      skillContext: req => { requests.push({ command: req.command, prompt: req.prompt }); return '## Engineering skills\n### rails-active-record — primary' },
+    })
+    await agent.run('speed this up', { command: 'optimize' })
+    expect(requests[0]).toEqual({ command: 'optimize', prompt: 'speed this up' })
+    expect(seen[0]).toContain('### rails-active-record — primary')
+
+    await agent.run('fix', { isFix: true, diagnosticMessage: 'Style/X', fileContent: 'class A; end' })
+    expect(seen[1]).toContain('### rails-active-record — primary')
+
+    const failing = buildAgent({ provider: 'vscode-lm', vscodeLmRequest: async () => 'fine', skillContext: () => { throw new Error('pack unreadable') } })
+    expect(await failing.run('x', {})).toMatchObject({ success: true })
   })
 })

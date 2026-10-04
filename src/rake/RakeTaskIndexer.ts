@@ -12,6 +12,7 @@
 
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { firstCandidate } from '../util/RubyCommand'
 
 const execFileAsync = promisify(execFile)
 
@@ -37,9 +38,7 @@ export function parseRakeTaskList(stdout: string): RakeTask[] {
 
 export class RakeTaskIndexer {
   async listTasks(workspaceRoot: string): Promise<RakeTask[]> {
-    const viaBundle = await this.tryRake('bundle', ['exec', 'rake', '-T'], workspaceRoot)
-    if (viaBundle) {return viaBundle}
-    return (await this.tryRake('rake', ['-T'], workspaceRoot)) ?? []
+    return (await firstCandidate(workspaceRoot, 'rake', ['-T'], (cmd, args) => this.tryRake(cmd, args, workspaceRoot))) ?? []
   }
 
   private async tryRake(command: string, args: string[], cwd: string): Promise<RakeTask[] | null> {

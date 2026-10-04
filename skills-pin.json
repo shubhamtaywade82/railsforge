@@ -1,0 +1,18 @@
+{
+  "repo": "shubhamtaywade82/ruby-agent-skills",
+  "ref": "dd22f25b435c40e38b28bd5226ef810adf1f4edc",
+  "treeSha256": "fbd3eb7e328d3dbd69296183e5b2d2d6b299a367ff05b7c0d87cffc9396b44e0",
+  "excludeFamilies": [
+    "typescript",
+    "react-typescript"
+  ],
+  "keepSkills": [
+    "rails-react-integration"
+  ],
+  "patternFamilies": [
+    "rails",
+    "ruby-design",
+    "testing",
+    "stack-minimality"
+  ]
+}
