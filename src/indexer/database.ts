@@ -33,7 +33,7 @@ export interface SqliteDatabase {
 export function openIndexDatabase(dbPath: string, readonly = false): SqliteDatabase {
    
   const Database = require('better-sqlite3')
-  const db: SqliteDatabase = new Database(dbPath, { readonly, fileMustExist: readonly })
+  const db: SqliteDatabase = new Database(dbPath, { readonly, fileMustExist: readonly, timeout: 2000 })
   if (!readonly) {
     // WAL is meaningless for :memory: databases (used throughout the test suite) —
     // there's no file for a second connection to read concurrently, and setting it
