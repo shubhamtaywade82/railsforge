@@ -2,11 +2,11 @@
 
 RailsForge layers three things (see the architecture at the end):
 
-| Layer | Owns | Where |
-| --- | --- | --- |
-| Ruby LSP (+ ruby-lsp-rails) | Ruby language facts | not in this repo |
-| **Rails Semantic Graph (RSG)** | Rails *application* facts: controllers/actions/routes/views, models/associations/validations/callbacks, tables/columns/indexes/foreign keys, services/policies/specs/migrations, call/include edges | `src/semantic/` |
-| **ruby-agent-skills** | Engineering decisions, patterns, verification discipline | `src/skills/` + a pinned build in `dist/skills/` |
+| Layer                          | Owns                                                                                                                                                                                                | Where                                            |
+|--------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------|
+| Ruby LSP (+ ruby-lsp-rails)    | Ruby language facts                                                                                                                                                                                 | not in this repo                                 |
+| **Rails Semantic Graph (RSG)** | Rails *application* facts: controllers/actions/routes/views, models/associations/validations/callbacks, tables/columns/indexes/foreign keys, services/policies/specs/migrations, call/include edges | `src/semantic/`                                  |
+| **ruby-agent-skills**          | Engineering decisions, patterns, verification discipline                                                                                                                                            | `src/skills/` + a pinned build in `dist/skills/` |
 
 ## The pinned pack
 
