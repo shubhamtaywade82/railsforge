@@ -75,6 +75,12 @@ jobs:
       - name: Build VSIX Package
         run: pnpm run vsce-package
 
+      # Installs the packaged VSIX into a clean VS Code and checks the *installed* copy (payload,
+      # native modules in Electron, activation, commands, LM tools, MCP server, native AST index).
+      - name: Installed VSIX smoke test
+        if: matrix.node-version == '22.x'
+        run: xvfb-run -a pnpm run vsix-smoke
+
       # Lets a PR reviewer download and manually install/test the exact build a PR
       # produces, without checking it out and building it themselves. Only the
       # Node 22.x build is uploaded — one artifact is enough for manual testing,
@@ -147,6 +153,9 @@ jobs:
 
       - name: Build VSIX Package
         run: pnpm run vsce-package
+
+      - name: Installed VSIX smoke test
+        run: pnpm run vsix-smoke
 
   ruby-addon:
     name: Ruby LSP Add-on (ruby-lsp ${{ matrix.ruby-lsp }})
