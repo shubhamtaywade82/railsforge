@@ -29,14 +29,14 @@ Developers working with Ruby and Rails typically have to install 8 to 12 separat
 
 Quickly jump across related Rails companion files using ergonomic keybindings:
 
-| Action | Keybinding (Linux/Win) | Keybinding (macOS) | Target File |
-| :--- | :--- | :--- | :--- |
-| **Go to Model** | `Alt+R M` | `Cmd+Alt+R M` | `app/models/[resource].rb` |
-| **Go to Controller** | `Alt+R C` | `Cmd+Alt+R C` | `app/controllers/[resource]_controller.rb` |
-| **Go to View** | `Alt+R V` | `Cmd+Alt+R V` | `app/views/[resource]/` |
-| **Go to Spec / Test** | `Alt+R S` | `Cmd+Alt+R S` | `spec/models/[resource]_spec.rb` |
-| **Go to Policy** | `Alt+R P` | `Cmd+Alt+R P` | `app/policies/[resource]_policy.rb` |
-| **Search Routes** | `Alt+R R` | `Cmd+Alt+R R` | Interactive Route Search |
+| Action                | Keybinding (Linux/Win) | Keybinding (macOS) | Target File                                |
+|:----------------------|:-----------------------|:-------------------|:-------------------------------------------|
+| **Go to Model**       | `Alt+R M`              | `Cmd+Alt+R M`      | `app/models/[resource].rb`                 |
+| **Go to Controller**  | `Alt+R C`              | `Cmd+Alt+R C`      | `app/controllers/[resource]_controller.rb` |
+| **Go to View**        | `Alt+R V`              | `Cmd+Alt+R V`      | `app/views/[resource]/`                    |
+| **Go to Spec / Test** | `Alt+R S`              | `Cmd+Alt+R S`      | `spec/models/[resource]_spec.rb`           |
+| **Go to Policy**      | `Alt+R P`              | `Cmd+Alt+R P`      | `app/policies/[resource]_policy.rb`        |
+| **Search Routes**     | `Alt+R R`              | `Cmd+Alt+R R`      | Interactive Route Search                   |
 
 ### 🛣️ 3. Real-Time Route Resolver & Path Helpers
 
@@ -200,27 +200,27 @@ RailsForge builds a graph of how *your* app fits together — route → controll
 
 ## Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
 
-| Command | Identifier |
-| :--- | :--- |
+| Command                                                      | Identifier                             |
+|:-------------------------------------------------------------|:---------------------------------------|
 | **RailsForge: Scan Workspace for Patterns, Smells & Safety** | `railsforge.scanWorkspaceArchitecture` |
-| **RailsForge: Refactor Selection (Design Patterns)** | `railsforge.refactorSelection` |
-| **RailsForge: Go to Matching Model** | `railsforge.goToModel` |
-| **RailsForge: Go to Matching Controller** | `railsforge.goToController` |
-| **RailsForge: Go to Matching View** | `railsforge.goToView` |
-| **RailsForge: Go to Spec / Test** | `railsforge.goToSpec` |
-| **RailsForge: Go to Pundit / CanCanCan Policy** | `railsforge.goToPolicy` |
-| **RailsForge: Go to ViewComponent** | `railsforge.goToComponent` |
-| **RailsForge: Search Rails Routes** | `railsforge.searchRoutes` |
-| **RailsForge: RuboCop Autocorrect File** | `railsforge.rubocopAutocorrect` |
-| **RailsForge: Run Brakeman Security Scan** | `railsforge.runBrakeman` |
-| **RailsForge: Run Gemfile Security Audit (bundle-audit)** | `railsforge.runBundleAudit` |
-| **RailsForge: Check Migration Safety (Strong Migrations)** | `railsforge.analyzeMigration` |
-| **RailsForge: Extract Selection to Service Object** | `railsforge.extractService` |
-| **RailsForge: Extract Selection to Query Object** | `railsforge.extractQuery` |
-| **RailsForge: Set AI Provider API Key** | `railsforge.setAiApiKey` |
-| **RailsForge: Generate OpenAPI Skeleton** | `railsforge.generateApiDocs` |
-| **RailsForge: Bump Gem Version** | `railsforge.bumpGemVersion` |
-| **RailsForge: Release Gem** | `railsforge.releaseGem` |
+| **RailsForge: Refactor Selection (Design Patterns)**         | `railsforge.refactorSelection`         |
+| **RailsForge: Go to Matching Model**                         | `railsforge.goToModel`                 |
+| **RailsForge: Go to Matching Controller**                    | `railsforge.goToController`            |
+| **RailsForge: Go to Matching View**                          | `railsforge.goToView`                  |
+| **RailsForge: Go to Spec / Test**                            | `railsforge.goToSpec`                  |
+| **RailsForge: Go to Pundit / CanCanCan Policy**              | `railsforge.goToPolicy`                |
+| **RailsForge: Go to ViewComponent**                          | `railsforge.goToComponent`             |
+| **RailsForge: Search Rails Routes**                          | `railsforge.searchRoutes`              |
+| **RailsForge: RuboCop Autocorrect File**                     | `railsforge.rubocopAutocorrect`        |
+| **RailsForge: Run Brakeman Security Scan**                   | `railsforge.runBrakeman`               |
+| **RailsForge: Run Gemfile Security Audit (bundle-audit)**    | `railsforge.runBundleAudit`            |
+| **RailsForge: Check Migration Safety (Strong Migrations)**   | `railsforge.analyzeMigration`          |
+| **RailsForge: Extract Selection to Service Object**          | `railsforge.extractService`            |
+| **RailsForge: Extract Selection to Query Object**            | `railsforge.extractQuery`              |
+| **RailsForge: Set AI Provider API Key**                      | `railsforge.setAiApiKey`               |
+| **RailsForge: Generate OpenAPI Skeleton**                    | `railsforge.generateApiDocs`           |
+| **RailsForge: Bump Gem Version**                             | `railsforge.bumpGemVersion`            |
+| **RailsForge: Release Gem**                                  | `railsforge.releaseGem`                |
 
 Several of these only show in the palette for the relevant project type — see [FEATURES.md §6](FEATURES.md#6-command-palette-reference).
 
@@ -377,11 +377,11 @@ disposed when its folder is removed.
 
 Three GitHub Actions workflows guard this repo:
 
-| Workflow | Triggers | What it does |
-| :--- | :--- | :--- |
-| [`ci.yml`](.github/workflows/ci.yml) | Every push to `master`, every pull request (any base branch) | Lint, type-check, compile, `vitest run`, and a full VSIX package build — on Node 20.x and 22.x. Uploads the built `.vsix` as a downloadable build artifact so a reviewer can install and manually test a PR's exact build. A separate job syntax-checks and `gem build`s `ruby-lsp-addon/`. |
-| [`codeql.yml`](.github/workflows/codeql.yml) | Push to `master`, every PR, weekly schedule | Static security analysis (CodeQL) over the TypeScript extension and the Ruby add-on. |
-| [`release.yml`](.github/workflows/release.yml) | Push of a `v*` tag | Two jobs: `verify` re-runs lint/type-check/test, checks the tag version matches `package.json`, and builds the VSIX; `publish` (gated behind a `release` environment — see below) creates the GitHub Release and publishes to the VS Code Marketplace / Open VSX if the corresponding secret is set. |
+| Workflow                                       | Triggers                                                     | What it does                                                                                                                                                                                                                                                                                         |
+|:-----------------------------------------------|:-------------------------------------------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [`ci.yml`](.github/workflows/ci.yml)           | Every push to `master`, every pull request (any base branch) | Lint, type-check, compile, `vitest run`, and a full VSIX package build — on Node 20.x and 22.x. Uploads the built `.vsix` as a downloadable build artifact so a reviewer can install and manually test a PR's exact build. A separate job syntax-checks and `gem build`s `ruby-lsp-addon/`.          |
+| [`codeql.yml`](.github/workflows/codeql.yml)   | Push to `master`, every PR, weekly schedule                  | Static security analysis (CodeQL) over the TypeScript extension and the Ruby add-on.                                                                                                                                                                                                                 |
+| [`release.yml`](.github/workflows/release.yml) | Push of a `v*` tag                                           | Two jobs: `verify` re-runs lint/type-check/test, checks the tag version matches `package.json`, and builds the VSIX; `publish` (gated behind a `release` environment — see below) creates the GitHub Release and publishes to the VS Code Marketplace / Open VSX if the corresponding secret is set. |
 
 **Cutting a release:**
 1. Bump `"version"` in `package.json` to the new version.
