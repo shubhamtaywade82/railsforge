@@ -27,7 +27,14 @@ describe('RailsForge Features End-to-End in Extension Host', function () {
     if (folder) {
       const cursorDir = path.join(folder.uri.fsPath, '.cursor')
       if (fs.existsSync(cursorDir)) {
-        fs.rmSync(cursorDir, { recursive: true, force: true })
+        // Best-effort cleanup after the assertions have run. On Windows the VS Code file watcher can
+        // still hold the freshly written directory open, so retry on EPERM/EBUSY instead of failing
+        // an otherwise green suite.
+        try {
+          fs.rmSync(cursorDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
+        } catch (err) {
+          console.warn(`could not remove ${cursorDir}: ${err instanceof Error ? err.message : String(err)}`)
+        }
       }
     }
   })
