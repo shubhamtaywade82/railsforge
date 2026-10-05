@@ -609,7 +609,7 @@
         },
         {
           "id": "railsforge.patternCatalogView",
-          "name": "Design Patterns (Refactoring Guru)"
+          "name": "Design Patterns"
         },
         {
           "id": "railsforge.rakeTasksView",
@@ -760,6 +760,17 @@
         "category": "RailsForge"
       },
       {
+        "command": "railsforge.openPattern",
+        "title": "RailsForge: Open Design Pattern Explanation",
+        "category": "RailsForge"
+      },
+      {
+        "command": "railsforge.explainPattern",
+        "title": "Explain Pattern in Chat",
+        "category": "RailsForge",
+        "icon": "$(comment-discussion)"
+      },
+      {
         "command": "railsforge.extractService",
         "title": "RailsForge: Extract Selection to Service Object",
         "category": "RailsForge"
@@ -772,7 +783,8 @@
       {
         "command": "railsforge.generateServiceObject",
         "title": "RailsForge: Generate New Service Object",
-        "category": "RailsForge"
+        "category": "RailsForge",
+        "icon": "$(add)"
       },
       {
         "command": "railsforge.showRuntimeIntrospection",
@@ -869,6 +881,14 @@
     ],
     "menus": {
       "commandPalette": [
+        {
+          "command": "railsforge.explainPattern",
+          "when": "false"
+        },
+        {
+          "command": "railsforge.openPattern",
+          "when": "false"
+        },
         {
           "command": "railsforge.setAiApiKey",
           "when": "railsforge.aiProvider != 'ollama'"
@@ -968,6 +988,18 @@
         {
           "command": "railsforge.openVirtualDoc",
           "when": "workbenchState != empty"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "railsforge.explainPattern",
+          "when": "view == railsforge.patternCatalogView && viewItem =~ /^pattern(\\.generate)?$/",
+          "group": "inline@1"
+        },
+        {
+          "command": "railsforge.generateServiceObject",
+          "when": "view == railsforge.patternCatalogView && viewItem == pattern.generate",
+          "group": "inline@2"
         }
       ],
       "view/title": [

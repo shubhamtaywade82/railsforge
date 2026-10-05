@@ -14,11 +14,16 @@ import { readCachedSnapshot } from '../rails/RuntimeIntrospectionService'
 import { projectVersionManager } from '../util/RubyCommand'
 import {
   VIRTUAL_DOC_KINDS, VIRTUAL_DOC_SCHEME, VirtualDocKind, parseVirtualDocKind, renderRoutesDoc,
-  renderRuntimeDoc, renderSchemaDoc, renderToolchainDoc, virtualDocPath,
+  parsePatternDocId, patternDocPath, renderRuntimeDoc, renderSchemaDoc, renderToolchainDoc, virtualDocPath,
 } from './VirtualDocs'
+import { getCatalogPattern, renderPatternDoc, toProjectInstances } from '../patterns/PatternCatalog'
 
 export function virtualDocUri(kind: VirtualDocKind, root: string): vscode.Uri {
   return vscode.Uri.from({ scheme: VIRTUAL_DOC_SCHEME, path: virtualDocPath(kind), query: new URLSearchParams({ root }).toString() })
+}
+
+export function patternDocUri(id: string, root: string): vscode.Uri {
+  return vscode.Uri.from({ scheme: VIRTUAL_DOC_SCHEME, path: patternDocPath(id), query: new URLSearchParams({ root }).toString() })
 }
 
 import { ToolContext } from '../mcp/tools/ToolContext'
@@ -33,8 +38,17 @@ export class VirtualDocsProvider implements vscode.TextDocumentContentProvider, 
   constructor(private readonly contexts: PerRootRegistry<ToolContext>) {}
 
   provideTextDocumentContent(uri: vscode.Uri): string {
-    const kind = parseVirtualDocKind(uri.path)
     const root = new URLSearchParams(uri.query).get('root')
+    const patternId = parsePatternDocId(uri.path)
+    if (patternId) {
+      const pattern = getCatalogPattern(patternId)
+      if (!pattern || !root) {return '# RailsForge\n\n_Unknown pattern._\n'}
+      const instances = pattern.projectKind
+        ? toProjectInstances(this.contexts.get(root).loadPatternIndexer().getPatternsByType(pattern.projectKind), root)
+        : undefined
+      return renderPatternDoc(pattern, instances)
+    }
+    const kind = parseVirtualDocKind(uri.path)
     if (!kind || !root) {return '# RailsForge\n\n_Unknown virtual document._\n'}
 
     switch (kind) {

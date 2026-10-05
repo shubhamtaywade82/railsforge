@@ -7,6 +7,13 @@ import { ProjectEnvironment, formatProjectType } from '../environment/Environmen
 import { SchemaIndexer } from '../rails/SchemaIndexer'
 import { RoutesIndexer, RailsRoute } from '../rails/RoutesIndexer'
 import { StimulusIndexer } from '../hotwire/StimulusIndexer'
+import { VirtualDocKind } from './VirtualDocs'
+
+/** Clicking a row opens the matching read-only `railsforge:` document in the editor. */
+function opensDoc<T extends vscode.TreeItem>(item: T, kind: VirtualDocKind): T {
+  item.command = { command: 'railsforge.openVirtualDoc', title: 'Open in Editor', arguments: [kind] }
+  return item
+}
 
 export class ArchitectureItem extends vscode.TreeItem {
   constructor(
@@ -79,12 +86,12 @@ export class RailsArchitectureTreeProvider implements vscode.TreeDataProvider<Ar
         `${this.schemaIndexer.getAllTables().length} Tables Indexed`,
         new vscode.ThemeIcon('database'),
       ),
-      new ArchitectureItem(
+      opensDoc(new ArchitectureItem(
         'Code Analysis (AST index)',
         vscode.TreeItemCollapsibleState.None,
         this.getAstIndexStatus(),
         new vscode.ThemeIcon('symbol-structure'),
-      ),
+      ), 'graph'),
       new ArchitectureItem(
         'Routes & Hotwire',
         vscode.TreeItemCollapsibleState.Collapsed,
@@ -96,31 +103,31 @@ export class RailsArchitectureTreeProvider implements vscode.TreeDataProvider<Ar
 
   private getEnvironmentItems(): ArchitectureItem[] {
     return [
-      new ArchitectureItem(`Ruby: ${this.env.rubyVersion}`, vscode.TreeItemCollapsibleState.None),
-      new ArchitectureItem(`Toolchain: ${this.getToolchain()}`, vscode.TreeItemCollapsibleState.None),
-      new ArchitectureItem(`Rails: ${this.env.hasRails ? this.env.railsVersion : 'Not detected (standalone Ruby project)'}`, vscode.TreeItemCollapsibleState.None),
-      new ArchitectureItem(`Project Type: ${formatProjectType(this.env.projectType)}`, vscode.TreeItemCollapsibleState.None),
-      new ArchitectureItem(`Hotwire / Turbo: ${this.env.hasHotwire ? 'Active ✓' : 'Inactive ✗'}`, vscode.TreeItemCollapsibleState.None),
-      new ArchitectureItem(`Testing Framework: ${this.env.testFramework.toUpperCase()}`, vscode.TreeItemCollapsibleState.None),
-      new ArchitectureItem(`Strong Migrations: ${this.env.hasStrongMigrations ? 'Enabled ✓' : 'Disabled ✗'}`, vscode.TreeItemCollapsibleState.None),
+      opensDoc(new ArchitectureItem(`Ruby: ${this.env.rubyVersion}`, vscode.TreeItemCollapsibleState.None), 'toolchain'),
+      opensDoc(new ArchitectureItem(`Toolchain: ${this.getToolchain()}`, vscode.TreeItemCollapsibleState.None), 'toolchain'),
+      opensDoc(new ArchitectureItem(`Rails: ${this.env.hasRails ? this.env.railsVersion : 'Not detected (standalone Ruby project)'}`, vscode.TreeItemCollapsibleState.None), 'toolchain'),
+      opensDoc(new ArchitectureItem(`Project Type: ${formatProjectType(this.env.projectType)}`, vscode.TreeItemCollapsibleState.None), 'toolchain'),
+      opensDoc(new ArchitectureItem(`Hotwire / Turbo: ${this.env.hasHotwire ? 'Active ✓' : 'Inactive ✗'}`, vscode.TreeItemCollapsibleState.None), 'toolchain'),
+      opensDoc(new ArchitectureItem(`Testing Framework: ${this.env.testFramework.toUpperCase()}`, vscode.TreeItemCollapsibleState.None), 'toolchain'),
+      opensDoc(new ArchitectureItem(`Strong Migrations: ${this.env.hasStrongMigrations ? 'Enabled ✓' : 'Disabled ✗'}`, vscode.TreeItemCollapsibleState.None), 'toolchain'),
     ]
   }
 
   private getDatabaseItems(): ArchitectureItem[] {
     return this.schemaIndexer.getAllTables().map(t => {
       const colCount = t.columns.size
-      return new ArchitectureItem(
+      return opensDoc(new ArchitectureItem(
         t.name,
         vscode.TreeItemCollapsibleState.None,
         `${colCount} columns`,
         new vscode.ThemeIcon('table'),
-      )
+      ), 'schema')
     })
   }
 
   private getRoutesHotwireItems(): ArchitectureItem[] {
     const items: ArchitectureItem[] = [
-      new ArchitectureItem(`Total Routes: ${this.routesIndexer.getAllRoutes().length}`, vscode.TreeItemCollapsibleState.None, undefined, new vscode.ThemeIcon('symbol-namespace')),
+      opensDoc(new ArchitectureItem(`Total Routes: ${this.routesIndexer.getAllRoutes().length}`, vscode.TreeItemCollapsibleState.None, undefined, new vscode.ThemeIcon('symbol-namespace')), 'routes'),
     ]
 
     const byController = new Map<string, RailsRoute[]>()
@@ -158,11 +165,11 @@ export class RailsArchitectureTreeProvider implements vscode.TreeDataProvider<Ar
   private getRoutesForController(controller: string): ArchitectureItem[] {
     return this.routesIndexer.getAllRoutes()
       .filter(r => r.controller === controller)
-      .map(r => new ArchitectureItem(
+      .map(r => opensDoc(new ArchitectureItem(
         `${r.verb} ${r.uriPattern}`,
         vscode.TreeItemCollapsibleState.None,
         r.action,
         new vscode.ThemeIcon('symbol-method'),
-      ))
+      ), 'routes'))
   }
 }

@@ -76,6 +76,7 @@ Dedicated Activity Bar Panel displaying:
 - **Runtime Environment:** Active Ruby, Rails, Hotwire, Testing framework, and migration safety status.
 - **Database & Models:** Indexed table counts and column breakdowns.
 - **Routes & Hotwire:** Route counts and registered Stimulus controller mappings.
+- **Click-through:** every row opens the matching read-only document in the editor (`railsforge:/toolchain.md`, `schema.md`, `routes.md`, `graph.md`) instead of just labelling a number.
 
 ### 🛡️ 9. DevSecOps & Zero-Downtime Migration Safety
 
@@ -89,9 +90,13 @@ Dedicated Activity Bar Panel displaying:
 - **Extract to Service Object:** Select business logic in controllers or models and extract it into a clean `app/services/[name]_service.rb` implementing the `ApplicationService.call` pattern.
 - **Extract to Query Object:** Move complex ActiveRecord query chains into `app/queries/[name]_query.rb`.
 
+### 📚 11. Design Patterns Sidebar (in the editor)
+
+The **Design Patterns** view lists 17 patterns (Service, Query, Form, Value and Policy objects, plus Strategy, Command, Observer, State, Template Method, Chain of Responsibility, Adapter, Facade, Decorator, Factory Method, Builder and Singleton). Selecting one opens an explanation **in the editor** (`railsforge:/pattern/<id>.md`): intent, when to use it, what to watch out for, a Ruby example, and the classes **in your project** that follow it (each links to its file). Pattern nodes expand to those classes; **Explain in chat** sends the pattern text — and nothing from your project — to your configured AI provider. The text is original to RailsForge; Refactoring.Guru is linked as a reference only.
+
 ### 🧩 12. Living Pattern Catalog ("How We Do X Here")
 
-Unlike the static Refactoring Guru catalog (§10), this indexes **your own project's**
+Unlike a static reference catalog, this indexes **your own project's**
 `app/services`, `app/queries`, `app/forms`, `app/policies`, `app/decorators`, and
 concerns as you work:
 

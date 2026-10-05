@@ -121,7 +121,18 @@ export interface RailsAgentContext {
   skillContext?: string
   diagnosticMessage?: string
   isFix?: boolean
+  /**
+   * Send only the prompt: no schema, routes, project patterns, semantic graph, skills or file
+   * content reach the model. Used for requests whose text is self-contained (pattern explanations).
+   */
+  isolated?: boolean
 }
+
+const ISOLATED_SYSTEM_PROMPT = [
+  'You are RailsForge AI, a senior Ruby on Rails engineering assistant.',
+  'Answer using only the notes in the user message. You have no access to the user\'s project; do not guess about their code.',
+  'Be concise and concrete.',
+].join('\n')
 
 export interface RailsAgentResult {
   success: boolean
@@ -149,6 +160,13 @@ export class RailsAgent {
 
   async run(prompt: string, context: RailsAgentContext): Promise<RailsAgentResult> {
     const startedAt = Date.now()
+    if (context.isolated) {
+      const systemPrompt = ISOLATED_SYSTEM_PROMPT
+      const provider = this.config.provider ?? 'ollama'
+      this.log('debug', `[AI] ${provider} isolated request: model=${this.modelFor(provider)}, prompt=${prompt.length} chars`)
+      const { success, response } = await this.chatCompletion(systemPrompt, prompt)
+      return { success, response, iterations: success ? 1 : 0 }
+    }
     if (context.semanticContext === undefined && this.config.semanticContext) {
       try {
         context = { ...context, semanticContext: await this.config.semanticContext({ prompt: `${prompt}\n${context.diagnosticMessage ?? ''}`, fileName: context.fileName, workspaceRoot: context.workspaceRoot }) }

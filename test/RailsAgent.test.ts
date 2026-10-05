@@ -473,3 +473,41 @@ describe('RailsAgent skill context', () => {
     expect(await failing.run('x', {})).toMatchObject({ success: true })
   })
 })
+
+describe('RailsAgent isolated requests', () => {
+  it('send only the prompt: no schema, routes, project patterns, graph or skills reach the model', async () => {
+    const schema = new SchemaIndexer()
+    schema.parseSchema('ActiveRecord::Schema.define do\n  create_table "secret_payroll" do |t|\n    t.string "ssn"\n  end\nend\n')
+    const routes = new RoutesIndexer()
+    routes.parseRoutesDsl('Rails.application.routes.draw do\n  resources :hidden_things\nend\n')
+    const semanticContext = vi.fn(() => 'GRAPH-SECRET')
+    const skillContext = vi.fn(() => 'SKILL-SECRET')
+    const vscodeLmRequest = vi.fn(async (_system: string, _prompt: string) => 'explained')
+
+    const agent = new RailsAgent(schema, routes, {
+      ollamaHost: 'http://localhost:11434', model: 'm', provider: 'vscode-lm', vscodeLmRequest, semanticContext, skillContext,
+    })
+    const result = await agent.run('Explain the Strategy pattern', {
+      isolated: true, fileContent: 'FILE-SECRET', fileName: 'secret.rb', selection: 'SEL-SECRET', workspaceRoot: '/proj',
+    })
+
+    expect(result).toMatchObject({ success: true, response: 'explained' })
+    expect(semanticContext).not.toHaveBeenCalled()
+    expect(skillContext).not.toHaveBeenCalled()
+    const [system, prompt] = vscodeLmRequest.mock.calls[0]
+    expect(prompt).toBe('Explain the Strategy pattern')
+    for (const secret of ['secret_payroll', 'hidden_things', 'GRAPH-SECRET', 'SKILL-SECRET', 'FILE-SECRET', 'SEL-SECRET', 'secret.rb']) {
+      expect(system).not.toContain(secret)
+      expect(prompt).not.toContain(secret)
+    }
+  })
+
+  it('non-isolated requests still include project context (guards against the flag leaking)', async () => {
+    const schema = new SchemaIndexer()
+    schema.parseSchema('ActiveRecord::Schema.define do\n  create_table "widgets" do |t|\n    t.string "name"\n  end\nend\n')
+    const vscodeLmRequest = vi.fn(async (_system: string, _prompt: string) => 'ok')
+    const agent = new RailsAgent(schema, new RoutesIndexer(), { ollamaHost: 'x', model: 'm', provider: 'vscode-lm', vscodeLmRequest })
+    await agent.run('hello', {})
+    expect(vscodeLmRequest.mock.calls[0][0]).toContain('widgets')
+  })
+})

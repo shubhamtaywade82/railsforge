@@ -42,7 +42,7 @@ import { routeSkills } from './skills/SkillRouter'
 import { buildSkillContext } from './skills/SkillContextBuilder'
 import { ProjectState } from './util/ProjectState'
 import { VIRTUAL_DOC_KINDS, VIRTUAL_DOC_SCHEME, VirtualDocKind } from './views/VirtualDocs'
-import { VirtualDocsProvider, virtualDocUri } from './views/VirtualDocsProvider'
+import { VirtualDocsProvider, patternDocUri, virtualDocUri } from './views/VirtualDocsProvider'
 import { showRuntimeSnapshot } from './rails/RuntimeIntrospectionService'
 import { RAILSFORGE_TASK_TYPE, RailsTaskProvider } from './tasks/RailsTaskProvider'
 import { GENERATORS, GeneratorMode, buildGeneratorArgs, parseAttributes, parseGeneratorOutput, validateGeneratorName } from './rails/RailsGenerators'
@@ -55,7 +55,8 @@ import { DesignPrincipleLinter } from './principles/DesignPrincipleLinter'
 import { VersionDocsEngine } from './docs/VersionDocsEngine'
 import { FactoryBotResolver } from './testing/FactoryBotResolver'
 import { RailsArchitectureTreeProvider } from './views/RailsArchitectureTreeProvider'
-import { PatternCatalogTreeProvider } from './views/PatternCatalogTreeProvider'
+import { PatternCatalogTreeProvider, PatternItem } from './views/PatternCatalogTreeProvider'
+import { explainPatternPrompt, getCatalogPattern, toProjectInstances } from './patterns/PatternCatalog'
 import { PatternDiagnosticsProvider } from './patterns/PatternDiagnosticsProvider'
 import { ProjectPatternIndexer } from './patterns/ProjectPatternIndexer'
 import { PatternCodeLensProvider } from './patterns/PatternCodeLensProvider'
@@ -423,12 +424,52 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     () => describeAstIndex(persistentIndexes.state(activeProject.root)),
     () => describeToolchain(activeProject.root),
   )
+  // Pattern catalog: explanations open in the editor; pattern nodes expand to this project's own
+  // classes. The per-root index is cached and dropped when matching files change.
+  const patternIndexCache = new Map<string, ProjectPatternIndexer>()
+  const patternCatalogTree = new PatternCatalogTreeProvider({
+    getRoot: () => activeWorkspaceRoot(),
+    loadInstances: (root, kind) => {
+      let index = patternIndexCache.get(root)
+      if (!index) {
+        index = semanticContexts.get(root).loadPatternIndexer()
+        patternIndexCache.set(root, index)
+      }
+      return toProjectInstances(index.getPatternsByType(kind), root)
+    },
+  })
+  let patternRefreshTimer: NodeJS.Timeout | undefined
+  const invalidatePatterns = (): void => {
+    clearTimeout(patternRefreshTimer)
+    patternRefreshTimer = setTimeout(() => { patternIndexCache.clear(); patternCatalogTree.refresh() }, 300)
+  }
+  const patternWatcher = vscode.workspace.createFileSystemWatcher('**/{services,queries,forms,policies,decorators,concerns}/**/*.rb')
+  context.subscriptions.push(
+    patternWatcher,
+    patternWatcher.onDidCreate(invalidatePatterns),
+    patternWatcher.onDidChange(invalidatePatterns),
+    patternWatcher.onDidDelete(invalidatePatterns),
+    { dispose: () => clearTimeout(patternRefreshTimer) },
+    vscode.commands.registerCommand('railsforge.openPattern', async (id: string) => {
+      const root = activeWorkspaceRoot()
+      if (!root || !getCatalogPattern(id)) { return }
+      const doc = await vscode.workspace.openTextDocument(patternDocUri(id, root))
+      await vscode.window.showTextDocument(doc, { preview: true })
+    }),
+    vscode.commands.registerCommand('railsforge.explainPattern', async (target: PatternItem | string) => {
+      const pattern = getCatalogPattern(typeof target === 'string' ? target : target?.patternId ?? '')
+      if (!pattern) { return }
+      // Only the catalog text is sent: no file, schema, routes or project context (isolated).
+      await chatViewProvider.sendExternalPrompt(explainPatternPrompt(pattern), { isolated: true })
+    }),
+  )
+
   const rakeTaskIndexer = new RakeTaskIndexer()
   const rakeTaskTreeProvider = new RakeTaskTreeProvider(rakeTaskIndexer, workspaceRoot)
 
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('railsforge.architectureView', architectureTreeProvider),
-    vscode.window.registerTreeDataProvider('railsforge.patternCatalogView', new PatternCatalogTreeProvider()),
+    vscode.window.registerTreeDataProvider('railsforge.patternCatalogView', patternCatalogTree),
     vscode.window.registerTreeDataProvider('railsforge.rakeTasksView', rakeTaskTreeProvider),
   )
   void vscode.commands.executeCommand('setContext', 'railsforge.hasRakefile', workspaceRoot && fs.existsSync(path.join(workspaceRoot, 'Rakefile')))
@@ -440,6 +481,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     if (!newRoot || newRoot === activeProject.root) {return}
     Logger.info(`[workspace] Active project: ${activeProject.root} -> ${newRoot}`)
     activeProject.root = newRoot
+    patternCatalogTree.refresh()
 
     const fresh = envDetector.detectEnvironment(newRoot)
     const override = readConfig().projectTypeOverride

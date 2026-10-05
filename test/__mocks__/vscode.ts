@@ -154,3 +154,17 @@ export const commands = {
   registerCommand: () => ({ dispose: () => {} }),
   executeCommand: () => Promise.resolve(),
 }
+
+export class EventEmitter<T> {
+  private listeners: Array<(e: T) => void> = []
+  readonly event = (listener: (e: T) => void): { dispose(): void } => {
+    this.listeners.push(listener)
+    return { dispose: () => { this.listeners = this.listeners.filter(l => l !== listener) } }
+  }
+  fire(e?: T): void { for (const l of this.listeners) { l(e as T) } }
+  dispose(): void { this.listeners = [] }
+}
+
+export const Uri = {
+  file: (fsPath: string) => ({ scheme: 'file', fsPath, path: fsPath.replace(/\\/g, '/'), toString: () => `file://${fsPath}` }),
+}
