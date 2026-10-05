@@ -76,6 +76,7 @@ Dedicated Activity Bar Panel displaying:
 - **Runtime Environment:** Active Ruby, Rails, Hotwire, Testing framework, and migration safety status.
 - **Database & Models:** Indexed table counts and column breakdowns.
 - **Routes & Hotwire:** Route counts and registered Stimulus controller mappings.
+- **Click-through:** every row opens the matching read-only document in the editor (`railsforge:/toolchain.md`, `schema.md`, `routes.md`, `graph.md`) instead of just labelling a number.
 
 ### 🛡️ 9. DevSecOps & Zero-Downtime Migration Safety
 
@@ -89,9 +90,13 @@ Dedicated Activity Bar Panel displaying:
 - **Extract to Service Object:** Select business logic in controllers or models and extract it into a clean `app/services/[name]_service.rb` implementing the `ApplicationService.call` pattern.
 - **Extract to Query Object:** Move complex ActiveRecord query chains into `app/queries/[name]_query.rb`.
 
+### 📚 11. Design Patterns Sidebar (in the editor)
+
+The **Design Patterns** view lists 17 patterns (Service, Query, Form, Value and Policy objects, plus Strategy, Command, Observer, State, Template Method, Chain of Responsibility, Adapter, Facade, Decorator, Factory Method, Builder and Singleton). Selecting one opens an explanation **in the editor** (`railsforge:/pattern/<id>.md`): intent, when to use it, what to watch out for, a Ruby example, and the classes **in your project** that follow it (each links to its file). Pattern nodes expand to those classes; **Explain in chat** sends the pattern text — and nothing from your project — to your configured AI provider. The text is original to RailsForge; Refactoring.Guru is linked as a reference only.
+
 ### 🧩 12. Living Pattern Catalog ("How We Do X Here")
 
-Unlike the static Refactoring Guru catalog (§10), this indexes **your own project's**
+Unlike a static reference catalog, this indexes **your own project's**
 `app/services`, `app/queries`, `app/forms`, `app/policies`, `app/decorators`, and
 concerns as you work:
 
@@ -381,14 +386,14 @@ Three GitHub Actions workflows guard this repo:
 |:-----------------------------------------------|:-------------------------------------------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | [`ci.yml`](.github/workflows/ci.yml)           | Every push to `master`, every pull request (any base branch) | Lint, type-check, compile, `vitest run`, and a full VSIX package build — on Node 20.x and 22.x. Uploads the built `.vsix` as a downloadable build artifact so a reviewer can install and manually test a PR's exact build. A separate job syntax-checks and `gem build`s `ruby-lsp-addon/`.          |
 | [`codeql.yml`](.github/workflows/codeql.yml)   | Push to `master`, every PR, weekly schedule                  | Static security analysis (CodeQL) over the TypeScript extension and the Ruby add-on.                                                                                                                                                                                                                 |
-| [`release.yml`](.github/workflows/release.yml) | Push of a `v*` tag                                           | Two jobs: `verify` re-runs lint/type-check/test, checks the tag version matches `package.json`, and builds the VSIX; `publish` (gated behind a `release` environment — see below) creates the GitHub Release and publishes to the VS Code Marketplace / Open VSX if the corresponding secret is set. |
+| [`release.yml`](.github/workflows/release.yml) | Push of a `v*` tag                                           | Two jobs: `verify` re-runs lint/type-check/test, checks the tag version matches `package.json` and that `CHANGELOG.md` has a section for it, builds the VSIX, **installs it into a clean VS Code and smoke-tests the installed copy** (`pnpm run vsix-smoke`), and records its sha256; `publish` (gated behind a `release` environment — see below) re-verifies that the VSIX is byte-identical to the smoke-tested one, creates the GitHub Release and publishes to the VS Code Marketplace / Open VSX if the corresponding secret is set. |
 
 **Cutting a release:**
-1. Bump `"version"` in `package.json` to the new version.
+1. Bump `"version"` in `package.json` and rename `## Unreleased` in `CHANGELOG.md` to `## X.Y.Z`.
 2. Commit, merge to `master`.
-3. Tag it and push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
-4. The `verify` job runs automatically. If the tag/`package.json` versions don't match, it fails fast before anything is built or published.
-5. The `publish` job then runs — see below for how to require a manual approval before it actually publishes anything.
+3. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z` for a stable release, or `git tag vX.Y.Z-pre && git push origin vX.Y.Z-pre` for a **Marketplace pre-release** (`package.json` still says `X.Y.Z`; the `-pre` suffix only selects `--pre-release` publishing and marks the GitHub Release as a pre-release).
+4. `verify` runs automatically; a tag/`package.json` mismatch, a missing changelog section, a failing test or a failing installed-VSIX smoke test stops the release before anything is published.
+5. `publish` then runs — see below for how to require a manual approval before it actually publishes anything.
 
 **One-time repo setup** (not something this repo's code can configure for you):
 - **`release` environment** (Settings → Environments → New environment named `release`, add required reviewers): without this, `publish` runs immediately after `verify` passes with no human check. With it, publishing to the Marketplace/Open VSX pauses for approval — recommended, since un-publishing a bad version afterward is much harder than a 30-second approval click.

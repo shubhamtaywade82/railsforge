@@ -127,6 +127,18 @@ describe('RailsForge in a real Extension Host', function () {
     assert.ok(!text.includes('betas'), 'rails_b schema leaked into the rails_a tool call')
   })
 
+  it('opens a design pattern explanation in the editor (not a browser) for the active project', async () => {
+    await openFile('rails_a', 'app/models/alphas.rb')
+    await vscode.commands.executeCommand('railsforge.openPattern', 'service-object')
+    const doc = vscode.window.activeTextEditor?.document
+    assert.ok(doc, 'no editor opened')
+    assert.strictEqual(doc.uri.scheme, 'railsforge')
+    const text = doc.getText()
+    assert.ok(text.startsWith('# Service Object'), text.slice(0, 80))
+    assert.ok(text.includes('## In this project'), 'project section missing')
+    assert.ok(text.includes('```ruby'), 'example missing')
+  })
+
   it('serves read-only virtual project documents per root', async () => {
     const folders = vscode.workspace.workspaceFolders ?? []
     const a = folders.find(f => f.uri.fsPath.endsWith('rails_a'))!.uri.fsPath

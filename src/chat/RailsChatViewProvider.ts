@@ -45,9 +45,9 @@ export class RailsChatViewProvider implements vscode.WebviewViewProvider {
     void this.postStatus()
   }
 
-  public async sendExternalPrompt(prompt: string): Promise<void> {
+  public async sendExternalPrompt(prompt: string, options: { isolated?: boolean } = {}): Promise<void> {
     await vscode.commands.executeCommand('railsforge.chatView.focus')
-    await this.processPrompt(prompt, true)
+    await this.processPrompt(prompt, !options.isolated, options.isolated)
   }
 
   private async handleMessage(msg: WebviewMessage): Promise<void> {
@@ -102,7 +102,7 @@ export class RailsChatViewProvider implements vscode.WebviewViewProvider {
     return parts.join('\n\n')
   }
 
-  private async processPrompt(prompt: string, includeContext: boolean): Promise<void> {
+  private async processPrompt(prompt: string, includeContext: boolean, isolated = false): Promise<void> {
     const editor = vscode.window.activeTextEditor
     let activeCode = ''
     let fileName = ''
@@ -118,14 +118,15 @@ export class RailsChatViewProvider implements vscode.WebviewViewProvider {
     void this.view?.webview.postMessage({ type: 'startStreaming' })
     Logger.info(`[Chat] "${prompt}"`)
 
-    const mentionCtx = this.buildMentionContext(prompt, activeCode)
-    const cleanPrompt = prompt.replace(/@(file|schema|routes|patterns)\b/g, '').trim()
+    // Isolated prompts (pattern explanations) carry only their own text: no @mentions are expanded
+    // and no project context is attached.
+    const mentionCtx = isolated ? '' : this.buildMentionContext(prompt, activeCode)
+    const cleanPrompt = isolated ? prompt : prompt.replace(/@(file|schema|routes|patterns)\b/g, '').trim()
     const groundedContent = mentionCtx ? `${mentionCtx}\n\n---\n\nUser: ${cleanPrompt}` : activeCode
 
-    const result = await this.agent.run(cleanPrompt, {
-      fileContent: groundedContent, fileName, selection,
-      workspaceRoot: activeWorkspaceRoot(),
-    })
+    const result = await this.agent.run(cleanPrompt, isolated
+      ? { isolated: true }
+      : { fileContent: groundedContent, fileName, selection, workspaceRoot: activeWorkspaceRoot() })
 
     if (!result.success) { Logger.warn(`[Chat] error: ${result.response}`) }
     void this.view?.webview.postMessage({ type: 'appendMessage', sender: 'assistant', text: result.response, success: result.success })

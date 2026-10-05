@@ -68,3 +68,13 @@ export function parseVirtualDocKind(uriPath: string): VirtualDocKind | undefined
   const m = /^\/(routes|schema|runtime|toolchain|graph)\.md$/.exec(uriPath)
   return m ? (m[1] as VirtualDocKind) : undefined
 }
+
+/** `railsforge:/pattern/<id>.md?root=<encoded>` — one catalog pattern, rendered with the project's own instances. */
+export function patternDocPath(id: string): string {
+  return `/pattern/${id}.md`
+}
+
+export function parsePatternDocId(uriPath: string): string | undefined {
+  const m = /^\/pattern\/([a-z0-9-]+)\.md$/.exec(uriPath)
+  return m ? m[1] : undefined
+}

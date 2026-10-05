@@ -1,5 +1,9 @@
 name: Release
 
+# Tags:  vX.Y.Z      -> stable release
+#        vX.Y.Z-pre  -> Marketplace pre-release (package.json must say X.Y.Z; vsce rejects semver suffixes)
+# The VSIX that passes the installed-package smoke test is the exact file that gets published
+# (artifact + sha256 re-verified in the publish job).
 on:
   push:
     tags:
@@ -12,6 +16,8 @@ jobs:
 
     outputs:
       version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      vsix_sha256: ${{ steps.hash.outputs.sha256 }}
 
     steps:
       - name: Checkout Repository
@@ -22,10 +28,10 @@ jobs:
         with:
           version: 10
 
-      - name: Setup Node.js 20.x
+      - name: Setup Node.js 22.x
         uses: actions/setup-node@v7
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: 'pnpm'
 
       - name: Install Dependencies
@@ -39,14 +45,24 @@ jobs:
         id: version
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PRERELEASE=false
+          if [[ "$TAG_VERSION" == *-pre ]]; then
+            PRERELEASE=true
+            TAG_VERSION="${TAG_VERSION%-pre}"
+          fi
           PKG_VERSION="$(node -p "require('./package.json').version")"
-          echo "Tag version: $TAG_VERSION"
+          echo "Tag version: $TAG_VERSION (pre-release: $PRERELEASE)"
           echo "package.json version: $PKG_VERSION"
           if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
             echo "::error::Tag $GITHUB_REF_NAME (version $TAG_VERSION) does not match package.json's version ($PKG_VERSION). Bump package.json and re-tag."
             exit 1
           fi
+          if ! grep -q "^## $PKG_VERSION\b" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## $PKG_VERSION' section. Rename 'Unreleased' before tagging."
+            exit 1
+          fi
           echo "version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
 
       - name: Run ESLint
         run: pnpm run lint
@@ -59,12 +75,27 @@ jobs:
 
       - name: Build Production Package
         run: pnpm run vsce-package
+        env:
+          RAILSFORGE_REQUIRE_SKILLS: '1'
+
+      # Gate: install the built VSIX into a clean VS Code and verify the installed copy
+      # (payload, native modules in Electron, activation, commands, LM tools, MCP server, AST index).
+      - name: Installed VSIX smoke test
+        run: xvfb-run -a pnpm run vsix-smoke
+
+      - name: Record VSIX checksum
+        id: hash
+        run: |
+          sha256sum railsforge.vsix | tee railsforge.vsix.sha256
+          echo "sha256=$(sha256sum railsforge.vsix | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v7
         with:
           name: railsforge-vsix
-          path: railsforge.vsix
+          path: |
+            railsforge.vsix
+            railsforge.vsix.sha256
           retention-days: 90
 
   publish:
@@ -84,34 +115,61 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v7
 
-      - name: Setup Node.js 20.x
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Setup Node.js 22.x
         uses: actions/setup-node@v7
         with:
-          node-version: 20.x
+          node-version: 22.x
+          cache: 'pnpm'
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Download VSIX artifact
         uses: actions/download-artifact@v8
         with:
           name: railsforge-vsix
 
+      # Publish exactly the bytes the smoke test ran against.
+      - name: Verify VSIX is the smoke-tested build
+        env:
+          EXPECTED: ${{ needs.verify.outputs.vsix_sha256 }}
+        run: |
+          ACTUAL="$(sha256sum railsforge.vsix | cut -d' ' -f1)"
+          echo "expected $EXPECTED"
+          echo "actual   $ACTUAL"
+          [ "$ACTUAL" = "$EXPECTED" ] || { echo "::error::VSIX differs from the smoke-tested build"; exit 1; }
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          files: railsforge.vsix
+          files: |
+            railsforge.vsix
+            railsforge.vsix.sha256
           draft: false
-          prerelease: false
+          prerelease: ${{ needs.verify.outputs.prerelease == 'true' }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to VS Code Marketplace
         if: env.VSCE_PAT != ''
-        run: npx vsce publish -p ${{ secrets.VSCE_PAT }} --packagePath railsforge.vsix
+        run: pnpm exec vsce publish --packagePath railsforge.vsix ${{ needs.verify.outputs.prerelease == 'true' && '--pre-release' || '' }}
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Marketplace publish skipped (no VSCE_PAT)
+        if: env.VSCE_PAT == ''
+        run: echo "::warning::VSCE_PAT is not set — the GitHub Release was created but nothing was published to the VS Code Marketplace."
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
       - name: Publish to Open VSX Registry
         if: env.OVSX_PAT != ''
-        run: npx ovsx publish railsforge.vsix -p ${{ secrets.OVSX_PAT }}
+        run: pnpm dlx ovsx publish railsforge.vsix ${{ needs.verify.outputs.prerelease == 'true' && '--pre-release' || '' }}
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
