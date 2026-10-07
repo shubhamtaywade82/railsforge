@@ -12,6 +12,7 @@
  */
 
 import * as fs from 'fs'
+import * as path from 'path'
 import { execSync } from 'child_process'
 
 const REQUIRED_NAPI_VERSION = 10
@@ -133,6 +134,24 @@ export function getPersistentIndexSupport(): PersistentIndexSupport {
 
   cachedSupport = { supported: true }
   return cachedSupport
+}
+
+/** Native modules the AST index needs a prebuilt binary for (shipped under dist/node_modules/<m>/prebuilds). */
+export const AST_INDEX_NATIVE_MODULES: readonly string[] = ['better-sqlite3', 'tree-sitter', 'tree-sitter-ruby']
+
+/** True when `<nodeModulesDir>/<mod>/prebuilds` has a binary for `<platform>-<arch>`. */
+export function hasPrebuild(nodeModulesDir: string, mod: string, platform: string = process.platform, arch: string = process.arch): boolean {
+  const key = `${platform}-${arch}`
+  try {
+    return fs.readdirSync(path.join(nodeModulesDir, mod, 'prebuilds')).some(name => name === key || name.startsWith(`${key}.`))
+  } catch {
+    return false
+  }
+}
+
+/** Modules without a prebuilt binary for this platform (empty = all present). */
+export function missingPrebuilds(nodeModulesDir: string, platform: string = process.platform, arch: string = process.arch): string[] {
+  return AST_INDEX_NATIVE_MODULES.filter(mod => !hasPrebuild(nodeModulesDir, mod, platform, arch))
 }
 
 export function isPersistentIndexSupported(): boolean {

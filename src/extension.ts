@@ -56,6 +56,8 @@ import { VersionDocsEngine } from './docs/VersionDocsEngine'
 import { FactoryBotResolver } from './testing/FactoryBotResolver'
 import { RailsArchitectureTreeProvider } from './views/RailsArchitectureTreeProvider'
 import { PatternCatalogTreeProvider, PatternItem } from './views/PatternCatalogTreeProvider'
+import { collectDiagnostics } from './diagnostics/collect'
+import { renderDiagnosticsDoc } from './diagnostics/Diagnostics'
 import { explainPatternPrompt, getCatalogPattern, toProjectInstances } from './patterns/PatternCatalog'
 import { PatternDiagnosticsProvider } from './patterns/PatternDiagnosticsProvider'
 import { ProjectPatternIndexer } from './patterns/ProjectPatternIndexer'
@@ -466,6 +468,36 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     }),
   )
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand('railsforge.diagnoseEnvironment', async () => {
+      const cfg = readConfig()
+      const root = activeWorkspaceRoot()
+      const projectEnv = root ? envDetector.detectEnvironment(root) : undefined
+      const info = collectDiagnostics({
+        context,
+        activeRoot: root,
+        astRoots: Object.fromEntries(persistentIndexes.roots().map(r => [r, persistentIndexes.state(r).status])),
+        project: {
+          root,
+          rubyVersion: projectEnv?.rubyVersion ?? 'unknown',
+          railsVersion: projectEnv?.hasRails ? projectEnv.railsVersion : 'unknown',
+          projectType: projectEnv?.projectType ?? 'unknown',
+          testFramework: projectEnv?.testFramework ?? 'unknown',
+          versionManager: root ? projectVersionManager(root) : 'none',
+          launcher: root ? describeToolchain(root) : 'n/a',
+        },
+        skills: readSkillsInfo(context.extensionPath),
+        ai: {
+          provider: cfg.aiProvider,
+          model: activeAiModel(cfg),
+          hasApiKey: cfg.aiProvider === 'ollama' || cfg.aiProvider === 'vscode-lm' ? false : Boolean(await context.secrets.get(aiApiKeySecretKey(cfg.aiProvider))),
+        },
+      })
+      const doc = await vscode.workspace.openTextDocument({ content: renderDiagnosticsDoc(info), language: 'markdown' })
+      await vscode.window.showTextDocument(doc, { preview: true })
+    }),
+  )
+
   const rakeTaskIndexer = new RakeTaskIndexer()
   const rakeTaskTreeProvider = new RakeTaskTreeProvider(rakeTaskIndexer, workspaceRoot)
 
@@ -792,6 +824,29 @@ async function suggestRubyLspAddon(context: vscode.ExtensionContext, root: strin
   }
   if (choice) {
     void context.globalState.update(dismissedKey, true)
+  }
+}
+
+
+/** Provider-specific model label for diagnostics (never includes keys or endpoints). */
+function activeAiModel(cfg: ReturnType<typeof readConfig>): string {
+  switch (cfg.aiProvider) {
+    case 'openai': return cfg.aiOpenaiModel
+    case 'anthropic': return cfg.aiAnthropicModel
+    case 'vscode-lm': return cfg.aiVscodeLmFamily || 'default (model picker)'
+    default: return cfg.ollamaModel
+  }
+}
+
+/** Bundled ruby-agent-skills pack identity, or undefined when the pack is missing. */
+function readSkillsInfo(extensionPath: string): { sha: string; skillCount: number } | undefined {
+  try {
+    const dir = path.join(extensionPath, 'dist', 'skills')
+    const pin = JSON.parse(fs.readFileSync(path.join(dir, '.pin.json'), 'utf8')) as { ref?: string }
+    const catalog = JSON.parse(fs.readFileSync(path.join(dir, 'catalog.json'), 'utf8')) as { skills?: Record<string, unknown> }
+    return { sha: pin.ref ?? 'unknown', skillCount: Object.keys(catalog.skills ?? {}).length }
+  } catch {
+    return undefined
   }
 }
 

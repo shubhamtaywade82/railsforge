@@ -133,6 +133,15 @@ export async function run(): Promise<void> {
       const missing = contributed.filter(n => !live.has(n))
       assert.deepStrictEqual(missing, [], `LM tools not registered: ${missing.join(', ')}`)
     } },
+    { name: 'Diagnose Environment reports the packaged native modules as loaded', fn: async () => {
+      await vscode.commands.executeCommand('railsforge.diagnoseEnvironment')
+      const text = vscode.window.activeTextEditor?.document.getText() ?? ''
+      assert.ok(text.startsWith('# RailsForge diagnostics'), text.slice(0, 80))
+      for (const mod of ['better-sqlite3', 'tree-sitter', 'tree-sitter-ruby']) {
+        assert.ok(text.includes(`${mod} loads`), `${mod} not reported as loading:\n${text}`)
+      }
+      assert.ok(!text.includes('❌'), `diagnostics contain errors:\n${text}`)
+    } },
     { name: 'bundled MCP server starts and lists tools over stdio', fn: async () => {
       const tools = await mcpListTools(path.join(root, 'dist', 'mcp', 'server.js'), workspaceRoot)
       assert.ok(tools.length > 0, 'MCP tools/list returned nothing')

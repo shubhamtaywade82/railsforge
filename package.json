@@ -760,6 +760,11 @@
         "category": "RailsForge"
       },
       {
+        "command": "railsforge.diagnoseEnvironment",
+        "title": "RailsForge: Diagnose Environment",
+        "category": "RailsForge"
+      },
+      {
         "command": "railsforge.openPattern",
         "title": "RailsForge: Open Design Pattern Explanation",
         "category": "RailsForge"
