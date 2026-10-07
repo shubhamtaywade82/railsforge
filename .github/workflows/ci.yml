@@ -82,6 +82,12 @@ jobs:
         if: matrix.node-version == '22.x'
         run: xvfb-run -a pnpm run test:host
 
+      # Restricted Mode, for real: VS Code launched with workspace trust ON on a workspace full of fake Ruby tools.
+      # Untrusted: read-only features work and no tool runs. Control run (trusted): the same commands do run them.
+      - name: Restricted Mode host test
+        if: matrix.node-version == '22.x'
+        run: xvfb-run -a pnpm run test:restricted
+
       - name: Build VSIX Package
         run: pnpm run vsce-package
 

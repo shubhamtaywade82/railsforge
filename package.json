@@ -20,8 +20,30 @@
   },
   "capabilities": {
     "untrustedWorkspaces": {
-      "supported": false,
-      "description": "RailsForge runs project tooling (RuboCop, Bundler, Rails, test runners, rake) and project-defined configuration, which can execute code from the workspace. Open the folder as trusted to enable it."
+      "supported": "limited",
+      "description": "In Restricted Mode RailsForge is read-only: navigation, schema/routes, the semantic graph, the pattern catalog, virtual documents and AI chat work, but nothing that runs project code does (RuboCop, Bundler, Rails, rake, test runners, debugging, terminals, rails runner). Settings that choose which program or server RailsForge talks to are ignored from the workspace until it is trusted.",
+      "restrictedConfigurations": [
+        "railsForge.ollama.host",
+        "railsForge.ai.provider",
+        "railsForge.ai.openai.baseUrl",
+        "railsForge.apidock.baseUrl",
+        "railsForge.rubydoc.baseUrl",
+        "railsForge.devdocs.baseUrl",
+        "railsForge.devdocs.dataBaseUrl",
+        "railsForge.ruby.versionManager",
+        "railsForge.testing.framework",
+        "railsForge.rubocop.autocorrectOnSave",
+        "railsForge.rubocop.mode",
+        "railsForge.brakeman.scanOnSave",
+        "railsForge.types.steepEnabled",
+        "railsForge.types.steepScanOnSave",
+        "railsForge.analyzers.enabled",
+        "railsForge.analyzers.paths",
+        "railsForge.runtime.introspection.enabled",
+        "railsForge.skills.extraPaths",
+        "railsForge.types.rbsSigDir",
+        "railsForge.mcp.enabled"
+      ]
     }
   },
   "categories": [
@@ -66,7 +88,8 @@
     "skills:fetch": "node scripts/fetch-skills.mjs",
     "test:host:stable": "pnpm run compile && tsc -p tsconfig.host.json && vscode-test --label stable",
     "native-smoke": "node scripts/native-smoke.cjs",
-    "vsix-smoke": "tsc -p tsconfig.host.json && node scripts/vsix-smoke.mjs"
+    "vsix-smoke": "tsc -p tsconfig.host.json && node scripts/vsix-smoke.mjs",
+    "test:restricted": "tsc -p tsconfig.host.json && node scripts/restricted-host-test.mjs && node scripts/restricted-host-test.mjs --trusted"
   },
   "contributes": {
     "languages": [
@@ -664,6 +687,7 @@
       {
         "command": "railsforge.releaseGem",
         "title": "RailsForge: Release Gem (bundle exec rake release)",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
@@ -694,6 +718,7 @@
       {
         "command": "railsforge.fixAllInFile",
         "title": "RailsForge: Fix All Deterministic Principle Violations in File",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
@@ -749,16 +774,19 @@
       {
         "command": "railsforge.rubocopAutocorrect",
         "title": "RailsForge: RuboCop Autocorrect File",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
         "command": "railsforge.runBrakeman",
         "title": "RailsForge: Run Brakeman Security Scan",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
         "command": "railsforge.runBundleAudit",
         "title": "RailsForge: Run Gemfile.lock Security Audit (bundle-audit)",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
@@ -816,11 +844,13 @@
       {
         "command": "railsforge.refreshRuntimeIntrospection",
         "title": "RailsForge: Refresh Rails Runtime Introspection (boots the app)",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
         "command": "railsforge.runAnalyzers",
         "title": "RailsForge: Run Code Analyzers (Reek, Flog, Flay, Debride, Standard)",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
@@ -831,11 +861,13 @@
       {
         "command": "railsforge.generate",
         "title": "RailsForge: Rails Generate…",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
         "command": "railsforge.destroyGenerated",
         "title": "RailsForge: Rails Destroy…",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
@@ -861,17 +893,20 @@
       {
         "command": "railsforge.refreshRakeTasks",
         "title": "RailsForge: Refresh Rake Tasks",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge",
         "icon": "$(refresh)"
       },
       {
         "command": "railsforge.openRailsConsole",
         "title": "RailsForge: Open Console (Pry/IRB/Rails)",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
         "command": "railsforge.evaluateInREPL",
         "title": "RailsForge: Evaluate Selection in REPL",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
@@ -882,11 +917,13 @@
       {
         "command": "railsforge.runSteepCheck",
         "title": "RailsForge: Run Steep Type Check",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
         "command": "railsforge.generateRBS",
         "title": "RailsForge: Generate RBS Signatures for File",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
@@ -1749,6 +1786,11 @@
       }
     ],
     "viewsWelcome": [
+      {
+        "view": "railsforge.rakeTasksView",
+        "contents": "RailsForge is in read-only mode because this workspace is not trusted, so Rake tasks are not listed or run.\n[Manage Workspace Trust](command:workbench.trust.manage)",
+        "when": "railsforge.restricted"
+      },
       {
         "view": "railsforge.rakeTasksView",
         "contents": "No Rake tasks were found. Rake may not be installed in this project's bundle, or the Rakefile defines no described tasks.\n[Refresh](command:railsforge.refreshRakeTasks)\n[Show Logs](command:railsforge.showLogs)"

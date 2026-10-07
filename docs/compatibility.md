@@ -11,7 +11,7 @@ Run **RailsForge: Diagnose Environment** to see how your own machine measures up
 | VS Code | `^1.96.0` (engines floor) — tested on 1.96.0 (Linux) and the latest stable (Linux, Windows, macOS) |
 | Cursor / VSCodium / other forks | Not tested; the extension only uses stable VS Code APIs, so they should work when built on VS Code ≥ 1.96 |
 | Remote (SSH, WSL, Dev Containers) | Native modules load on the remote host, so the **remote** OS/arch must be in the table below |
-| Workspace Trust | Runs in untrusted workspaces in a read-only mode (nothing executes project code) |
+| Workspace Trust | Runs in Restricted Mode as a read-only tier: navigation, schema/routes, the semantic graph, patterns, virtual documents and AI chat work; RuboCop, Bundler, rake, rails, tests, debugging, terminals, `rails runner` and tasks are off until the workspace is trusted. Verified by `pnpm run test:restricted` (real VS Code, fake tools that must never run) |
 
 ## Platforms
 

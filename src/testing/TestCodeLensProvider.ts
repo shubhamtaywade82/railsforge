@@ -3,9 +3,12 @@
  */
 
 import * as vscode from 'vscode'
+import { isWorkspaceTrusted } from '../workspace/Trust'
 
 export class TestCodeLensProvider implements vscode.CodeLensProvider {
   provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
+    // Run/Debug lenses launch project code: not offered in Restricted Mode.
+    if (!isWorkspaceTrusted()) {return []}
     if (!document.fileName.endsWith('_spec.rb') && !document.fileName.endsWith('_test.rb')) {
       return []
     }

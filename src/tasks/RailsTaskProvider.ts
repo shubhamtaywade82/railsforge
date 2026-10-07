@@ -9,6 +9,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { EnvironmentDetector } from '../environment/EnvironmentDetector'
 import { rubyCandidates } from '../util/RubyCommand'
+import { isWorkspaceTrusted } from '../workspace/Trust'
 import { RailsTaskSpec, buildCustomTask, buildTaskCatalog } from './RailsTaskCatalog'
 
 export const RAILSFORGE_TASK_TYPE = 'railsforge'
@@ -22,6 +23,8 @@ export class RailsTaskProvider implements vscode.TaskProvider {
   private readonly detector = new EnvironmentDetector()
 
   provideTasks(): vscode.Task[] {
+    // Tasks run project code; offer none in Restricted Mode (VS Code also refuses to run them).
+    if (!isWorkspaceTrusted()) {return []}
     const tasks: vscode.Task[] = []
     for (const folder of vscode.workspace.workspaceFolders ?? []) {
       const root = folder.uri.fsPath
@@ -40,6 +43,7 @@ export class RailsTaskProvider implements vscode.TaskProvider {
   }
 
   resolveTask(task: vscode.Task): vscode.Task | undefined {
+    if (!isWorkspaceTrusted()) {return undefined}
     const def = task.definition as RailsForgeTaskDefinition
     const folder = typeof task.scope === 'object' && task.scope && 'uri' in task.scope
       ? task.scope as vscode.WorkspaceFolder

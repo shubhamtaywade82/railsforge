@@ -3,10 +3,10 @@
  */
 
 import * as vscode from 'vscode'
+import { createProjectTerminal, sendToTerminal } from './workspace/ProjectTerminal'
 import * as fs from 'fs'
 import * as path from 'path'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
+import { execFileAsync } from './util/ProjectProcess'
 
 import { SchemaIndexer } from './rails/SchemaIndexer'
 import { RoutesIndexer } from './rails/RoutesIndexer'
@@ -57,6 +57,7 @@ import { FactoryBotResolver } from './testing/FactoryBotResolver'
 import { RailsArchitectureTreeProvider } from './views/RailsArchitectureTreeProvider'
 import { PatternCatalogTreeProvider, PatternItem } from './views/PatternCatalogTreeProvider'
 import { createLoopTools } from './agent/LoopTools'
+import { isWorkspaceTrusted, setBlockedListener, setTrustProvider } from './workspace/Trust'
 import { collectDiagnostics } from './diagnostics/collect'
 import { renderDiagnosticsDoc } from './diagnostics/Diagnostics'
 import { explainPatternPrompt, getCatalogPattern, toProjectInstances } from './patterns/PatternCatalog'
@@ -117,7 +118,6 @@ import { diffLines, filterFixHunks, applyHunks } from './patch/LineDiff'
 import { rubySyntaxError } from './util/RubySyntax'
 import { handleWorkspaceAutoOptimization, optimizeRailsWorkspace } from './workspace/WorkspaceOptimizer'
 
-const execFileAsync = promisify(execFile)
 
 /** Applies railsForge.log.level and railsForge.log.file immediately, without a reload. */
 function applyLogSettings(config: RailsForgeConfig, workspaceRoot: string): void {
@@ -144,6 +144,10 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   skillsPackDir = path.join(context.extensionPath, 'dist', 'skills')
   setVersionManagerSettingProvider(() => readConfig().rubyVersionManager)
   Logger.init(context)
+  // Must be first: from here on every process/terminal/debug launch asks VS Code whether the workspace is trusted.
+  setTrustProvider(() => vscode.workspace.isTrusted)
+  setBlockedListener(action => Logger.info(`[trust] refused in Restricted Mode: ${action}`))
+  setUpRestrictedMode(context)
   const config = readConfig()
   Logger.setLevel(config.logLevel)
   const schemaIndexer = new SchemaIndexer()
@@ -640,7 +644,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     }, delayMs))
   }
   const scheduleRubocopLint = (doc: vscode.TextDocument, delayMs: number): void => {
-    if (doc.languageId !== 'ruby') {return}
+    if (doc.languageId !== 'ruby' || !isWorkspaceTrusted()) {return}
     const key = `rubocop:${doc.uri.toString()}`
     const existing = lintTimers.get(key)
     if (existing) {clearTimeout(existing)}
@@ -667,6 +671,9 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   vscode.workspace.onDidSaveTextDocument(doc => {
     if (doc.languageId !== 'ruby') {return}
     const saveConfig = readConfig()
+    // Everything below runs project tooling (RuboCop loads the project's `require:` files, Brakeman and Steep go
+    // through `bundle exec`): nothing starts in Restricted Mode.
+    if (!isWorkspaceTrusted()) {return}
     if (saveConfig.rubocopAutocorrectOnSave) {
       void rubocopProvider.autoCorrectFile(doc.uri, saveConfig.rubocopMode)
     }
@@ -830,6 +837,30 @@ async function suggestRubyLspAddon(context: vscode.ExtensionContext, root: strin
   }
 }
 
+
+
+/**
+ * Restricted Mode: the extension runs in a read-only tier (see workspace/Trust.ts). Tell the user once, keep the
+ * status bar honest, and offer a reload when trust is granted so the project tooling comes up cleanly.
+ */
+function setUpRestrictedMode(context: vscode.ExtensionContext): void {
+  void vscode.commands.executeCommand('setContext', 'railsforge.restricted', !vscode.workspace.isTrusted)
+  if (!vscode.workspace.isTrusted) {
+    Logger.info('[trust] Restricted Mode: RailsForge runs read-only (no RuboCop, rake, rails, tests, terminals or debugging).')
+    void vscode.window
+      .showInformationMessage(
+        'RailsForge is running in read-only mode because this workspace is not trusted. Navigation, schema/routes, the semantic graph, patterns and AI chat work; anything that runs project code (RuboCop, rake, rails, tests, terminals) is off.',
+        'Manage Workspace Trust',
+      )
+      .then(choice => { if (choice === 'Manage Workspace Trust') {void vscode.commands.executeCommand('workbench.trust.manage')} })
+  }
+  context.subscriptions.push(vscode.workspace.onDidGrantWorkspaceTrust(() => {
+    void vscode.commands.executeCommand('setContext', 'railsforge.restricted', false)
+    void vscode.window
+      .showInformationMessage('RailsForge: workspace trusted. Reload the window to enable project tooling (RuboCop, rake, tests, Rails generators).', 'Reload Window')
+      .then(choice => { if (choice === 'Reload Window') {void vscode.commands.executeCommand('workbench.action.reloadWindow')} })
+  }))
+}
 
 /** Provider-specific model label for diagnostics (never includes keys or endpoints). */
 function activeAiModel(cfg: ReturnType<typeof readConfig>): string {
@@ -1692,9 +1723,9 @@ function registerCommands(
       )
       if (choice !== 'Run rake release') {return}
 
-      const term = vscode.window.createTerminal({ name: 'RailsForge Release', cwd: root })
+      const term = createProjectTerminal({ name: 'RailsForge Release', cwd: root })
       term.show()
-      term.sendText(rubyTerminalCommand(root, 'rake', ['release'], currentShellKind()))
+      sendToTerminal(term, rubyTerminalCommand(root, 'rake', ['release'], currentShellKind()))
     }),
     vscode.commands.registerCommand('railsforge.showLogs', () => {
       Logger.show()
@@ -2389,9 +2420,9 @@ function registerCommands(
       }
     }),
     vscode.commands.registerCommand('railsforge.runSingleTest', (uri: vscode.Uri, line: number) => {
-      const term = createProjectTerminal('RailsForge Test', uri)
+      const term = openProjectTerminal('RailsForge Test', uri)
       term.show()
-      term.sendText(buildSingleTestCommand(uri, line, env))
+      sendToTerminal(term, buildSingleTestCommand(uri, line, env))
     }),
     vscode.commands.registerCommand('railsforge.debugSingleTest', (uri: vscode.Uri, line: number) => {
       const { tool, args } = singleTestInvocation(uri, line, env)
@@ -2485,25 +2516,25 @@ function registerCommands(
     vscode.commands.registerCommand('railsforge.destroyGenerated', () => runRailsGenerator('destroy', rubocop)),
     vscode.commands.registerCommand('railsforge.runRakeTask', (taskName: string) => {
       if (!taskName) {return}
-      const term = createProjectTerminal('RailsForge Rake')
+      const term = openProjectTerminal('RailsForge Rake')
       term.show()
-      term.sendText(rubyTerminalCommand(activeWorkspaceRoot() ?? '', 'rake', [taskName], currentShellKind()))
+      sendToTerminal(term, rubyTerminalCommand(activeWorkspaceRoot() ?? '', 'rake', [taskName], currentShellKind()))
     }),
     vscode.commands.registerCommand('railsforge.refreshRakeTasks', () => {
       rakeTaskTreeProvider.refresh()
     }),
     vscode.commands.registerCommand('railsforge.openRailsConsole', () => {
-      const term = createProjectTerminal('RailsForge Console')
+      const term = openProjectTerminal('RailsForge Console')
       term.show()
       const consoleRoot = activeWorkspaceRoot() ?? ''
       const kind = currentShellKind()
       if (env.hasRails) {
-        term.sendText(rubyTerminalCommand(consoleRoot, 'rails', ['console'], kind))
+        sendToTerminal(term, rubyTerminalCommand(consoleRoot, 'rails', ['console'], kind))
       } else if (env.hasPry) {
-        term.sendText(rubyTerminalCommand(consoleRoot, 'pry', [], kind))
+        sendToTerminal(term, rubyTerminalCommand(consoleRoot, 'pry', [], kind))
       } else {
         const irb = rubyTerminalCommand(consoleRoot, 'irb', [], kind)
-        term.sendText(kind === 'powershell' ? irb : `${irb} || irb`)
+        sendToTerminal(term, kind === 'powershell' ? irb : `${irb} || irb`)
       }
     }),
     vscode.commands.registerCommand('railsforge.evaluateInREPL', () => {
@@ -2515,9 +2546,9 @@ function registerCommands(
       const code = editor.document.getText(editor.selection.isEmpty ? editor.document.lineAt(editor.selection.active.line).range : editor.selection)
       if (!code.trim()) {return}
 
-      const term = vscode.window.activeTerminal ?? vscode.window.createTerminal('RailsForge Console')
+      const term = vscode.window.activeTerminal ?? openProjectTerminal('RailsForge Console')
       term.show()
-      term.sendText(code, true)
+      sendToTerminal(term, code, true)
     }),
     vscode.commands.registerCommand('railsforge.applyRubocopStyleGuide', async () => {
       const root = activeWorkspaceRoot()
@@ -2912,8 +2943,8 @@ function buildSingleTestCommand(uri: vscode.Uri, line: number, env: ProjectEnvir
 }
 
 /** Terminal rooted at the project that owns `uri` (never an arbitrary first folder). */
-function createProjectTerminal(name: string, uri?: vscode.Uri): vscode.Terminal {
-  return vscode.window.createTerminal({ name, cwd: workspaceRootFor(uri) })
+function openProjectTerminal(name: string, uri?: vscode.Uri): vscode.Terminal {
+  return createProjectTerminal({ name, cwd: workspaceRootFor(uri) })
 }
 
 function navigateCompanion(mvc: MVCNavigator, targetType: string): void {
