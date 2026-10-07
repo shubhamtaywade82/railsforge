@@ -44,7 +44,7 @@ import { ProjectState } from './util/ProjectState'
 import { VIRTUAL_DOC_KINDS, VIRTUAL_DOC_SCHEME, VirtualDocKind } from './views/VirtualDocs'
 import { VirtualDocsProvider, patternDocUri, virtualDocUri } from './views/VirtualDocsProvider'
 import { showRuntimeSnapshot } from './rails/RuntimeIntrospectionService'
-import { RAILSFORGE_TASK_TYPE, RailsTaskProvider } from './tasks/RailsTaskProvider'
+import { RailsTaskProvider } from './tasks/RailsTaskProvider'
 import { GENERATORS, GeneratorMode, buildGeneratorArgs, parseAttributes, parseGeneratorOutput, validateGeneratorName } from './rails/RailsGenerators'
 import { firstCandidate, projectVersionManager, setVersionManagerSettingProvider, rubyCandidates, rubyTerminalCommand } from './util/RubyCommand'
 import { ShellKind, shellKindFromPath, hasPathSegment } from './util/ShellCommand'
@@ -747,7 +747,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
       await vscode.window.showTextDocument(doc, { preview: true })
     }),
   )
-  context.subscriptions.push(vscode.tasks.registerTaskProvider(RAILSFORGE_TASK_TYPE, new RailsTaskProvider()))
+  // Task Provider registration migrated to ProviderRegistry (enableTerminalTasks).
 
   // 6. Status Bar
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)
@@ -785,6 +785,11 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
       // the RefactoringEditProvider (atomic, previewable WorkspaceEdits).
       codeActions: (index, catalog) => new PrincipleCodeActionProvider(index, catalog, sharedEditProvider),
     },
+    // Migrated from direct `vscode.tasks.registerTaskProvider` call: the RailsTaskProvider
+    // is now registered via TerminalTasksProvider, which also exposes the background-
+    // terminal automation API (worktree setup, silent rails CLI).
+    enableTerminalTasks: true,
+    taskProviderFactory: () => new RailsTaskProvider(),
   })
   providerRegistry.activate()
   context.subscriptions.push(providerRegistry)
