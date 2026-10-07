@@ -19,6 +19,13 @@ updates:
           - 'tree-sitter-ruby'
           - '@vscode/vsce'
     open-pull-requests-limit: 10
+    ignore:
+      # TypeScript 7 breaks ts-loader, typescript-eslint and vsce; adopt deliberately, not via a bot PR.
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major']
+      # @types/vscode must stay at or below engines.vscode (1.96): newer typings let the code use APIs
+      # that don't exist on the minimum supported editor. Bump together with engines.vscode.
+      - dependency-name: '@types/vscode'
 
   - package-ecosystem: 'bundler'
     directory: '/ruby-lsp-addon'

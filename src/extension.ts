@@ -786,7 +786,7 @@ async function suggestRubyLspAddon(context: vscode.ExtensionContext, root: strin
     "Don't show again",
   )
   if (choice === 'Show Instructions') {
-    void vscode.env.openExternal(vscode.Uri.parse('https://github.com/shubhamtaywade82/ruby-rails-extension/tree/master/ruby-lsp-addon'))
+    void vscode.env.openExternal(vscode.Uri.parse('https://github.com/shubhamtaywade82/railsforge/tree/master/ruby-lsp-addon'))
   }
   if (choice) {
     void context.globalState.update(dismissedKey, true)
