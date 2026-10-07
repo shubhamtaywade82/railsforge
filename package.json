@@ -1829,7 +1829,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.4",
     "@types/vscode": "~1.96.0",
     "@typescript-eslint/eslint-plugin": "^8.71.0",
     "@typescript-eslint/parser": "^8.67.0",
@@ -1837,8 +1837,8 @@
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.0.0",
     "copy-webpack-plugin": "^14.0.0",
-    "eslint": "^10.11.0",
-    "mocha": "^11.8.0",
+    "eslint": "^10.12.0",
+    "mocha": "^12.0.3",
     "ts-loader": "^9.5.1",
     "typescript": "^6.0.3",
     "vitest": "^5.0.3",
@@ -1846,8 +1846,8 @@
     "webpack-cli": "^7.2.3"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.31.0",
-    "@nemesis-oss/ollama-sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
+    "@nemesis-oss/ollama-sdk": "^1.8.0",
     "better-sqlite3": "^13.0.3",
     "js-yaml": "^5.4.2",
     "tree-sitter": "^0.21.1",
