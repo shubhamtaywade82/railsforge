@@ -1,3 +1,5 @@
+import { spawnSync } from 'child_process'
+import { z } from 'zod'
 import { existsSync } from 'fs'
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { RailsAgent } from '../src/agent/RailsAgent'
@@ -509,5 +511,53 @@ describe('RailsAgent isolated requests', () => {
     const agent = new RailsAgent(schema, new RoutesIndexer(), { ollamaHost: 'x', model: 'm', provider: 'vscode-lm', vscodeLmRequest })
     await agent.run('hello', {})
     expect(vscodeLmRequest.mock.calls[0][0]).toContain('widgets')
+  })
+})
+
+describe('RailsAgent tool loop', () => {
+  const loopSettings = { enabled: true, maxSteps: 3, verifySyntax: false }
+  const toolCall = '```tool\n{"name":"get_schema","arguments":{"model":"Order"}}\n```'
+  const agentWith = (replies: string[], extra: Partial<ConstructorParameters<typeof RailsAgent>[2]> = {}) => {
+    const requests: Array<{ system: string; user: string }> = []
+    let i = 0
+    const run = vi.fn(async () => 'orders(id, user_id)')
+    const agent = new RailsAgent(new SchemaIndexer(), new RoutesIndexer(), {
+      ollamaHost: 'x', model: 'm', provider: 'vscode-lm',
+      vscodeLmRequest: async (system: string, user: string) => { requests.push({ system, user }); return replies[Math.min(i++, replies.length - 1)] },
+      toolLoop: loopSettings,
+      loopTools: () => [{ name: 'get_schema', description: 'Reads the schema.', inputSchema: { model: z.string().optional() }, run }],
+      ...extra,
+    })
+    return { agent, requests, run }
+  }
+
+  it('lets the model call a read-only tool and answers from the result', async () => {
+    const { agent, requests, run } = agentWith([toolCall, 'Order has user_id.'])
+    const result = await agent.run('Describe Order', {})
+    expect(run).toHaveBeenCalledWith({ model: 'Order' })
+    expect(result).toEqual({ success: true, response: 'Order has user_id.', iterations: 2 })
+    expect(requests[0].system).toContain('Available tools:')
+    expect(requests[1].user).toContain('orders(id, user_id)')
+  })
+
+  it('does not use the loop when disabled, for fix flows, or for isolated requests', async () => {
+    const disabled = agentWith([toolCall], { toolLoop: { ...loopSettings, enabled: false } })
+    expect((await disabled.agent.run('p', {})).response).toBe(toolCall)
+    expect(disabled.run).not.toHaveBeenCalled()
+
+    const fix = agentWith([toolCall])
+    expect((await fix.agent.run('p', { isFix: true, diagnosticMessage: 'x' })).response).toBe(toolCall)
+
+    const isolated = agentWith([toolCall])
+    expect((await isolated.agent.run('p', { isolated: true })).response).toBe(toolCall)
+    expect(isolated.run).not.toHaveBeenCalled()
+  })
+
+  it('syntax-checks Ruby in the answer when enabled and says what it checked', async () => {
+    const ruby = spawnSync('ruby', ['-v']).status === 0
+    if (!ruby) {return}
+    const { agent } = agentWith(['```ruby\nclass A\n  def b; end\nend\n```'], { toolLoop: { ...loopSettings, verifySyntax: true }, loopTools: () => [] })
+    const result = await agent.run('write a class', {})
+    expect(result.response).toContain('syntax checked with `ruby -c`: 1 block(s) OK')
   })
 })

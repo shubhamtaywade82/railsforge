@@ -17,7 +17,7 @@ import * as path from 'path'
 import { PersistentIndexClient } from './PersistentIndexClient'
 import { PersistentDependencyGraph } from './PersistentDependencyGraph'
 import { DuplicateMethodDetector } from './DuplicateMethodDetector'
-import { getPersistentIndexSupport } from './nativeSupport'
+import { getPersistentIndexSupport, missingPrebuilds } from './nativeSupport'
 import { readConfig, buildExcludeGlob } from '../config/RailsForgeConfig'
 import { Logger } from '../util/Logger'
 
@@ -63,6 +63,15 @@ export class PersistentIndexManager implements vscode.Disposable {
     if (!support.supported) {
       const reason = support.reason ?? 'unsupported runtime'
       Logger.warn(`RailsForge: persistent AST index unavailable — ${reason} AST features (duplicate methods, dependency cycles) are skipped; all core RailsForge features remain fully active.`)
+      return { status: 'unsupported', reason }
+    }
+
+    // No prebuilt binary for this OS/arch (e.g. linux-arm64, win32-arm64 have no tree-sitter build):
+    // say so up front instead of letting the worker crash on require().
+    const missing = missingPrebuilds(path.join(context.extensionPath, 'dist', 'node_modules'))
+    if (missing.length > 0) {
+      const reason = `no prebuilt ${missing.join(', ')} binary for ${process.platform}-${process.arch}.`
+      Logger.warn(`RailsForge: persistent AST index unavailable — ${reason} All other RailsForge features remain fully active.`)
       return { status: 'unsupported', reason }
     }
 

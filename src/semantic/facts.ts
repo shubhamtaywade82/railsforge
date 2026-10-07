@@ -153,6 +153,21 @@ export interface SourceFile {
 
 const lineOf = (content: string, index: number): number => content.slice(0, index).split('\n').length
 
+/**
+ * Text of the Ruby statement starting at `index`: the line plus continuation lines while it ends with a
+ * comma or has unclosed brackets, so options written on following lines are not lost.
+ */
+export function statementText(content: string, index: number): string {
+  const lines = content.slice(index).split('\n')
+  let text = lines[0]
+  for (let i = 1; i < lines.length && i < 12; i++) {
+    const open = (text.match(/[([{]/g) ?? []).length - (text.match(/[)\]}]/g) ?? []).length
+    if (!/,\s*$/.test(text) && open <= 0) {break}
+    text += `\n${lines[i]}`
+  }
+  return text
+}
+
 /** Public instance methods of the first class in `content` (stops at private/protected). */
 export function publicMethods(content: string): Array<{ name: string; line: number }> {
   const out: Array<{ name: string; line: number }> = []
@@ -162,6 +177,12 @@ export function publicMethods(content: string): Array<{ name: string; line: numb
     const line = lines[i]
     if (/^\s*(private|protected)\s*$/.test(line)) {isPublic = false; continue}
     if (/^\s*public\s*$/.test(line)) {isPublic = true; continue}
+    const hide = /^\s*(?:private|protected)\s+(:\w+[?!]?(?:(?:\s*,\s*|\s+):\w+[?!]?)*)\s*$/.exec(line)
+    if (hide) {
+      const names = new Set([...hide[1].matchAll(/:(\w+[?!]?)/g)].map(m => m[1]))
+      for (let j = out.length - 1; j >= 0; j--) {if (names.has(out[j].name)) {out.splice(j, 1)}}
+      continue
+    }
     const def = /^\s*def\s+([a-z_][A-Za-z0-9_]*[?!]?)\b/.exec(line)
     if (def && isPublic && !/^\s*def\s+self\./.test(line)) {out.push({ name: def[1], line: i + 1 })}
   }
@@ -185,7 +206,8 @@ export function controllerFacts(file: SourceFile): FactBatch {
   const cls = qualifiedClassName(file.content)
   if (!cls || !/Controller$/.test(cls.name)) {return batch}
   const controllerId = entityId('controller', cls.name)
-  const filters = [...file.content.matchAll(/^\s*(before_action|after_action|around_action|skip_before_action)\s+:(\w+)/gm)].map(m => `${m[1]}:${m[2]}`)
+  const filters = [...file.content.matchAll(/^\s*(before_action|after_action|around_action|skip_before_action)\s*\(?\s*((?::\w+[?!]?\s*,\s*)*:\w+[?!]?)/gm)]
+    .flatMap(m => [...m[2].matchAll(/:(\w+[?!]?)/g)].map(sym => `${m[1]}:${sym[1]}`))
   batch.entities.push({
     id: controllerId, kind: 'controller', name: cls.name, file: file.path, line: cls.line, source: 'source', confidence: 'static',
     attrs: { ...(cls.superclass ? { superclass: cls.superclass } : {}), filters },
@@ -203,15 +225,17 @@ export function modelFacts(file: SourceFile): FactBatch {
   const cls = qualifiedClassName(file.content)
   if (!cls) {return batch}
   const id = entityId('model', cls.name)
-  const validations = [...file.content.matchAll(/^\s*validates?\s+((?::\w+,\s*)*:\w+)/gm)].map(m => `validates:${m[1].replace(/[:\s]/g, '')}`)
-  const callbacks = [...file.content.matchAll(/^\s*((?:before|after|around)_\w+)\s+:(\w+)/gm)].map(m => `${m[1]}:${m[2]}`)
-  const scopes = [...file.content.matchAll(/^\s*scope\s+:(\w+)/gm)].map(m => m[1])
+  const validations = [...file.content.matchAll(/^\s*(validates(?:_\w+_of)?|validate)\s*\(?\s*((?::\w+[?!]?\s*,\s*)*:\w+[?!]?)/gm)]
+    .map(m => `${m[1]}:${[...m[2].matchAll(/:(\w+[?!]?)/g)].map(sym => sym[1]).join(',')}`)
+  const callbacks = [...file.content.matchAll(/^\s*((?:before|after|around)_\w+)\s*\(?\s*:(\w+[?!]?)/gm)].map(m => `${m[1]}:${m[2]}`)
+  const scopes = [...file.content.matchAll(/^\s*scope\s*\(?\s*:(\w+)/gm)].map(m => m[1])
   batch.entities.push({
     id, kind: 'model', name: cls.name, file: file.path, line: cls.line, source: 'source', confidence: 'static',
     attrs: { ...(cls.superclass ? { superclass: cls.superclass } : {}), validations, callbacks, scopes },
   })
-  for (const m of file.content.matchAll(/^\s*(belongs_to|has_many|has_one|has_and_belongs_to_many)\s+:(\w+)([^\n]*)/gm)) {
-    const [, macro, name, rest] = m
+  for (const m of file.content.matchAll(/^\s*(belongs_to|has_many|has_one|has_and_belongs_to_many)\s*\(?\s*:(\w+)/gm)) {
+    const [, macro, name] = m
+    const rest = statementText(file.content, (m.index ?? 0) + m[0].length)
     const explicit = /class_name:\s*["']([\w:]+)["']/.exec(rest)?.[1]
     const target = explicit ?? camelize(singularize(name))
     const through = /through:\s*:(\w+)/.exec(rest)?.[1]

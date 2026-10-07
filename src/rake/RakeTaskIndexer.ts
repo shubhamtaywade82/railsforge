@@ -10,11 +10,9 @@
  * RuboCopProvider/BrakemanProvider — never throws, degrades to an empty task list.
  */
 
-import { execFile } from 'child_process'
-import { promisify } from 'util'
+import { execFileAsync } from '../util/ProjectProcess'
 import { firstCandidate } from '../util/RubyCommand'
 
-const execFileAsync = promisify(execFile)
 
 export interface RakeTask {
   name: string

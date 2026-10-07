@@ -1,0 +1,653 @@
+[
+ {
+  "id": "c001",
+  "prompt": "Fix N+1 queries on the orders index page",
+  "expectAny": [
+   "rails-active-record",
+   "rails-performance"
+  ]
+ },
+ {
+  "id": "c002",
+  "prompt": "Add a unique index on users.email without locking the table",
+  "expectAny": [
+   "rails-database-engineering"
+  ]
+ },
+ {
+  "id": "c003",
+  "prompt": "Write a migration to add a not null column with a default to a large table",
+  "expectAny": [
+   "rails-database-engineering",
+   "rails-active-record",
+   "rails-data-modeling"
+  ]
+ },
+ {
+  "id": "c004",
+  "prompt": "How should I model a many-to-many between students and courses?",
+  "expectAny": [
+   "rails-associations",
+   "rails-data-modeling",
+   "rails-active-record"
+  ]
+ },
+ {
+  "id": "c005",
+  "prompt": "Add a polymorphic comments association",
+  "expectAny": [
+   "rails-associations"
+  ]
+ },
+ {
+  "id": "c006",
+  "prompt": "Validate uniqueness of slug scoped to account",
+  "expectAny": [
+   "rails-validations"
+  ]
+ },
+ {
+  "id": "c007",
+  "prompt": "Add a custom validator for phone numbers",
+  "expectAny": [
+   "rails-validations",
+   "rails-active-model"
+  ]
+ },
+ {
+  "id": "c008",
+  "prompt": "Use counter_cache for the comments count",
+  "expectAny": [
+   "rails-associations",
+   "rails-performance",
+   "rails-active-record"
+  ]
+ },
+ {
+  "id": "c009",
+  "prompt": "Soft delete records with a deleted_at column",
+  "expectAny": [
+   "rails-data-modeling",
+   "rails-active-record"
+  ]
+ },
+ {
+  "id": "c010",
+  "prompt": "Why is this query slow? Should I add an index?",
+  "expectAny": [
+   "rails-database-engineering",
+   "rails-performance"
+  ]
+ },
+ {
+  "id": "c011",
+  "prompt": "Add a nested route for comments under posts",
+  "expectAny": [
+   "rails-routing"
+  ]
+ },
+ {
+  "id": "c012",
+  "prompt": "Strong parameters for nested attributes in the controller",
+  "expectAny": [
+   "rails-action-controller",
+   "rails-security"
+  ]
+ },
+ {
+  "id": "c013",
+  "prompt": "Return JSON errors for a failed create in the API controller",
+  "expectAny": [
+   "rails-action-controller",
+   "rails-api-integration",
+   "ruby-api-design"
+  ]
+ },
+ {
+  "id": "c014",
+  "prompt": "Add a before_action to require login",
+  "expectAny": [
+   "rails-authentication",
+   "rails-action-controller"
+  ]
+ },
+ {
+  "id": "c015",
+  "prompt": "Paginate a Rails JSON collection for a React table",
+  "expectAny": [
+   "rails-react-integration"
+  ]
+ },
+ {
+  "id": "c016",
+  "prompt": "Replace this form with a turbo frame that updates in place",
+  "expectAny": [
+   "rails-hotwire"
+  ]
+ },
+ {
+  "id": "c017",
+  "prompt": "Broadcast updates with turbo streams when a message is created",
+  "expectAny": [
+   "rails-hotwire",
+   "rails-action-cable"
+  ]
+ },
+ {
+  "id": "c018",
+  "prompt": "Write a Stimulus controller for a dropdown",
+  "expectAny": [
+   "rails-hotwire"
+  ]
+ },
+ {
+  "id": "c019",
+  "prompt": "Extract this ERB into a partial with locals",
+  "expectAny": [
+   "rails-action-view"
+  ]
+ },
+ {
+  "id": "c020",
+  "prompt": "Add a view helper to format currency",
+  "expectAny": [
+   "rails-action-view"
+  ]
+ },
+ {
+  "id": "c021",
+  "prompt": "Send the welcome email in the background with retries",
+  "expectAny": [
+   "rails-active-job",
+   "rails-action-mailer"
+  ]
+ },
+ {
+  "id": "c022",
+  "prompt": "Make the background job idempotent",
+  "expectAny": [
+   "rails-active-job",
+   "rails-reliability-engineering"
+  ]
+ },
+ {
+  "id": "c023",
+  "prompt": "Preview mailers in development",
+  "expectAny": [
+   "rails-action-mailer"
+  ]
+ },
+ {
+  "id": "c024",
+  "prompt": "Process incoming emails with Action Mailbox",
+  "expectAny": [
+   "rails-action-mailbox"
+  ]
+ },
+ {
+  "id": "c025",
+  "prompt": "Prevent SQL injection in this search query",
+  "expectAny": [
+   "rails-security",
+   "rails-security-engineering"
+  ]
+ },
+ {
+  "id": "c026",
+  "prompt": "Add CSRF protection to the API endpoint",
+  "expectAny": [
+   "rails-security",
+   "rails-security-engineering"
+  ]
+ },
+ {
+  "id": "c027",
+  "prompt": "Add role based authorization with Pundit",
+  "expectAny": [
+   "rails-authorization"
+  ]
+ },
+ {
+  "id": "c028",
+  "prompt": "Implement login with has_secure_password",
+  "expectAny": [
+   "rails-authentication"
+  ]
+ },
+ {
+  "id": "c029",
+  "prompt": "Store third party API keys in credentials",
+  "expectAny": [
+   "rails-encryption-credentials-engineering"
+  ]
+ },
+ {
+  "id": "c030",
+  "prompt": "Rate limit login attempts",
+  "expectAny": [
+   "rails-security",
+   "rails-authentication",
+   "rails-rack-middleware-engineering",
+   "rails-security-engineering"
+  ]
+ },
+ {
+  "id": "c031",
+  "prompt": "Avoid mass assignment vulnerabilities",
+  "expectAny": [
+   "rails-security",
+   "rails-security-engineering",
+   "rails-action-controller"
+  ]
+ },
+ {
+  "id": "c032",
+  "prompt": "Write an RSpec request spec for the orders endpoint",
+  "expectAny": [
+   "rails-test-engineering"
+  ]
+ },
+ {
+  "id": "c033",
+  "prompt": "Fix a flaky system test",
+  "expectAny": [
+   "rails-test-engineering"
+  ]
+ },
+ {
+  "id": "c034",
+  "prompt": "Should I use factories or fixtures?",
+  "expectAny": [
+   "rails-test-engineering"
+  ]
+ },
+ {
+  "id": "c035",
+  "prompt": "TDD the discount calculation",
+  "expectAny": [
+   "ruby-tdd-refactoring"
+  ]
+ },
+ {
+  "id": "c036",
+  "prompt": "Refactor this long method into smaller ones",
+  "expectAny": [
+   "ruby-method-design",
+   "ruby-clean-code"
+  ]
+ },
+ {
+  "id": "c037",
+  "prompt": "Extract a service object for checkout",
+  "expectAny": [
+   "ruby-service-objects"
+  ]
+ },
+ {
+  "id": "c038",
+  "prompt": "When should I use a module mixin versus composition?",
+  "expectAny": [
+   "ruby-modules-mixins",
+   "ruby-object-composition"
+  ]
+ },
+ {
+  "id": "c039",
+  "prompt": "Use a Struct or Data for a value object",
+  "expectAny": [
+   "ruby-data-types",
+   "ruby-domain-modeling",
+   "ruby-poro"
+  ]
+ },
+ {
+  "id": "c040",
+  "prompt": "Debug a NoMethodError on nil",
+  "expectAny": [
+   "ruby-debugging"
+  ]
+ },
+ {
+  "id": "c041",
+  "prompt": "Use dependency injection for the payment gateway",
+  "expectAny": [
+   "ruby-dependency-injection"
+  ]
+ },
+ {
+  "id": "c042",
+  "prompt": "Speed up this Ruby loop",
+  "expectAny": [
+   "ruby-performance",
+   "ruby-enumerables"
+  ]
+ },
+ {
+  "id": "c043",
+  "prompt": "Use lazy enumerators for large files",
+  "expectAny": [
+   "ruby-enumerables",
+   "ruby-collections"
+  ]
+ },
+ {
+  "id": "c044",
+  "prompt": "Define dynamic methods with define_method",
+  "expectAny": [
+   "ruby-metaprogramming"
+  ]
+ },
+ {
+  "id": "c045",
+  "prompt": "Is this class variable thread safe?",
+  "expectAny": [
+   "ruby-concurrency"
+  ]
+ },
+ {
+  "id": "c046",
+  "prompt": "Build a gem with a gemspec",
+  "expectAny": [
+   "ruby-gem-development"
+  ]
+ },
+ {
+  "id": "c047",
+  "prompt": "Fix these RuboCop offenses",
+  "expectAny": [
+   "rubocop"
+  ]
+ },
+ {
+  "id": "c048",
+  "prompt": "Which Ruby versions does this code support?",
+  "expectAny": [
+   "ruby-runtime-compatibility"
+  ]
+ },
+ {
+  "id": "c049",
+  "prompt": "Install Ruby with mise and bundler",
+  "expectAny": [
+   "ruby-toolchain"
+  ]
+ },
+ {
+  "id": "c050",
+  "prompt": "Cache expensive fragments with Russian doll caching",
+  "expectAny": [
+   "rails-caching"
+  ]
+ },
+ {
+  "id": "c051",
+  "prompt": "Add structured logging and metrics",
+  "expectAny": [
+   "rails-observability"
+  ]
+ },
+ {
+  "id": "c052",
+  "prompt": "Fix a Zeitwerk autoloading NameError",
+  "expectAny": [
+   "rails-zeitwerk"
+  ]
+ },
+ {
+  "id": "c053",
+  "prompt": "Create a Rails engine",
+  "expectAny": [
+   "rails-engines-railties-engineering"
+  ]
+ },
+ {
+  "id": "c054",
+  "prompt": "Translate validation messages with i18n",
+  "expectAny": [
+   "rails-i18n"
+  ]
+ },
+ {
+  "id": "c055",
+  "prompt": "Direct upload files to S3 with Active Storage",
+  "expectAny": [
+   "rails-active-storage"
+  ]
+ },
+ {
+  "id": "c056",
+  "prompt": "Add a rich text editor with Action Text",
+  "expectAny": [
+   "rails-action-text"
+  ]
+ },
+ {
+  "id": "c057",
+  "prompt": "Add a websocket chat with Action Cable",
+  "expectAny": [
+   "rails-action-cable"
+  ]
+ },
+ {
+  "id": "c058",
+  "prompt": "Plan the Rails 7 to 8 upgrade",
+  "expectAny": [
+   "rails-release-engineering",
+   "rails-initialization-configuration-engineering",
+   "ruby-runtime-compatibility"
+  ]
+ },
+ {
+  "id": "c059",
+  "prompt": "Tune Puma and deploy with Kamal",
+  "expectAny": [
+   "rails-production-runtime"
+  ]
+ },
+ {
+  "id": "c060",
+  "prompt": "Write the postmortem for the production outage",
+  "expectAny": [
+   "rails-incident-engineering"
+  ]
+ },
+ {
+  "id": "c061",
+  "prompt": "Make webhook handling idempotent across retries",
+  "expectAny": [
+   "rails-reliability-engineering",
+   "rails-event-driven-messaging",
+   "rails-active-job",
+   "rails-api-integration"
+  ]
+ },
+ {
+  "id": "c062",
+  "prompt": "Write a rake task to backfill data safely",
+  "expectAny": [
+   "rails-operational-tasks-maintenance"
+  ]
+ },
+ {
+  "id": "c063",
+  "prompt": "Serialize records with GlobalID for jobs",
+  "expectAny": [
+   "rails-serialization-globalid-engineering",
+   "rails-active-job"
+  ]
+ },
+ {
+  "id": "c064",
+  "prompt": "Integrate a React frontend with Rails JSON",
+  "expectAny": [
+   "rails-react-integration"
+  ]
+ },
+ {
+  "id": "c065",
+  "prompt": "Write Rack middleware for request timing",
+  "expectAny": [
+   "rails-rack-middleware-engineering"
+  ]
+ },
+ {
+  "id": "c066",
+  "prompt": "Choose between Propshaft and esbuild for assets",
+  "expectAny": [
+   "rails-asset-build-engineering"
+  ]
+ },
+ {
+  "id": "c067",
+  "prompt": "Design bounded contexts for a Rails monolith",
+  "expectAny": [
+   "rails-architecture",
+   "rails-staff-principal-architecture"
+  ]
+ },
+ {
+  "id": "c068",
+  "prompt": "Call a third-party HTTP API with retries and timeouts",
+  "expectAny": [
+   "rails-api-integration",
+   "ruby-gems-io-services"
+  ]
+ },
+ {
+  "id": "c069",
+  "prompt": "Use Active Support concerns and callbacks",
+  "expectAny": [
+   "rails-active-support",
+   "rails-active-model"
+  ]
+ },
+ {
+  "id": "c070",
+  "prompt": "Generate a scaffold for products",
+  "expectAny": [
+   "rails-generators"
+  ]
+ },
+ {
+  "id": "c071",
+  "prompt": "rails new with api only and postgres",
+  "expectAny": [
+   "rails-application-bootstrap"
+  ]
+ },
+ {
+  "id": "c072",
+  "prompt": "Break the feature into tickets",
+  "expectAny": [
+   "planning-tickets"
+  ]
+ },
+ {
+  "id": "c073",
+  "prompt": "Review this diff before merging",
+  "expectAny": [
+   "change-review"
+  ]
+ },
+ {
+  "id": "c074",
+  "prompt": "Keep this change minimal and avoid new dependencies",
+  "expectAny": [
+   "stack-minimality"
+  ]
+ },
+ {
+  "id": "c075",
+  "prompt": "speed this up",
+  "expectAny": [
+   "rails-performance"
+  ],
+  "command": "optimize",
+  "entityKinds": [
+   "model"
+  ]
+ },
+ {
+  "id": "c076",
+  "prompt": "add tests",
+  "expectAny": [
+   "rails-test-engineering"
+  ],
+  "command": "spec"
+ },
+ {
+  "id": "c077",
+  "prompt": "pull this out",
+  "expectAny": [
+   "ruby-service-objects"
+  ],
+  "command": "service"
+ },
+ {
+  "id": "c078",
+  "prompt": "who can see this record",
+  "expectAny": [
+   "rails-authorization"
+  ],
+  "entityKinds": [
+   "policy"
+  ]
+ },
+ {
+  "id": "c079",
+  "prompt": "make this retry",
+  "expectAny": [
+   "rails-active-job"
+  ],
+  "entityKinds": [
+   "job"
+  ]
+ },
+ {
+  "id": "c080",
+  "prompt": "change the template",
+  "expectAny": [
+   "rails-action-mailer"
+  ],
+  "entityKinds": [
+   "mailer"
+  ]
+ },
+ {
+  "id": "c081",
+  "prompt": "why does this raise",
+  "expectAny": [
+   "ruby-debugging"
+  ],
+  "command": "fix"
+ },
+ {
+  "id": "c082",
+  "prompt": "add a table for invoices",
+  "expectAny": [
+   "rails-database-engineering",
+   "rails-data-modeling"
+  ],
+  "command": "migrate"
+ },
+ {
+  "id": "n001",
+  "prompt": "zzz qqq",
+  "expectNone": true
+ },
+ {
+  "id": "n002",
+  "prompt": "hello there",
+  "expectNone": true
+ },
+ {
+  "id": "n003",
+  "prompt": "what is the weather today",
+  "expectNone": true
+ },
+ {
+  "id": "n004",
+  "prompt": "tell me a joke",
+  "expectNone": true
+ }
+]

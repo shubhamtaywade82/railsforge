@@ -1,0 +1,225 @@
+[
+ {
+  "id": "b001",
+  "prompt": "Build an admin dashboard with live-updating counters without writing much JavaScript",
+  "expectAny": [
+   "rails-hotwire",
+   "rails-action-cable",
+   "rails-action-view"
+  ]
+ },
+ {
+  "id": "b002",
+  "prompt": "Customers get charged twice when they double click pay",
+  "expectAny": [
+   "rails-reliability-engineering",
+   "rails-database-engineering",
+   "rails-api-integration",
+   "rails-active-record",
+   "rails-security"
+  ]
+ },
+ {
+  "id": "b003",
+  "prompt": "Add full text search for products",
+  "expectAny": [
+   "rails-database-engineering",
+   "rails-active-record",
+   "rails-performance",
+   "rails-architecture"
+  ]
+ },
+ {
+  "id": "b004",
+  "prompt": "Encrypt personally identifiable fields in the database",
+  "expectAny": [
+   "rails-encryption-credentials-engineering",
+   "rails-security",
+   "rails-security-engineering",
+   "rails-active-record"
+  ]
+ },
+ {
+  "id": "b005",
+  "prompt": "Why is my deploy failing on the asset precompile step",
+  "expectAny": [
+   "rails-asset-build-engineering",
+   "rails-release-engineering",
+   "rails-production-runtime"
+  ]
+ },
+ {
+  "id": "b006",
+  "prompt": "We want to split the monolith into engines per domain",
+  "expectAny": [
+   "rails-engines-railties-engineering",
+   "rails-architecture",
+   "rails-staff-principal-architecture"
+  ]
+ },
+ {
+  "id": "b007",
+  "prompt": "A joined query returns duplicate rows",
+  "expectAny": [
+   "rails-active-record",
+   "rails-database-engineering",
+   "rails-associations"
+  ]
+ },
+ {
+  "id": "b008",
+  "prompt": "Test that an email is sent after signup",
+  "expectAny": [
+   "rails-test-engineering",
+   "rails-action-mailer"
+  ]
+ },
+ {
+  "id": "b009",
+  "prompt": "Handle timezone differences for scheduled reports",
+  "expectAny": [
+   "rails-active-support",
+   "rails-active-job",
+   "rails-data-modeling",
+   "ruby-data-types"
+  ]
+ },
+ {
+  "id": "b010",
+  "prompt": "The log output is too noisy and has no request ids",
+  "expectAny": [
+   "rails-observability"
+  ]
+ },
+ {
+  "id": "b011",
+  "prompt": "Use a state machine for order status transitions",
+  "expectAny": [
+   "ruby-domain-modeling",
+   "rails-active-record",
+   "rails-active-model",
+   "ruby-oop",
+   "rails-data-modeling"
+  ]
+ },
+ {
+  "id": "b012",
+  "prompt": "Allow users to sign in with Google",
+  "expectAny": [
+   "rails-authentication",
+   "rails-security"
+  ]
+ },
+ {
+  "id": "b013",
+  "prompt": "Stop the N+1 in the serializer",
+  "expectAny": [
+   "rails-performance",
+   "rails-active-record",
+   "rails-serialization-globalid-engineering",
+   "rails-api-integration"
+  ]
+ },
+ {
+  "id": "b014",
+  "prompt": "Write documentation for onboarding new developers to the codebase",
+  "expectAny": [
+   "planning-spec",
+   "agent-workflow",
+   "planning-wayfinder",
+   "change-review",
+   "rails-architecture"
+  ]
+ },
+ {
+  "id": "b015",
+  "prompt": "Memoization is causing stale values between requests",
+  "expectAny": [
+   "ruby-concurrency",
+   "rails-caching",
+   "ruby-oop",
+   "ruby-debugging",
+   "rails-active-support"
+  ]
+ },
+ {
+  "id": "b016",
+  "prompt": "How do I make a gem compatible with Ruby 3.4 and 3.2",
+  "expectAny": [
+   "ruby-runtime-compatibility",
+   "ruby-gem-development"
+  ]
+ },
+ {
+  "id": "b017",
+  "prompt": "Use pattern matching to parse this hash",
+  "expectAny": [
+   "ruby-control-flow",
+   "ruby-collections",
+   "ruby-data-types",
+   "ruby-core"
+  ]
+ },
+ {
+  "id": "b018",
+  "prompt": "Add retries with exponential backoff to the HTTP client",
+  "expectAny": [
+   "rails-api-integration",
+   "rails-reliability-engineering",
+   "ruby-gems-io-services"
+  ]
+ },
+ {
+  "id": "b019",
+  "prompt": "Confirm that no secrets are committed in the repo",
+  "expectAny": [
+   "rails-encryption-credentials-engineering",
+   "rails-security",
+   "rails-security-engineering"
+  ]
+ },
+ {
+  "id": "b020",
+  "prompt": "Design the table structure for a multi tenant SaaS",
+  "expectAny": [
+   "rails-data-modeling",
+   "rails-database-engineering",
+   "rails-authorization",
+   "rails-architecture"
+  ]
+ },
+ {
+  "id": "b021",
+  "prompt": "Why does Rails say undefined method for a helper in the mailer view",
+  "expectAny": [
+   "rails-action-mailer",
+   "rails-action-view"
+  ]
+ },
+ {
+  "id": "b022",
+  "prompt": "Cover the edge cases of this parser with tests first",
+  "expectAny": [
+   "ruby-tdd-refactoring",
+   "rails-test-engineering"
+  ]
+ },
+ {
+  "id": "b023",
+  "prompt": "Add a CDN and caching headers for static files",
+  "expectAny": [
+   "rails-caching",
+   "rails-asset-build-engineering",
+   "rails-production-runtime"
+  ]
+ },
+ {
+  "id": "b024",
+  "prompt": "Review my pull request for security problems",
+  "expectAny": [
+   "change-review",
+   "rails-security",
+   "rails-security-engineering"
+  ]
+ }
+]

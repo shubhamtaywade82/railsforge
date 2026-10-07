@@ -4,12 +4,10 @@
 
 import * as vscode from 'vscode'
 import * as path from 'path'
-import { execFile, spawn } from 'child_process'
-import { promisify } from 'util'
+import { execFileAsync, spawnProject } from '../util/ProjectProcess'
 import { firstCandidate, rubyCandidates } from '../util/RubyCommand'
 import { workspaceRootFor } from '../workspace/activeRoot'
 
-const execFileAsync = promisify(execFile)
 
 export interface RuboCopOffense {
   severity: 'info' | 'refactor' | 'convention' | 'warning' | 'error' | 'fatal'
@@ -80,7 +78,7 @@ export class RuboCopProvider implements vscode.CodeActionProvider {
 
   private spawnWithStdin(command: string, args: string[], content: string, cwd: string): Promise<string | null> {
     return new Promise(resolve => {
-      const child = spawn(command, args, { cwd, stdio: ['pipe', 'pipe', 'ignore'] })
+      const child = spawnProject(command, args, { cwd, stdio: ['pipe', 'pipe', 'ignore'] })
       let stdout = ''
       child.stdout.on('data', chunk => { stdout += chunk })
       child.on('error', () => resolve(null))

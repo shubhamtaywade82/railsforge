@@ -4,8 +4,9 @@
 // Linux CI needs a display: xvfb-run -a pnpm run test:host
 //
 // Not covered here: Restricted Mode. @vscode/test-electron always appends --disable-workspace-trust, so an
-// untrusted window cannot be produced through it; the trust gate is unit-tested (test/RuntimeTrust.test.ts)
-// and the manifest declares capabilities.untrustedWorkspaces explicitly.
+// untrusted window cannot be produced through it. It is covered by `pnpm run test:restricted`
+// (scripts/restricted-host-test.mjs launches VS Code itself with trust enabled) plus unit and static tests
+// (test/Trust*.test.ts, test/RestrictedManifest.test.ts).
 import { defineConfig } from '@vscode/test-cli'
 import * as os from 'node:os'
 import * as path from 'node:path'

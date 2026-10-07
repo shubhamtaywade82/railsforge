@@ -4,7 +4,7 @@
  */
 
 import { RailsSemanticGraph, Neighbor } from './RailsSemanticGraph'
-import { Edge, Entity } from './types'
+import { ConfidenceClass, Edge, Entity, GraphProvenance, confidenceClass } from './types'
 
 export interface ContextRequest {
   /** Project-relative or absolute path of the active file. */
@@ -38,6 +38,21 @@ export function selectSeeds(graph: RailsSemanticGraph, request: ContextRequest):
     .slice(0, request.maxSeeds ?? 4)
 }
 
+/** Marker for facts a reader should weigh: everything except `declared` (the unremarkable default). */
+function tag(fact: { source: Entity['source']; confidence: Entity['confidence'] }, used: Set<ConfidenceClass>): string {
+  const cls = confidenceClass(fact)
+  if (cls === 'declared') {return ''}
+  used.add(cls)
+  return ` [${cls}]`
+}
+
+const LEGEND: Record<ConfidenceClass, string> = {
+  verified: 'verified = observed in the booted app',
+  declared: 'declared = parsed from schema/routes',
+  extracted: 'extracted = pattern-matched from source, may miss metaprogramming',
+  inferred: 'inferred = naming convention, verify before relying on it',
+}
+
 const attrList = (e: Entity, key: string): string[] => {
   const v = e.attrs?.[key]
   return Array.isArray(v) ? v : []
@@ -50,48 +65,48 @@ const edgeNote = (edge: Edge): string => {
   return parts.length ? ` [${parts.join(', ')}]` : ''
 }
 
-function renderController(graph: RailsSemanticGraph, e: Entity): string[] {
-  const lines = [`### ${e.name} — controller${loc(e)}`]
+function renderController(graph: RailsSemanticGraph, e: Entity, used: Set<ConfidenceClass>): string[] {
+  const lines = [`### ${e.name} — controller${loc(e)}${tag(e, used)}`]
   const filters = attrList(e, 'filters')
   if (filters.length) {lines.push(`- filters: ${filters.join(', ')}`)}
   for (const n of graph.neighbors(e.id, { kinds: ['has_action'], direction: 'out' })) {
     const routes = graph.neighbors(n.entity.id, { kinds: ['routes_to'], direction: 'in' }).map(r => r.entity.name)
     const views = graph.neighbors(n.entity.id, { kinds: ['renders'], direction: 'out' }).map(r => r.entity.name)
-    lines.push(`- ${n.entity.name.split('#')[1]}${routes.length ? ` ← ${routes.join(', ')}` : ''}${views.length ? ` → view ${views.join(', ')}` : ''}${loc(n.entity)}`)
+    lines.push(`- ${n.entity.name.split('#')[1]}${routes.length ? ` ← ${routes.join(', ')}` : ''}${views.length ? ` → view ${views.join(', ')}` : ''}${loc(n.entity)}${tag(n.entity, used)}`)
   }
-  for (const n of graph.neighbors(e.id, { kinds: ['related'], direction: 'out' })) {lines.push(`- resource model: ${n.entity.name}${loc(n.entity)}`)}
+  for (const n of graph.neighbors(e.id, { kinds: ['related'], direction: 'out' })) {lines.push(`- resource model: ${n.entity.name}${loc(n.entity)}${tag(n.edge, used)}`)}
   return lines
 }
 
-function renderModel(graph: RailsSemanticGraph, e: Entity): string[] {
-  const lines = [`### ${e.name} — model${loc(e)}${e.confidence === 'runtime' ? ' [runtime-verified]' : ''}`]
+function renderModel(graph: RailsSemanticGraph, e: Entity, used: Set<ConfidenceClass>): string[] {
+  const lines = [`### ${e.name} — model${loc(e)}${tag(e, used)}`]
   const table = graph.neighbors(e.id, { kinds: ['maps_to_table'], direction: 'out' })[0]
   if (table) {
     const cols = attrList(table.entity, 'columns')
-    lines.push(`- table \`${table.entity.name}\`: ${cols.join(', ')}`)
+    lines.push(`- table \`${table.entity.name}\`${tag(table.edge, used)}: ${cols.join(', ')}`)
     const idx = attrList(table.entity, 'indexes')
     if (idx.length) {lines.push(`- indexes: ${idx.join('; ')}`)}
     for (const fk of graph.neighbors(table.entity.id, { kinds: ['foreign_key'], direction: 'out' })) {
-      lines.push(`- foreign key ${String(fk.edge.attrs?.column ?? '?')} → ${fk.entity.name}`)
+      lines.push(`- foreign key ${String(fk.edge.attrs?.column ?? '?')} → ${fk.entity.name}${tag(fk.edge, used)}`)
     }
   }
   const assoc = graph.neighbors(e.id, { kinds: ['belongs_to', 'has_many', 'has_one', 'has_and_belongs_to_many'], direction: 'out' })
-  for (const n of assoc) {lines.push(`- ${n.edge.kind} :${String(n.edge.attrs?.name ?? n.entity.name)} → ${n.entity.name}${edgeNote(n.edge)}`)}
+  for (const n of assoc) {lines.push(`- ${n.edge.kind} :${String(n.edge.attrs?.name ?? n.entity.name)} → ${n.entity.name}${edgeNote(n.edge)}${tag(n.edge, used)}`)}
   const validations = attrList(e, 'validations')
-  if (validations.length) {lines.push(`- validations: ${validations.join('; ')}`)}
+  if (validations.length) {lines.push(`- validations${tag(e, used)}: ${validations.join('; ')}`)}
   const callbacks = attrList(e, 'callbacks')
-  if (callbacks.length) {lines.push(`- callbacks: ${callbacks.join('; ')}`)}
+  if (callbacks.length) {lines.push(`- callbacks${tag(e, used)}: ${callbacks.join('; ')}`)}
   const scopes = attrList(e, 'scopes')
-  if (scopes.length) {lines.push(`- scopes: ${scopes.join(', ')}`)}
-  appendRelated(graph, e, lines)
+  if (scopes.length) {lines.push(`- scopes${tag(e, used)}: ${scopes.join(', ')}`)}
+  appendRelated(graph, e, lines, used)
   return lines
 }
 
-function appendRelated(graph: RailsSemanticGraph, e: Entity, lines: string[]): void {
+function appendRelated(graph: RailsSemanticGraph, e: Entity, lines: string[], used: Set<ConfidenceClass>): void {
   const groups = new Map<string, string[]>()
   const push = (label: string, n: Neighbor): void => {
     const list = groups.get(label) ?? []
-    list.push(`${n.entity.name}${loc(n.entity)}`)
+    list.push(`${n.entity.name}${loc(n.entity)}${tag(n.edge, used)}`)
     groups.set(label, list)
   }
   for (const n of graph.neighbors(e.id)) {
@@ -108,12 +123,19 @@ function appendRelated(graph: RailsSemanticGraph, e: Entity, lines: string[]): v
   }
 }
 
-function renderGeneric(graph: RailsSemanticGraph, e: Entity): string[] {
-  const lines = [`### ${e.name} — ${e.kind}${loc(e)}`]
+function renderGeneric(graph: RailsSemanticGraph, e: Entity, used: Set<ConfidenceClass>): string[] {
+  const lines = [`### ${e.name} — ${e.kind}${loc(e)}${tag(e, used)}`]
   const methods = attrList(e, 'publicMethods')
   if (methods.length) {lines.push(`- public methods: ${methods.slice(0, 12).join(', ')}`)}
-  appendRelated(graph, e, lines)
+  appendRelated(graph, e, lines, used)
   return lines
+}
+
+/** "Graph built 2026-10-07T03:00:00.000Z from 120 files; runtime snapshot: present (older than schema/models — may be stale)". */
+export function describeProvenance(p: GraphProvenance): string {
+  const runtime = !p.hasRuntimeSnapshot ? 'absent' : p.runtimeStale ? 'present but older than the schema/models, may be stale' : 'present'
+  const files = p.inputs.filter(i => !['db/schema.rb', 'config/routes.rb', '.railsforge/runtime.json'].includes(i.path)).length
+  return `Graph built ${new Date(p.builtAt).toISOString()} from ${files} source files${p.truncated ? ' (file cap reached: partial view)' : ''}; runtime snapshot: ${runtime}.`
 }
 
 export function buildSemanticContext(graph: RailsSemanticGraph, request: ContextRequest): string {
@@ -121,21 +143,28 @@ export function buildSemanticContext(graph: RailsSemanticGraph, request: Context
   if (seeds.length === 0) {return ''}
   const budget = request.maxChars ?? 4000
   const blocks: string[] = []
-  let used = 0
+  const used = new Set<ConfidenceClass>()
+  let usedChars = 0
   for (const e of seeds) {
-    const lines = e.kind === 'controller' ? renderController(graph, e) : e.kind === 'model' ? renderModel(graph, e) : renderGeneric(graph, e)
+    const lines = e.kind === 'controller' ? renderController(graph, e, used) : e.kind === 'model' ? renderModel(graph, e, used) : renderGeneric(graph, e, used)
     const block = lines.join('\n')
-    if (used + block.length > budget && blocks.length > 0) {break}
+    if (usedChars + block.length > budget && blocks.length > 0) {break}
     blocks.push(block.length > budget ? `${block.slice(0, budget)}\n…[truncated]` : block)
-    used += block.length
+    usedChars += block.length
   }
-  return `## Rails application facts (from the project's semantic graph)\n\n${blocks.join('\n\n')}`
+  const footer: string[] = []
+  if (used.size > 0) {
+    footer.push(`_Fact confidence — ${(['verified', 'extracted', 'inferred'] as ConfidenceClass[]).filter(c => used.has(c)).map(c => LEGEND[c]).join('; ')}. Untagged facts are declared (schema/routes)._`)
+  }
+  if (graph.provenance) {footer.push(`_${describeProvenance(graph.provenance)}_`)}
+  return `## Rails application facts (from the project's semantic graph)\n\n${blocks.join('\n\n')}${footer.length ? `\n\n${footer.join('\n')}` : ''}`
 }
 
 /** Compact overview for virtual documents: counts plus controller→route and model→association maps. */
 export function renderGraphOverview(graph: RailsSemanticGraph): string {
   const stats = graph.stats()
   const out = ['# Rails Semantic Graph', '', Object.entries(stats).sort().map(([k, v]) => `${k}: ${v}`).join(' · '), '']
+  if (graph.provenance) {out.push(`_${describeProvenance(graph.provenance)}_`, '')}
   out.push('## Controllers')
   for (const c of graph.entities('controller')) {
     const actions = graph.neighbors(c.id, { kinds: ['has_action'], direction: 'out' }).map(n => n.entity.name.split('#')[1])

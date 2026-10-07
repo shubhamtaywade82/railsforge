@@ -40,6 +40,14 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
+      # The parser contract tests compare the TypeScript extractors with Ruby's own parser (Ripper);
+      # setup-ruby guarantees a Ruby here so they can never silently skip on the main Linux job.
+      - name: Setup Ruby (parser contract tests)
+        if: matrix.node-version == '22.x'
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
       - name: Run ESLint
         run: pnpm run lint
 
@@ -64,6 +72,23 @@ jobs:
 
       - name: Run Vitest Unit Tests
         run: pnpm test
+        env:
+          RAILSFORGE_REQUIRE_RUBY: ${{ matrix.node-version == '22.x' && '1' || '' }}
+
+      # Enforces the per-file coverage floors in vitest.config.ts on the security/correctness-critical modules.
+      - name: Coverage (enforces thresholds)
+        if: matrix.node-version == '22.x'
+        run: pnpm run coverage
+        env:
+          RAILSFORGE_REQUIRE_RUBY: '1'
+
+      - name: Upload coverage report
+        if: matrix.node-version == '22.x'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
 
       # Boots a real VS Code Extension Host (Electron under xvfb) with the webpack build
       # and a two-folder multi-root workspace: checks activate(), that every contributed
@@ -71,6 +96,12 @@ jobs:
       - name: Run Extension Host Integration Tests
         if: matrix.node-version == '22.x'
         run: xvfb-run -a pnpm run test:host
+
+      # Restricted Mode, for real: VS Code launched with workspace trust ON on a workspace full of fake Ruby tools.
+      # Untrusted: read-only features work and no tool runs. Control run (trusted): the same commands do run them.
+      - name: Restricted Mode host test
+        if: matrix.node-version == '22.x'
+        run: xvfb-run -a pnpm run test:restricted
 
       - name: Build VSIX Package
         run: pnpm run vsce-package

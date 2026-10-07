@@ -3,7 +3,7 @@
  * agent, tools and virtual documents need. Pure and deterministic (stable ordering).
  */
 
-import { Edge, EdgeKind, Entity, EntityKind, FactBatch, SOURCE_RANK } from './types'
+import { Edge, EdgeKind, Entity, EntityKind, FactBatch, GraphProvenance, SOURCE_RANK } from './types'
 
 export interface NeighborOptions {
   kinds?: readonly EdgeKind[]
@@ -27,6 +27,8 @@ export class RailsSemanticGraph {
   private outIndex = new Map<string, Edge[]>()
   private inIndex = new Map<string, Edge[]>()
   private indexDirty = true
+  /** Set by the builder; absent for hand-assembled graphs. */
+  provenance?: GraphProvenance
 
   /** Merges a batch: the higher-ranked source wins scalar fields, attrs are unioned. */
   add(batch: FactBatch): this {

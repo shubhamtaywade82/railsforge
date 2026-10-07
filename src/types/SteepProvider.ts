@@ -14,11 +14,9 @@
  * not a single file, so this is a whole-workspace scan rather than a per-document lint.
  */
 
-import { execFile } from 'child_process'
-import { promisify } from 'util'
+import { execFileAsync } from '../util/ProjectProcess'
 import { firstCandidate } from '../util/RubyCommand'
 
-const execFileAsync = promisify(execFile)
 
 export interface SteepDiagnostic {
   severity: 'error' | 'warning' | 'notice'

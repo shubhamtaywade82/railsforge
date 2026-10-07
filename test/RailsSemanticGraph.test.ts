@@ -149,7 +149,7 @@ describe('context builder', () => {
   it('renders the model neighbourhood for a file', () => {
     const text = buildSemanticContext(graph, { filePath: 'app/models/order.rb' })
     expect(text).toContain('### Order — model')
-    expect(text).toContain('table `orders`: user_id:integer!')
+    expect(text).toContain('table `orders` [inferred]: user_id:integer!')
     expect(text).toContain('has_many :line_items → LineItem [dependent')
     expect(text).toContain('foreign key user_id → table:users'.replace('table:', ''))
     expect(text).toContain('specs: spec/models/order_spec.rb')
