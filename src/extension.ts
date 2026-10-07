@@ -117,6 +117,7 @@ import {
   SemanticIndexAdapter,
   PatternCatalogAccessAdapter,
   RefactoringEditProvider,
+  generateConventionalCommit,
 } from './providers'
 
 const execFileAsync = promisify(execFile)
@@ -790,9 +791,52 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     // terminal automation API (worktree setup, silent rails CLI).
     enableTerminalTasks: true,
     taskProviderFactory: () => new RailsTaskProvider(),
+
+    // Source Control: AI-assisted Conventional Commit generation. No existing
+    // `vscode.scm.createSourceControl` call to migrate - this is a new feature.
+    // The provider hooks into the built-in Git extension's input box (no separate
+    // SCM provider is registered). The `railsforge.generateAiCommit` command
+    // (registered in package.json) calls the generator and pushes the result into
+    // the Git SCM input box.
+    enableSourceControl: true,
+    commitMessageGenerator: async (diff, index, catalog) => {
+      const commit = generateConventionalCommit(diff, index, catalog)
+      return commit?.toString()
+    },
   })
   providerRegistry.activate()
   context.subscriptions.push(providerRegistry)
+
+  // 8. AI Conventional Commit - wired after the registry so the command handler can
+  //    access providerRegistry.sourceControl. Runs `git diff --cached` in the
+  //    workspace root, passes the diff to the ConventionalCommitGenerator (which
+  //    classifies files by Rails pattern type via the PatternCatalogAccess), and
+  //    pushes the result into the Git SCM input box.
+  context.subscriptions.push(vscode.commands.registerCommand('railsforge.generateAiCommit', async () => {
+    const root = activeWorkspaceRoot()
+    if (!root) {
+      void vscode.window.showWarningMessage('RailsForge: Open a workspace folder to generate a commit message.')
+      return
+    }
+    let diff: string
+    try {
+      const result = await execFileAsync('git', ['diff', '--cached'], { cwd: root, maxBuffer: 10 * 1024 * 1024 })
+      diff = result.stdout
+    } catch (err) {
+      void vscode.window.showErrorMessage(`RailsForge: Could not read staged diff. Is git installed and are there staged changes? (${err instanceof Error ? err.message : String(err)})`)
+      return
+    }
+    if (!diff.trim()) {
+      void vscode.window.showInformationMessage('RailsForge: No staged changes. Stage files with `git add` first.')
+      return
+    }
+    const message = await providerRegistry.sourceControl?.generateCommitMessage(diff)
+    if (!message) {
+      void vscode.window.showWarningMessage('RailsForge: Could not generate a commit message from the staged diff.')
+      return
+    }
+    await providerRegistry.sourceControl?.setCommitMessage(message)
+  }))
 
   return {
     getActiveProjectRoot: () => activeProject.root,

@@ -883,6 +883,13 @@
         "title": "RailsForge: Clone Existing Pattern",
         "category": "RailsForge",
         "enablement": "railsforge:semanticIndexReady"
+      },
+      {
+        "command": "railsforge.generateAiCommit",
+        "title": "RailsForge: Generate Conventional Commit",
+        "category": "RailsForge",
+        "icon": "$(sparkle)",
+        "enablement": "railsforge:semanticIndexReady"
       }
     ],
     "menus": {
@@ -1013,6 +1020,11 @@
           "command": "railsforge.refreshRakeTasks",
           "when": "view == railsforge.rakeTasksView",
           "group": "navigation"
+        },
+        {
+          "command": "railsforge.generateAiCommit",
+          "when": "view == workbench.scm",
+          "group": "navigation@99"
         }
       ],
       "editor/context": [
@@ -1079,6 +1091,13 @@
           "command": "railsforge.openVirtualDoc",
           "when": "explorerResourceIsRoot",
           "group": "z_railsforge@2"
+        }
+      ],
+      "scm/inputBox": [
+        {
+          "command": "railsforge.generateAiCommit",
+          "when": "scmProvider == git",
+          "group": "navigation"
         }
       ]
     },

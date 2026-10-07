@@ -89,11 +89,44 @@ export class SourceControlProvider implements vscode.Disposable {
   /**
    * Push the generated message into the Source Control input box. The user can still
    * edit it before committing - we never auto-commit.
+   *
+   * If RailsForge registered its own `vscode.SourceControl` (via `sourceControlFactory`),
+   * the message is set on that input box. Otherwise, we try to hook into the built-in
+   * Git extension's repository input box (the common case — the user already has the
+   * Git SCM view open). If neither is available, we fall back to copying the message
+   * to the clipboard and showing an informational notification.
    */
-  setCommitMessage(message: string): void {
+  async setCommitMessage(message: string): Promise<void> {
+    // 1. If we own a SourceControl, use its input box directly.
     if (this.sourceControl) {
       this.sourceControl.inputBox.value = message
+      return
     }
+
+    // 2. Try the built-in Git extension's API. The `vscode.git` extension exports
+    //    a `getAPI(version)` function that returns an object with `repositories[]`,
+    //    each having an `inputBox.value` setter. This is the same API GitHub Copilot
+    //    uses for its commit-message generation feature.
+    try {
+      const gitExtension = vscode.extensions.getExtension('vscode.git')
+      if (gitExtension) {
+        const gitExports = gitExtension.isActive ? gitExtension.exports : await gitExtension.activate()
+        const git = typeof gitExports?.getAPI === 'function' ? gitExports.getAPI(1) : undefined
+        const repo = git?.repositories?.[0]
+        if (repo?.inputBox) {
+          repo.inputBox.value = message
+          return
+        }
+      }
+    } catch (err) {
+      console.warn('[RailsForge] SourceControlProvider: could not access vscode.git API:', err)
+    }
+
+    // 3. Fallback: copy to clipboard and notify.
+    await vscode.env.clipboard.writeText(message)
+    vscode.window.showInformationMessage(
+      'RailsForge: Conventional commit message copied to clipboard. Paste it into the commit input box.',
+    )
   }
 
   dispose(): void {

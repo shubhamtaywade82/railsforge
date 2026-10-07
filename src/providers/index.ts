@@ -82,3 +82,10 @@ export type { ProviderRegistryDeps } from './ProviderRegistry'
 // classes. They bridge PersistentIndexManager / PatternCatalog / DesignPrincipleLinter
 // to the SemanticIndex / PatternCatalogAccess interfaces.
 export { SemanticIndexAdapter, PatternCatalogAccessAdapter } from './EngineAdapters'
+
+// Conventional Commit generator - pure-function diff analysis, unit-testable.
+export {
+  generateConventionalCommit,
+  parseDiffFiles,
+} from './ConventionalCommitGenerator'
+export type { DiffFileEntry, ConventionalCommit } from './ConventionalCommitGenerator'
