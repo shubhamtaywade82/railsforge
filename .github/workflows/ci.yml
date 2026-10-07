@@ -40,6 +40,14 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
+      # The parser contract tests compare the TypeScript extractors with Ruby's own parser (Ripper);
+      # setup-ruby guarantees a Ruby here so they can never silently skip on the main Linux job.
+      - name: Setup Ruby (parser contract tests)
+        if: matrix.node-version == '22.x'
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
       - name: Run ESLint
         run: pnpm run lint
 
@@ -64,6 +72,8 @@ jobs:
 
       - name: Run Vitest Unit Tests
         run: pnpm test
+        env:
+          RAILSFORGE_REQUIRE_RUBY: ${{ matrix.node-version == '22.x' && '1' || '' }}
 
       # Boots a real VS Code Extension Host (Electron under xvfb) with the webpack build
       # and a two-folder multi-root workspace: checks activate(), that every contributed

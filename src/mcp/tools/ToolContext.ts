@@ -19,6 +19,7 @@ import { DevDocsOfflineIndex } from '../../docs/DevDocsOfflineIndex'
 import { RBSIndex } from '../../types/RBSIndex'
 import { RailsSemanticGraph } from '../../semantic/RailsSemanticGraph'
 import { buildSemanticGraph } from '../../semantic/GraphBuilder'
+import { checkFreshness } from '../../semantic/Freshness'
 import { DependencyRow } from '../../semantic/facts'
 import { SkillRegistry } from '../../skills/SkillRegistry'
 
@@ -59,7 +60,7 @@ export class ToolContext {
   readonly rubyDocProvider = new RubyDocProvider()
   private devDocsIndex: DevDocsOfflineIndex | null = null
   private rbsIndex: RBSIndex | null = null
-  private graph: { builtAt: number; value: RailsSemanticGraph } | null = null
+  private graph: { checkedAt: number; value: RailsSemanticGraph } | null = null
 
   private skills: SkillRegistry | null = null
 
@@ -141,7 +142,13 @@ export class ToolContext {
    */
   getSemanticGraph(ttlMs = 15_000): RailsSemanticGraph {
     const now = Date.now()
-    if (this.graph && now - this.graph.builtAt < ttlMs) {return this.graph.value}
+    if (this.graph && now - this.graph.checkedAt < ttlMs) {return this.graph.value}
+    // Past the TTL the cached graph is only rebuilt if the files it was built from actually changed
+    // (stat-only check), so idle projects cost one cheap tree walk instead of a full rebuild.
+    if (this.graph?.value.provenance && checkFreshness(this.graph.value.provenance, this.excludedDirNames).fresh) {
+      this.graph.checkedAt = now
+      return this.graph.value
+    }
     let dependencyRows: DependencyRow[] | undefined
     const db = this.openPersistentDbReadonly()
     if (db) {
@@ -151,7 +158,7 @@ export class ToolContext {
       try { db.close() } catch { /* ignore */ }
     }
     const value = buildSemanticGraph(this.workspaceRoot, { excludedDirNames: this.excludedDirNames, dependencyRows })
-    this.graph = { builtAt: now, value }
+    this.graph = { checkedAt: now, value }
     return value
   }
 

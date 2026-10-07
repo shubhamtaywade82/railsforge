@@ -19,6 +19,46 @@ export type FactSource = 'runtime' | 'ast' | 'source' | 'patterns' | 'routes' | 
 
 export type Confidence = 'runtime' | 'static'
 
+/**
+ * How much weight a fact deserves, derived from where it came from:
+ *  - verified:  observed in the booted application (runtime snapshot)
+ *  - declared:  parsed from an explicit declaration (schema.rb, routes.rb, a real syntax tree)
+ *  - extracted: pattern-matched out of Ruby source; can miss metaprogramming and unusual layouts
+ *  - inferred:  derived from naming conventions; verify before relying on it
+ */
+export type ConfidenceClass = 'verified' | 'declared' | 'extracted' | 'inferred'
+
+export function confidenceClass(fact: { source: FactSource; confidence: Confidence }): ConfidenceClass {
+  if (fact.confidence === 'runtime' || fact.source === 'runtime') {return 'verified'}
+  switch (fact.source) {
+    case 'schema': case 'routes': case 'ast': return 'declared'
+    case 'source': case 'patterns': return 'extracted'
+    case 'convention': return 'inferred'
+  }
+}
+
+/** What a graph was built from, so staleness can be detected later without rebuilding. */
+export interface GraphInput {
+  /** Project-relative, forward slashes. */
+  path: string
+  mtimeMs: number
+  size: number
+}
+
+export interface GraphProvenance {
+  root: string
+  /** Epoch ms when the build started. */
+  builtAt: number
+  inputs: GraphInput[]
+  /** Well-known inputs that did not exist at build time (so a later appearance counts as a change). */
+  absent: string[]
+  /** True when the file cap stopped the scan, i.e. the graph is a partial view. */
+  truncated: boolean
+  /** The runtime snapshot exists but is older than the schema or a model file. */
+  runtimeStale: boolean
+  hasRuntimeSnapshot: boolean
+}
+
 export const SOURCE_RANK: Record<FactSource, number> = {
   runtime: 6, ast: 5, source: 4, patterns: 3, routes: 3, schema: 3, convention: 1,
 }
