@@ -2,7 +2,7 @@ class OrdersController < ApplicationController
   before_action :authenticate_user!
   before_action :load_order, only: %i[show update]
   before_action :set_a, :set_b
-  skip_before_action :verify_authenticity_token, only: :webhook
+  skip_before_action :set_locale, only: :webhook
   around_action :wrap_in_transaction
 
   def index; end

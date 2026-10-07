@@ -177,7 +177,7 @@ export function publicMethods(content: string): Array<{ name: string; line: numb
     const line = lines[i]
     if (/^\s*(private|protected)\s*$/.test(line)) {isPublic = false; continue}
     if (/^\s*public\s*$/.test(line)) {isPublic = true; continue}
-    const hide = /^\s*(?:private|protected)\s+((?::\w+[?!]?\s*,?\s*)+)$/.exec(line)
+    const hide = /^\s*(?:private|protected)\s+(:\w+[?!]?(?:(?:\s*,\s*|\s+):\w+[?!]?)*)\s*$/.exec(line)
     if (hide) {
       const names = new Set([...hide[1].matchAll(/:(\w+[?!]?)/g)].map(m => m[1]))
       for (let j = out.length - 1; j >= 0; j--) {if (names.has(out[j].name)) {out.splice(j, 1)}}
