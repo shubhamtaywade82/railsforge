@@ -711,15 +711,11 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     getAgentConfig,
   )
 
-  // 5. Register Chat Participant
-  RailsChatParticipant.getInstance().register(
-    context,
-    agent,
-    schemaIndexer,
-    routesIndexer,
-    () => env.testFramework,
-    () => projectPatternIndexer.getAllPatterns().map(p => `${p.type}/${p.name}`),
-  )
+  // 5. Chat Participant registration migrated to ProviderRegistry (AiChatProvider).
+  // The RailsChatParticipant.getInstance().createParticipant(...) call is now
+  // wrapped in a factory passed to the registry; the AiChatProvider owns the
+  // disposable lifecycle. The `agent`, `schemaIndexer`, and callback closures
+  // are captured by the factory below.
 
   // 6. Suggest the ruby-lsp add-on when ruby-lsp is present but the gem isn't
   if (workspaceRoot) {
@@ -826,6 +822,25 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     // TestingApiProvider owns the dispose lifecycle; the `testExplorer` variable
     // stays accessible for direct .discoverWorkspace() / .getController() calls.
     testing: () => testExplorer,
+
+    // AI Chat: @rails participant registration migrated from direct
+    // `RailsChatParticipant.getInstance().register(...)`. The factory calls the
+    // new `createParticipant` method (which returns the participant without
+    // pushing onto context.subscriptions); the AiChatProvider owns the dispose
+    // lifecycle. The factory throws if the participant can't be created, which
+    // the AiChatProvider catches and logs — chat is an optional surface.
+    chatParticipant: () => {
+      const participant = RailsChatParticipant.getInstance().createParticipant(
+        agent,
+        schemaIndexer,
+        () => env.testFramework,
+        () => projectPatternIndexer.getAllPatterns().map(p => `${p.type}/${p.name}`),
+      )
+      if (!participant) {
+        throw new Error('vscode.chat.createChatParticipant is unavailable or failed')
+      }
+      return participant
+    },
   })
   providerRegistry.activate()
   context.subscriptions.push(providerRegistry)

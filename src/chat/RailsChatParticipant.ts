@@ -24,17 +24,21 @@ export class RailsChatParticipant {
     return (RailsChatParticipant.instance ??= new RailsChatParticipant())
   }
 
-  register(
-    context: vscode.ExtensionContext,
+  /**
+   * Create and return the `vscode.ChatParticipant` without pushing it onto
+   * `context.subscriptions`. The caller (typically the ProviderRegistry's
+   * AiChatProvider) owns the disposable lifecycle. Returns undefined if the
+   * chat API is unavailable in this host environment.
+   */
+  createParticipant(
     agent: RailsAgent,
     schemaIndexer: SchemaIndexer,
-    _routesIndexer: RoutesIndexer,
     getTestFramework: () => 'rspec' | 'minitest',
     getPatterns: () => string[],
-  ): void {
+  ): vscode.ChatParticipant | undefined {
     if (typeof vscode.chat?.createChatParticipant !== 'function') {
       Logger.debug('vscode.chat.createChatParticipant is unavailable in this host environment.')
-      return
+      return undefined
     }
 
     try {
@@ -45,10 +49,31 @@ export class RailsChatParticipant {
           await this.handleRequest(request, stream, agent, schemaIndexer, getTestFramework, getPatterns)
         },
       )
-      context.subscriptions.push(this.participant)
-      Logger.info('Registered @rails chat participant.')
+      Logger.info('Created @rails chat participant.')
+      return this.participant
     } catch (err) {
-      Logger.warn('Failed to register @rails chat participant:', err)
+      Logger.warn('Failed to create @rails chat participant:', err)
+      return undefined
+    }
+  }
+
+  /**
+   * Legacy registration method - creates the participant via `createParticipant`
+   * and pushes it onto `context.subscriptions`. Kept for backward compatibility;
+   * new code should use `createParticipant` via the ProviderRegistry's
+   * `chatParticipant` factory instead.
+   */
+  register(
+    context: vscode.ExtensionContext,
+    agent: RailsAgent,
+    schemaIndexer: SchemaIndexer,
+    _routesIndexer: RoutesIndexer,
+    getTestFramework: () => 'rspec' | 'minitest',
+    getPatterns: () => string[],
+  ): void {
+    const participant = this.createParticipant(agent, schemaIndexer, getTestFramework, getPatterns)
+    if (participant) {
+      context.subscriptions.push(participant)
     }
   }
 
