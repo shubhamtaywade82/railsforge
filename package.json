@@ -124,10 +124,10 @@
             "Errors and warnings",
             "Errors, warnings, and normal progress (default)",
             "Adds AI request/response summaries, latency, and diff-parse results",
-            "Adds raw HTTP request/response payloads sent to the AI provider — these contain your code/prompts, so be careful before sharing logs"
+            "Adds raw HTTP request/response payloads sent to the AI provider \u2014 these contain your code/prompts, so be careful before sharing logs"
           ],
           "default": "info",
-          "description": "Verbosity of the RailsForge output channel (View → Output → RailsForge) and the railsForge.log.file mirror. Applies immediately on change — no window reload needed."
+          "description": "Verbosity of the RailsForge output channel (View \u2192 Output \u2192 RailsForge) and the railsForge.log.file mirror. Applies immediately on change \u2014 no window reload needed."
         },
         "railsForge.log.file": {
           "type": "boolean",
@@ -151,7 +151,7 @@
             "Force plain Ruby script treatment (same as gem, minus gem-publishing commands)"
           ],
           "default": "auto",
-          "description": "Override RailsForge's auto-detected project type. Controls which commands/keybindings appear (see the Architecture sidebar for what was detected) — set this when auto-detection gets it wrong, e.g. an API-only app without `config.api_only = true` set yet. Requires a window reload to take effect."
+          "description": "Override RailsForge's auto-detected project type. Controls which commands/keybindings appear (see the Architecture sidebar for what was detected) \u2014 set this when auto-detection gets it wrong, e.g. an API-only app without `config.api_only = true` set yet. Requires a window reload to take effect."
         },
         "railsForge.rubocop.autocorrectOnSave": {
           "type": "boolean",
@@ -239,13 +239,13 @@
             "vscode-lm"
           ],
           "enumDescriptions": [
-            "Local, private, free — uses railsForge.ollama.host/model (default)",
-            "Cloud — requires an API key set via 'RailsForge: Set AI Provider API Key'",
-            "Cloud — requires an API key set via 'RailsForge: Set AI Provider API Key'",
-            "VS Code's own model picker (Copilot or any installed Language Model provider, e.g. an Ollama provider) — no API key stored by RailsForge; VS Code asks for consent"
+            "Local, private, free \u2014 uses railsForge.ollama.host/model (default)",
+            "Cloud \u2014 requires an API key set via 'RailsForge: Set AI Provider API Key'",
+            "Cloud \u2014 requires an API key set via 'RailsForge: Set AI Provider API Key'",
+            "VS Code's own model picker (Copilot or any installed Language Model provider, e.g. an Ollama provider) \u2014 no API key stored by RailsForge; VS Code asks for consent"
           ],
           "default": "ollama",
-          "description": "Backend for the @rails AI agent and chat participant. Cloud providers send your code/prompts to that provider's API — only switch away from 'ollama' if you're fine with that. Requires a window reload to take effect."
+          "description": "Backend for the @rails AI agent and chat participant. Cloud providers send your code/prompts to that provider's API \u2014 only switch away from 'ollama' if you're fine with that. Requires a window reload to take effect."
         },
         "railsForge.ai.vscodeLm.family": {
           "type": "string",
@@ -294,7 +294,7 @@
         "railsForge.mcp.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Whether 'RailsForge: Export Cursor Rules & Register MCP Server' also registers the RailsForge MCP server (in .cursor/mcp.json). When false, that command still writes .cursor/rules/railsforge.mdc but skips MCP server registration. The MCP server itself always runs over stdio, started on demand by the MCP client (Cursor/Claude Code) — there is no in-editor 'server process' to start/stop or a port to configure."
+          "description": "Whether 'RailsForge: Export Cursor Rules & Register MCP Server' also registers the RailsForge MCP server (in .cursor/mcp.json). When false, that command still writes .cursor/rules/railsforge.mdc but skips MCP server registration. The MCP server itself always runs over stdio, started on demand by the MCP client (Cursor/Claude Code) \u2014 there is no in-editor 'server process' to start/stop or a port to configure."
         },
         "railsForge.apiDocs.enabled": {
           "type": "boolean",
@@ -347,7 +347,7 @@
         "railsForge.apidock.customMappings": {
           "type": "array",
           "default": [],
-          "description": "Extra (or overriding) entries for the hovered-word → apidock.com Class/method lookup used by the APIDock hover note. Each entry overrides any built-in mapping with the same keyword.",
+          "description": "Extra (or overriding) entries for the hovered-word \u2192 apidock.com Class/method lookup used by the APIDock hover note. Each entry overrides any built-in mapping with the same keyword.",
           "items": {
             "type": "object",
             "required": [
@@ -442,7 +442,7 @@
         "railsForge.rubydoc.namespaceMappings": {
           "type": "array",
           "default": [],
-          "description": "Extra (or overriding) entries for the constant-namespace → gem-name lookup used to resolve 'RailsForge: Open Gem Documentation' and get_gem_documentation. Only needed for a gem whose top-level module doesn't match its snake_cased or lowercased gem name.",
+          "description": "Extra (or overriding) entries for the constant-namespace \u2192 gem-name lookup used to resolve 'RailsForge: Open Gem Documentation' and get_gem_documentation. Only needed for a gem whose top-level module doesn't match its snake_cased or lowercased gem name.",
           "items": {
             "type": "object",
             "required": [
@@ -808,12 +808,12 @@
       },
       {
         "command": "railsforge.generate",
-        "title": "RailsForge: Rails Generate…",
+        "title": "RailsForge: Rails Generate\u2026",
         "category": "RailsForge"
       },
       {
         "command": "railsforge.destroyGenerated",
-        "title": "RailsForge: Rails Destroy…",
+        "title": "RailsForge: Rails Destroy\u2026",
         "category": "RailsForge"
       },
       {
@@ -877,6 +877,12 @@
         "command": "railsforge.openVirtualDoc",
         "title": "RailsForge: Open Project Overview (routes, schema, runtime, toolchain)",
         "category": "RailsForge"
+      },
+      {
+        "command": "railsforge.clonePattern",
+        "title": "RailsForge: Clone Existing Pattern",
+        "category": "RailsForge",
+        "enablement": "railsforge:semanticIndexReady"
       }
     ],
     "menus": {
@@ -1014,6 +1020,11 @@
           "submenu": "railsforge.editorSubmenu",
           "when": "resourceLangId == ruby || resourceLangId == erb",
           "group": "navigation@9"
+        },
+        {
+          "command": "railsforge.clonePattern",
+          "when": "resourceLangId == ruby && railsforge:semanticIndexReady",
+          "group": "railsforge.refactor@5"
         }
       ],
       "railsforge.editorSubmenu": [
@@ -1271,7 +1282,7 @@
         "displayName": "Find similar existing pattern",
         "toolReferenceName": "find_similar_pattern",
         "canBeReferencedInPrompt": true,
-        "modelDescription": "Given a proposed class name (e.g. \"CreateOrderService\"), finds the closest existing Service/Query/etc. in this project — use before generating new code.",
+        "modelDescription": "Given a proposed class name (e.g. \"CreateOrderService\"), finds the closest existing Service/Query/etc. in this project \u2014 use before generating new code.",
         "userDescription": "Find similar existing pattern",
         "tags": [
           "rails",
@@ -1321,7 +1332,7 @@
         "displayName": "Find near-duplicate methods",
         "toolReferenceName": "find_duplicate_methods",
         "canBeReferencedInPrompt": true,
-        "modelDescription": "Checks the codebase for near-duplicate method bodies (candidates for extracting a shared concern/method) — call this before generating a new method, to avoid writing a redundant duplicate of existing logic. Requires the persistent AST index.",
+        "modelDescription": "Checks the codebase for near-duplicate method bodies (candidates for extracting a shared concern/method) \u2014 call this before generating a new method, to avoid writing a redundant duplicate of existing logic. Requires the persistent AST index.",
         "userDescription": "Find near-duplicate methods",
         "tags": [
           "rails",
@@ -1339,7 +1350,7 @@
         "displayName": "Get APIDock method notes",
         "toolReferenceName": "get_method_notes",
         "canBeReferencedInPrompt": true,
-        "modelDescription": "Fetches apidock.com's community notes and doc summary for a Ruby/Rails/RSpec method — call this before generating code that uses an unfamiliar method, to ground it in real-world gotchas (skipped validations/callbacks, deprecated behavior, surprising defaults) that official docs often miss. This is APIDock only (community notes); for the official signature/description of a Ruby core or Rails framework method, prefer get_offline_docs instead — it's instant (no network call) when the docset is cached.",
+        "modelDescription": "Fetches apidock.com's community notes and doc summary for a Ruby/Rails/RSpec method \u2014 call this before generating code that uses an unfamiliar method, to ground it in real-world gotchas (skipped validations/callbacks, deprecated behavior, surprising defaults) that official docs often miss. This is APIDock only (community notes); for the official signature/description of a Ruby core or Rails framework method, prefer get_offline_docs instead \u2014 it's instant (no network call) when the docset is cached.",
         "userDescription": "Get APIDock method notes",
         "tags": [
           "rails",
@@ -1370,7 +1381,7 @@
         "displayName": "Get gem documentation (rubydoc.info)",
         "toolReferenceName": "get_gem_documentation",
         "canBeReferencedInPrompt": true,
-        "modelDescription": "Fetches YARD documentation (signature, description, params, return type) for a class/method in one of this project's dependency gems, at the exact version locked in Gemfile.lock — use this before generating code that calls into a gem (Pundit, Sidekiq, dry-rb, etc.) whose API isn't in RailsForge's own indexed patterns.",
+        "modelDescription": "Fetches YARD documentation (signature, description, params, return type) for a class/method in one of this project's dependency gems, at the exact version locked in Gemfile.lock \u2014 use this before generating code that calls into a gem (Pundit, Sidekiq, dry-rb, etc.) whose API isn't in RailsForge's own indexed patterns.",
         "userDescription": "Get gem documentation (rubydoc.info)",
         "tags": [
           "rails",
@@ -1409,7 +1420,7 @@
         "displayName": "Get offline DevDocs documentation",
         "toolReferenceName": "get_offline_docs",
         "canBeReferencedInPrompt": true,
-        "modelDescription": "Looks up a Ruby/Rails method or class in this project's locally cached DevDocs data (.railsforge/devdocs/, downloaded by the extension on activation) — instant, no network call, no tokens spent fetching a web page. Prefer this over get_method_notes/get_gem_documentation when you just need the official signature/description for a Ruby core or Rails framework method; use those for community gotchas or gem-specific (non-Rails) APIs instead.",
+        "modelDescription": "Looks up a Ruby/Rails method or class in this project's locally cached DevDocs data (.railsforge/devdocs/, downloaded by the extension on activation) \u2014 instant, no network call, no tokens spent fetching a web page. Prefer this over get_method_notes/get_gem_documentation when you just need the official signature/description for a Ruby core or Rails framework method; use those for community gotchas or gem-specific (non-Rails) APIs instead.",
         "userDescription": "Get offline DevDocs documentation",
         "tags": [
           "rails",
@@ -1465,7 +1476,7 @@
         "displayName": "List Rake tasks",
         "toolReferenceName": "list_rake_tasks",
         "canBeReferencedInPrompt": true,
-        "modelDescription": "Lists this project's Rake tasks (name, namespace, description) via `rake -T` — use before suggesting a shell command, to check whether a task for it already exists (e.g. db:migrate, a custom deploy/report task) rather than proposing a new script.",
+        "modelDescription": "Lists this project's Rake tasks (name, namespace, description) via `rake -T` \u2014 use before suggesting a shell command, to check whether a task for it already exists (e.g. db:migrate, a custom deploy/report task) rather than proposing a new script.",
         "userDescription": "List Rake tasks",
         "tags": [
           "rails",
@@ -1488,7 +1499,7 @@
         "displayName": "Suggest a learning resource for a design smell",
         "toolReferenceName": "suggest_learning_resource",
         "canBeReferencedInPrompt": true,
-        "modelDescription": "Given one of RailsForge's own design-principle diagnostic ids (SRP-FAT-CLASS, DEMETER-VIOLATION, KISS-METAPROGRAMMING, YAGNI-UNUSED-PRIVATE — as seen in this project's \"RailsForge Principles\" diagnostics), returns a specific book/chapter recommendation for further reading.",
+        "modelDescription": "Given one of RailsForge's own design-principle diagnostic ids (SRP-FAT-CLASS, DEMETER-VIOLATION, KISS-METAPROGRAMMING, YAGNI-UNUSED-PRIVATE \u2014 as seen in this project's \"RailsForge Principles\" diagnostics), returns a specific book/chapter recommendation for further reading.",
         "userDescription": "Suggest a learning resource for a design smell",
         "tags": [
           "rails",
@@ -1519,7 +1530,7 @@
         "displayName": "Get project architecture guidelines",
         "toolReferenceName": "get_project_guidelines",
         "canBeReferencedInPrompt": true,
-        "modelDescription": "Returns this project's actual conventions — from .railsforge.yml if the team wrote one, otherwise learned from the codebase's own existing Service Objects (majority base class + entry-point method name, only when the codebase actually agrees on one) — so an AI agent generates a Service Object matching this repo's real pattern (e.g. `Interactor`/`run`) instead of assuming the generic Rails-generator default (`ApplicationService`/`call`). Call this before generating a new Service Object.",
+        "modelDescription": "Returns this project's actual conventions \u2014 from .railsforge.yml if the team wrote one, otherwise learned from the codebase's own existing Service Objects (majority base class + entry-point method name, only when the codebase actually agrees on one) \u2014 so an AI agent generates a Service Object matching this repo's real pattern (e.g. `Interactor`/`run`) instead of assuming the generic Rails-generator default (`ApplicationService`/`call`). Call this before generating a new Service Object.",
         "userDescription": "Get project architecture guidelines",
         "tags": [
           "rails",
@@ -1625,7 +1636,7 @@
         "displayName": "Pick the engineering skills for a task",
         "toolReferenceName": "route_skills",
         "canBeReferencedInPrompt": true,
-        "modelDescription": "Given a task description (and optionally the file you are working on), returns the smallest set of ruby-agent-skills that apply — primary, secondary and always-on cross-cutting skills — with the reasons, plus relevant pattern names. Call this at the START of a Ruby/Rails change, then read the skills with get_skill. Uses the semantic graph of this project so a task touching a controller or migration routes accordingly.",
+        "modelDescription": "Given a task description (and optionally the file you are working on), returns the smallest set of ruby-agent-skills that apply \u2014 primary, secondary and always-on cross-cutting skills \u2014 with the reasons, plus relevant pattern names. Call this at the START of a Ruby/Rails change, then read the skills with get_skill. Uses the semantic graph of this project so a task touching a controller or migration routes accordingly.",
         "userDescription": "Pick the engineering skills for a task",
         "tags": [
           "rails",
@@ -1694,7 +1705,7 @@
         "displayName": "Get Rails runtime introspection",
         "toolReferenceName": "get_runtime_introspection",
         "canBeReferencedInPrompt": true,
-        "modelDescription": "Returns what the RUNNING Rails app knows — real ActiveRecord associations, validations, callbacks, routes and middleware — from the cached `rails runner` snapshot (.railsforge/runtime.json). More accurate than static parsing for metaprogrammed models. Only available after the developer ran \"RailsForge: Refresh Rails Runtime Introspection\" (it boots the app, so it is never run automatically).",
+        "modelDescription": "Returns what the RUNNING Rails app knows \u2014 real ActiveRecord associations, validations, callbacks, routes and middleware \u2014 from the cached `rails runner` snapshot (.railsforge/runtime.json). More accurate than static parsing for metaprogrammed models. Only available after the developer ran \"RailsForge: Refresh Rails Runtime Introspection\" (it boots the app, so it is never run automatically).",
         "userDescription": "Get Rails runtime introspection",
         "tags": [
           "rails",
@@ -1823,6 +1834,66 @@
       },
       {
         "path": "./dist/skills/skills/stack-minimality/SKILL.md"
+      }
+    ],
+    "semanticTokenTypes": [
+      {
+        "id": "rails-association",
+        "description": "ActiveRecord association (belongs_to, has_one, has_many, has_and_belongs_to_many)."
+      },
+      {
+        "id": "rails-callback",
+        "description": "ActiveRecord / ActiveSupport callback (before_save, after_commit, etc.)."
+      },
+      {
+        "id": "rails-validation",
+        "description": "ActiveModel validation (validates, validates_presence_of, etc.)."
+      },
+      {
+        "id": "rails-scope",
+        "description": "ActiveRecord scope (scope :name, ...)."
+      },
+      {
+        "id": "rails-route-helper",
+        "description": "Rails URL helper (users_path, user_url, etc.)."
+      },
+      {
+        "id": "rails-migration-method",
+        "description": "Migration DSL method (create_table, add_column, etc.)."
+      },
+      {
+        "id": "rails-stimulus-target",
+        "description": "Stimulus data-controller / data-target attribute value."
+      },
+      {
+        "id": "rails-view-helper",
+        "description": "ActionView helper (link_to, form_with, etc.)."
+      },
+      {
+        "id": "rails-policy-method",
+        "description": "Pundit policy method (authorize, policy, etc.)."
+      },
+      {
+        "id": "rails-service-entrypoint",
+        "description": "Service Object entry-point method (call, run, etc.)."
+      }
+    ],
+    "semanticTokenModifiers": [
+      {
+        "id": "deprecated",
+        "description": "Deprecated Rails API (will be removed in a future Rails release)."
+      },
+      {
+        "id": "internal",
+        "description": "Internal Rails API (not part of the public stable API)."
+      },
+      {
+        "id": "readonly",
+        "description": "Read-only attribute (attr_readonly, etc.)."
+      },
+      {
+        "id": "cached",
+        "description": "Method or query wrapped in a Rails cache block."
       }
     ]
   },

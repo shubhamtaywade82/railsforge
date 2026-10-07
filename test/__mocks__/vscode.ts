@@ -81,9 +81,20 @@ export class CompletionItem {
   }
 }
 
-export const CodeActionKind = {
-  QuickFix: 'QuickFix',
-  RefactorExtract: 'RefactorExtract',
+export class CodeActionKind {
+  constructor(public readonly value: string) {}
+  append(parts: string): CodeActionKind {
+    return new CodeActionKind(`${this.value}.${parts}`)
+  }
+  static readonly Empty = new CodeActionKind('')
+  static readonly QuickFix = new CodeActionKind('QuickFix')
+  static readonly Refactor = new CodeActionKind('Refactor')
+  static readonly RefactorExtract = new CodeActionKind('RefactorExtract')
+  static readonly RefactorRewrite = new CodeActionKind('RefactorRewrite')
+  static readonly RefactorInline = new CodeActionKind('RefactorInline')
+  static readonly Source = new CodeActionKind('Source')
+  static readonly SourceFixAll = new CodeActionKind('SourceFixAll')
+  static readonly SourceOrganizeImports = new CodeActionKind('SourceOrganizeImports')
 }
 
 export class MarkdownString {
@@ -92,6 +103,29 @@ export class MarkdownString {
   appendMarkdown(str: string) {
     this.value += str
     return this
+  }
+}
+
+/** Minimal WorkspaceEdit stub - records operations so tests can assert on them. */
+export class WorkspaceEdit {
+  readonly operations: Array<{ kind: string; uri?: unknown; range?: unknown; position?: unknown; newText?: string; options?: unknown; oldUri?: unknown; newUri?: unknown }> = []
+  replace(uri: unknown, range: unknown, newText: string): void {
+    this.operations.push({ kind: 'replace', uri, range, newText })
+  }
+  insert(uri: unknown, position: unknown, newText: string): void {
+    this.operations.push({ kind: 'insert', uri, position, newText })
+  }
+  delete(uri: unknown, range: unknown): void {
+    this.operations.push({ kind: 'delete', uri, range })
+  }
+  createFile(uri: unknown, options?: unknown): void {
+    this.operations.push({ kind: 'createFile', uri, options })
+  }
+  renameFile(oldUri: unknown, newUri: unknown, options?: unknown): void {
+    this.operations.push({ kind: 'renameFile', oldUri, newUri, options })
+  }
+  deleteFile(uri: unknown, options?: unknown): void {
+    this.operations.push({ kind: 'deleteFile', uri, options })
   }
 }
 

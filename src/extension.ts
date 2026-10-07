@@ -111,6 +111,13 @@ import { parseVersion, bumpVersion, replaceVersionInContent, VersionBumpPart } f
 import { SpeculativeFixCache } from './agent/SpeculativeFixCache'
 import { Logger } from './util/Logger'
 import { handleWorkspaceAutoOptimization, optimizeRailsWorkspace } from './workspace/WorkspaceOptimizer'
+import {
+  ProviderRegistry,
+  PrincipleCodeActionProvider,
+  SemanticIndexAdapter,
+  PatternCatalogAccessAdapter,
+  RefactoringEditProvider,
+} from './providers'
 
 const execFileAsync = promisify(execFile)
 
@@ -748,6 +755,39 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   statusBar.tooltip = 'RailsForge: Active'
   statusBar.show()
   context.subscriptions.push(statusBar)
+
+  // 7. Provider Registry - the architectural firewall between VS Code APIs and the
+  //    core engine. Wires the PrincipleCodeActionProvider (canonical example) plus
+  //    the engine adapters (SemanticIndexAdapter wraps PersistentIndexManager +
+  //    DesignPrincipleLinter; PatternCatalogAccessAdapter wraps PatternCatalog +
+  //    ProjectPatternIndexer). Other providers (WorkspaceFs, SourceControl,
+  //    TerminalTasks, WindowUi, TestingApi, AiChat) are opt-in flags that the
+  //    engineering team can flip on as they migrate existing direct registrations
+  //    in extension.ts to the new layer one at a time.
+  const semanticIndexAdapter = new SemanticIndexAdapter(
+    activeProject.root,
+    persistentIndexes.get(activeProject.root) ?? undefined,
+    principleLinter,
+  )
+  const patternCatalogAdapter = new PatternCatalogAccessAdapter(projectPatternIndexer)
+  // Construct the shared RefactoringEditProvider outside the registry closure so its
+  // reference is resolved before the registry's factory arrow function captures it.
+  // This avoids the TS7022 "implicitly has type any" self-reference error.
+  const sharedEditProvider = new RefactoringEditProvider()
+  const providerRegistry = new ProviderRegistry({
+    index: semanticIndexAdapter,
+    catalog: patternCatalogAdapter,
+    workspaceRoot: activeProject.root,
+    languageIntelligence: {
+      // Canonical example: a CodeActionProvider that consumes the SemanticIndex and
+      // PatternCatalog, producing refactoring Quick Fixes ("Extract to Service",
+      // "Fix Demeter Violation", "Inject Dependency", "Clone existing pattern") via
+      // the RefactoringEditProvider (atomic, previewable WorkspaceEdits).
+      codeActions: (index, catalog) => new PrincipleCodeActionProvider(index, catalog, sharedEditProvider),
+    },
+  })
+  providerRegistry.activate()
+  context.subscriptions.push(providerRegistry)
 
   return {
     getActiveProjectRoot: () => activeProject.root,
