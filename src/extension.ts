@@ -475,11 +475,10 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   const rakeTaskIndexer = new RakeTaskIndexer()
   const rakeTaskTreeProvider = new RakeTaskTreeProvider(rakeTaskIndexer, workspaceRoot)
 
-  context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('railsforge.architectureView', architectureTreeProvider),
-    vscode.window.registerTreeDataProvider('railsforge.patternCatalogView', patternCatalogTree),
-    vscode.window.registerTreeDataProvider('railsforge.rakeTasksView', rakeTaskTreeProvider),
-  )
+  // Tree-view registration migrated to ProviderRegistry (WindowUiProvider).
+  // The tree-provider variables remain in scope so extension.ts can call
+  // .refresh() / .setRoot() on them directly; only the VS Code registration
+  // call has moved into the registry.
   void vscode.commands.executeCommand('setContext', 'railsforge.hasRakefile', workspaceRoot && fs.existsSync(path.join(workspaceRoot, 'Rakefile')))
 
   // Multi-root: schema/routes/env/stimulus/factories/rake are per-project. They are
@@ -802,6 +801,20 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     commitMessageGenerator: async (diff, index, catalog) => {
       const commit = generateConventionalCommit(diff, index, catalog)
       return commit?.toString()
+    },
+
+    // Window UI: tree-view registration migrated from direct
+    // `vscode.window.registerTreeDataProvider` calls. The three tree providers
+    // (architecture, pattern catalog, rake tasks) are constructed above as local
+    // variables; the factories here just wrap them in `createTreeView` so the
+    // WindowUiProvider owns the disposable lifetime. The provider variables stay
+    // accessible for direct .refresh() / .setRoot() calls from extension.ts.
+    windowUi: {
+      treeViews: {
+        'railsforge.architectureView': () => vscode.window.createTreeView('railsforge.architectureView', { treeDataProvider: architectureTreeProvider }),
+        'railsforge.patternCatalogView': () => vscode.window.createTreeView('railsforge.patternCatalogView', { treeDataProvider: patternCatalogTree }),
+        'railsforge.rakeTasksView': () => vscode.window.createTreeView('railsforge.rakeTasksView', { treeDataProvider: rakeTaskTreeProvider }),
+      },
     },
   })
   providerRegistry.activate()
