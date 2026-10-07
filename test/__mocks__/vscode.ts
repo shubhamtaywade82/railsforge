@@ -164,8 +164,34 @@ export const languages = {
 export const workspace = {
   createFileSystemWatcher: () => ({
     onDidChange: () => {},
+    onDidCreate: () => {},
+    onDidDelete: () => {},
     dispose: () => {},
   }),
+  onDidSaveTextDocument: (
+    _handler: (doc: unknown) => void,
+    _thisArgs?: unknown,
+    disposables?: Array<{ dispose(): void }>,
+  ): { dispose(): void } => {
+    const d = { dispose: () => {} }
+    if (disposables) {disposables.push(d)}
+    return d
+  },
+  onDidChangeConfiguration: (
+    _handler: (event: unknown) => void,
+    _thisArgs?: unknown,
+    disposables?: Array<{ dispose(): void }>,
+  ): { dispose(): void } => {
+    const d = { dispose: () => {} }
+    if (disposables) {disposables.push(d)}
+    return d
+  },
+  getConfiguration: () => ({
+    get: <T>(_key: string, defaultValue: T): T => defaultValue,
+    update: async () => {},
+  }),
+  workspaceFolders: [] as unknown[],
+  getWorkspaceFolder: (_uri: unknown) => undefined,
 }
 
 export const window = {

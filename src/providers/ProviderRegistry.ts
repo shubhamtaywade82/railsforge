@@ -91,6 +91,15 @@ export class ProviderRegistry implements vscode.Disposable {
 
   constructor(private readonly deps: ProviderRegistryDeps) {
     this.editProvider = new RefactoringEditProvider()
+
+    // Construct the WorkspaceFsProvider eagerly (before activate()) so that
+    // onFileChange / onSave / onConfigChange handlers can be registered between
+    // construction and activation. This lets extension.ts register save handlers
+    // before the registry's activate() call wires up the underlying
+    // vscode.workspace.onDidSaveTextDocument listener.
+    if (deps.enableWorkspaceFs) {
+      this.workspaceFs = new WorkspaceFsProvider(deps.index, deps.catalog)
+    }
   }
 
   /**
@@ -101,12 +110,9 @@ export class ProviderRegistry implements vscode.Disposable {
   activate(): void {
     const { deps } = this
 
-    // 1. Workspace / File System - registered first so the FileSystemWatcher is live
-    //    before any other provider starts reading the index. Opt-in because the
-    //    existing extension.ts already creates several watchers directly; flipping
-    //    this on is a follow-up migration step.
-    if (deps.enableWorkspaceFs) {
-      this.workspaceFs = new WorkspaceFsProvider(deps.index, deps.catalog)
+    // 1. Workspace / File System - activate the eagerly-constructed provider so
+    //    the FileSystemWatchers and onDidSaveTextDocument listener go live.
+    if (this.workspaceFs) {
       this.workspaceFs.activate()
       this.providers.push(this.workspaceFs)
     }

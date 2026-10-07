@@ -636,44 +636,11 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
 
   let lastBrakemanScanOnSave = 0
   let lastSteepScanOnSave = 0
-  vscode.workspace.onDidSaveTextDocument(doc => {
-    if (doc.languageId !== 'ruby') {return}
-    const saveConfig = readConfig()
-    if (saveConfig.rubocopAutocorrectOnSave) {
-      void rubocopProvider.autoCorrectFile(doc.uri, saveConfig.rubocopMode)
-    }
-    void rubocopProvider.lintDocument(doc)
-    if (saveConfig.brakemanScanOnSave && env.hasRails) {
-      // Brakeman is a whole-project static scan (can take several seconds), so a save-
-      // triggered run is debounced and silent-on-clean rather than firing (and popping a
-      // doc open) on every keystroke-adjacent save the way a per-file linter would.
-      const now = Date.now()
-      if (now - lastBrakemanScanOnSave >= 30_000) {
-        lastBrakemanScanOnSave = now
-        const scanRoot = workspaceRootFor(doc.uri) ?? workspaceRoot
-        void brakemanProvider.runScan(scanRoot).then(report => {
-          if (report.warnings.length === 0) {return}
-          void vscode.window
-            .showWarningMessage(`RailsForge: Brakeman found ${report.warnings.length} security warning(s).`, 'Show Report')
-            .then(choice => {
-              if (choice !== 'Show Report') {return}
-              void vscode.workspace
-                .openTextDocument({ content: brakemanProvider.formatMarkdownReport(report), language: 'markdown' })
-                .then(reportDoc => vscode.window.showTextDocument(reportDoc))
-            })
-        })
-      }
-    }
-    if (saveConfig.typesSteepEnabled && saveConfig.typesSteepScanOnSave) {
-      // Same debounce rationale as Brakeman above: Steep type-checks the whole configured
-      // target, not just the saved file, so a save-triggered run needs a floor between runs.
-      const now = Date.now()
-      if (now - lastSteepScanOnSave >= 30_000) {
-        lastSteepScanOnSave = now
-        void updateSteepDiagnostics(steepProvider, steepDiagnostics, workspaceRootFor(doc.uri) ?? workspaceRoot)
-      }
-    }
-  }, null, context.subscriptions)
+  // onDidSaveTextDocument handler migrated to ProviderRegistry (WorkspaceFsProvider.onSave).
+  // The handler closure is registered below, after the registry is constructed but
+  // before activate() is called, so the WorkspaceFsProvider's internal saveHandlers
+  // array is populated before the underlying vscode.workspace.onDidSaveTextDocument
+  // listener goes live.
 
   // 4. Register Commands
   registerCommands(
@@ -776,6 +743,11 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     index: semanticIndexAdapter,
     catalog: patternCatalogAdapter,
     workspaceRoot: activeProject.root,
+    // Workspace FS: FileSystemWatcher + onDidSaveTextDocument + onDidChangeConfiguration.
+    // The WorkspaceFsProvider is constructed eagerly in the registry constructor so
+    // that onSave() handlers can be registered before activate() wires up the
+    // underlying vscode.workspace listeners.
+    enableWorkspaceFs: true,
     languageIntelligence: {
       // Canonical example: a CodeActionProvider that consumes the SemanticIndex and
       // PatternCatalog, producing refactoring Quick Fixes ("Extract to Service",
@@ -842,6 +814,51 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
       return participant
     },
   })
+
+  // Register the onDidSaveTextDocument handler via the WorkspaceFsProvider before
+  // calling activate(). The handler is stored in the provider's internal
+  // saveHandlers array; activate() then wires up the single underlying
+  // vscode.workspace.onDidSaveTextDocument listener that dispatches to all
+  // registered handlers.
+  providerRegistry.workspaceFs?.onSave(doc => {
+    if (doc.languageId !== 'ruby') {return}
+    const saveConfig = readConfig()
+    if (saveConfig.rubocopAutocorrectOnSave) {
+      void rubocopProvider.autoCorrectFile(doc.uri, saveConfig.rubocopMode)
+    }
+    void rubocopProvider.lintDocument(doc)
+    if (saveConfig.brakemanScanOnSave && env.hasRails) {
+      // Brakeman is a whole-project static scan (can take several seconds), so a save-
+      // triggered run is debounced and silent-on-clean rather than firing (and popping a
+      // doc open) on every keystroke-adjacent save the way a per-file linter would.
+      const now = Date.now()
+      if (now - lastBrakemanScanOnSave >= 30_000) {
+        lastBrakemanScanOnSave = now
+        const scanRoot = workspaceRootFor(doc.uri) ?? workspaceRoot
+        void brakemanProvider.runScan(scanRoot).then(report => {
+          if (report.warnings.length === 0) {return}
+          void vscode.window
+            .showWarningMessage(`RailsForge: Brakeman found ${report.warnings.length} security warning(s).`, 'Show Report')
+            .then(choice => {
+              if (choice !== 'Show Report') {return}
+              void vscode.workspace
+                .openTextDocument({ content: brakemanProvider.formatMarkdownReport(report), language: 'markdown' })
+                .then(reportDoc => vscode.window.showTextDocument(reportDoc))
+            })
+        })
+      }
+    }
+    if (saveConfig.typesSteepEnabled && saveConfig.typesSteepScanOnSave) {
+      // Same debounce rationale as Brakeman above: Steep type-checks the whole configured
+      // target, not just the saved file, so a save-triggered run needs a floor between runs.
+      const now = Date.now()
+      if (now - lastSteepScanOnSave >= 30_000) {
+        lastSteepScanOnSave = now
+        void updateSteepDiagnostics(steepProvider, steepDiagnostics, workspaceRootFor(doc.uri) ?? workspaceRoot)
+      }
+    }
+  })
+
   providerRegistry.activate()
   context.subscriptions.push(providerRegistry)
 
