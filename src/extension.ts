@@ -56,6 +56,7 @@ import { VersionDocsEngine } from './docs/VersionDocsEngine'
 import { FactoryBotResolver } from './testing/FactoryBotResolver'
 import { RailsArchitectureTreeProvider } from './views/RailsArchitectureTreeProvider'
 import { PatternCatalogTreeProvider, PatternItem } from './views/PatternCatalogTreeProvider'
+import { createLoopTools } from './agent/LoopTools'
 import { collectDiagnostics } from './diagnostics/collect'
 import { renderDiagnosticsDoc } from './diagnostics/Diagnostics'
 import { explainPatternPrompt, getCatalogPattern, toProjectInstances } from './patterns/PatternCatalog'
@@ -283,6 +284,8 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     ollamaMinP: cfg.ollamaMinP,
     getApiKey: async () => context.secrets.get(aiApiKeySecretKey(readConfig().aiProvider)),
     vscodeLmFamily: cfg.aiVscodeLmFamily,
+    toolLoop: { enabled: cfg.agentToolLoop, maxSteps: cfg.agentMaxToolSteps, verifySyntax: cfg.agentVerifySyntax },
+    loopTools: root => (root ? createLoopTools(semanticContexts.get(root)) : []),
     skillContext: ({ prompt, command, fileName, workspaceRoot: root, diagnosticMessage }) => {
       const settings = readConfig()
       if (!settings.skillsEnabled) {return ''}

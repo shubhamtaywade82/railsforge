@@ -94,6 +94,9 @@ export interface RailsForgeConfig {
   /** Route and inject ruby-agent-skills guidance into AI requests. */
   skillsEnabled: boolean
   skillsMaxPerRequest: number
+  agentToolLoop: boolean
+  agentMaxToolSteps: number
+  agentVerifySyntax: boolean
   skillsExtraPaths: string[]
   analyzersEnabled: string[]
   analyzersFlogThreshold: number
@@ -158,6 +161,9 @@ export function readConfig(scope?: vscode.ConfigurationScope): RailsForgeConfig 
     runtimeIntrospectionEnabled: cfg.get<boolean>('runtime.introspection.enabled', false),
     skillsEnabled: cfg.get<boolean>('skills.enabled', true),
     skillsMaxPerRequest: cfg.get<number>('skills.maxPerRequest', 4),
+    agentToolLoop: cfg.get<boolean>('agent.toolLoop', true),
+    agentMaxToolSteps: Math.max(1, Math.min(8, cfg.get<number>('agent.maxToolSteps', 3))),
+    agentVerifySyntax: cfg.get<boolean>('agent.verifyRubySyntax', true),
     skillsExtraPaths: cfg.get<string[]>('skills.extraPaths', []),
     analyzersEnabled: cfg.get<string[]>('analyzers.enabled', []),
     analyzersFlogThreshold: cfg.get<number>('analyzers.flogThreshold', 20),

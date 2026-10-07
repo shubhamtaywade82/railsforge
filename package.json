@@ -476,6 +476,23 @@
           "default": true,
           "description": "Route each AI request to the most relevant ruby-agent-skills (bundled, pinned release) and inject their rules into the prompt. The same skills are available to agent mode via the railsforge_get_skill / railsforge_route_skills tools."
         },
+        "railsForge.agent.toolLoop": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Let the AI look things up with a few read-only RailsForge tools (schema, routes, semantic graph, skills, patterns) before answering. Bounded by `railsForge.agent.maxToolSteps`; no tool can write, run project code or reach the network. Turn off for a single plain completion."
+        },
+        "railsForge.agent.maxToolSteps": {
+          "type": "integer",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 8,
+          "markdownDescription": "Most tool calls the AI may make for one request before it must answer."
+        },
+        "railsForge.agent.verifyRubySyntax": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Syntax-check Ruby code blocks in AI answers with `ruby -c` (parse only, nothing is executed). A failing block gets one automatic repair attempt; anything still failing is flagged in the answer. Skipped silently when `ruby` is not on the PATH."
+        },
         "railsForge.skills.maxPerRequest": {
           "type": "number",
           "default": 4,
