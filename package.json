@@ -89,6 +89,8 @@
     "test:host:stable": "pnpm run compile && tsc -p tsconfig.host.json && vscode-test --label stable",
     "native-smoke": "node scripts/native-smoke.cjs",
     "vsix-smoke": "tsc -p tsconfig.host.json && node scripts/vsix-smoke.mjs",
+    "coverage": "vitest run --coverage",
+    "mutation": "node scripts/mutation.mjs",
     "test:restricted": "tsc -p tsconfig.host.json && node scripts/restricted-host-test.mjs && node scripts/restricted-host-test.mjs --trusted"
   },
   "contributes": {
@@ -1892,11 +1894,13 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@stryker-mutator/core": "^10.0.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^26.6.3",
     "@types/vscode": "~1.96.0",
     "@typescript-eslint/eslint-plugin": "^8.71.0",
     "@typescript-eslint/parser": "^8.67.0",
+    "@vitest/coverage-v8": "5.0.3",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.0.0",

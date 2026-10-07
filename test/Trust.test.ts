@@ -22,6 +22,7 @@ describe('workspace trust gate', () => {
     let thrown: unknown
     try { assertTrusted('rubocop') } catch (err) { thrown = err }
     expect(thrown).toBeInstanceOf(UntrustedWorkspaceError)
+    expect((thrown as Error).name).toBe('UntrustedWorkspaceError')
     expect((thrown as UntrustedWorkspaceError).code).toBe('RAILSFORGE_UNTRUSTED_WORKSPACE')
     expect((thrown as Error).message).toMatch(/"rubocop" runs project code.*Restricted Mode/)
     expect(blocked).toHaveBeenCalledWith('rubocop')

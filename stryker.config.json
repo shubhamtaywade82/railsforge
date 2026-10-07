@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "command",
+  "coverageAnalysis": "off",
+  "reporters": ["clear-text", "json"],
+  "tempDirName": ".stryker-tmp",
+  "cleanTempDir": true,
+  "timeoutMS": 30000,
+  "timeoutFactor": 3,
+  "ignorePatterns": ["dist", "out", ".vscode-test", ".vscode-test.mjs", "reports", "coverage", "*.vsix", ".railsforge", "ruby-lsp-addon", "test-host", "/docs", "/media", "/examples"],
+  "thresholds": { "high": 90, "low": 75, "break": 70 }
+}

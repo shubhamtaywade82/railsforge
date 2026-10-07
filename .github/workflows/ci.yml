@@ -75,6 +75,21 @@ jobs:
         env:
           RAILSFORGE_REQUIRE_RUBY: ${{ matrix.node-version == '22.x' && '1' || '' }}
 
+      # Enforces the per-file coverage floors in vitest.config.ts on the security/correctness-critical modules.
+      - name: Coverage (enforces thresholds)
+        if: matrix.node-version == '22.x'
+        run: pnpm run coverage
+        env:
+          RAILSFORGE_REQUIRE_RUBY: '1'
+
+      - name: Upload coverage report
+        if: matrix.node-version == '22.x'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
+
       # Boots a real VS Code Extension Host (Electron under xvfb) with the webpack build
       # and a two-folder multi-root workspace: checks activate(), that every contributed
       # command is registered, and per-folder schema isolation. One Node version is enough.

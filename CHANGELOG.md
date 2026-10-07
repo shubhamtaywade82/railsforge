@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Testing
+- `pnpm run coverage` enforces per-file v8 coverage floors on the trust gate, workspace-path guard, agent loop, safety rules, freshness, diagnostics and line-diff modules (uploaded as a CI artifact).
+- `pnpm run mutation` mutation-tests those modules with Stryker (command runner; per-group `break` scores in `scripts/mutation.mjs`). Runs weekly, on demand, and on PRs touching those files (`.github/workflows/mutation.yml`).
+
 ### Fixed
 - Extract Service/Query no longer prepends generated code into an existing file; it aborts with an error.
 - AI patch hunks are matched to files by exact workspace-relative path (not basename).
