@@ -195,7 +195,9 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   const analyzers = new RubyAnalyzersProvider()
   context.subscriptions.push(analyzers)
   const testExplorer = new TestExplorerController()
-  context.subscriptions.push(testExplorer)
+  // TestExplorerController registration migrated to ProviderRegistry (TestingApiProvider).
+  // The testExplorer variable stays in scope so extension.ts can call
+  // .discoverWorkspace() / .discoverTestsInDocument() / .getController() directly.
   const serviceExtractor = new ServiceExtractor()
   const queryExtractor = new QueryExtractor()
   const formExtractor = new FormObjectExtractor()
@@ -816,6 +818,14 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
         'railsforge.rakeTasksView': () => vscode.window.createTreeView('railsforge.rakeTasksView', { treeDataProvider: rakeTaskTreeProvider }),
       },
     },
+
+    // Testing API: TestExplorerController registration migrated from direct
+    // `context.subscriptions.push(testExplorer)`. The factory returns the
+    // already-constructed TestExplorerController (which implements vscode.Disposable
+    // and internally calls `vscode.tests.createTestController`). The
+    // TestingApiProvider owns the dispose lifecycle; the `testExplorer` variable
+    // stays accessible for direct .discoverWorkspace() / .getController() calls.
+    testing: () => testExplorer,
   })
   providerRegistry.activate()
   context.subscriptions.push(providerRegistry)
