@@ -19,6 +19,7 @@ import { formatSnapshotMarkdown, RuntimeSnapshot } from '../../rails/RuntimeIntr
 import { ToolContext } from './ToolContext'
 import { buildSemanticContext, selectSeeds } from '../../semantic/RailsContextBuilder'
 import { routeSkills, suggestPatterns } from '../../skills/SkillRouter'
+import { evaluateSafety } from '../../skills/SafetyRules'
 import { buildSkillContext } from '../../skills/SkillContextBuilder'
 
 export interface ToolDefinition {
@@ -301,7 +302,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   defineTool({
     name: 'route_skills',
     title: 'Pick the engineering skills for a task',
-    description: 'Given a task description (and optionally the file you are working on), returns the smallest set of ruby-agent-skills that apply — primary, secondary and always-on cross-cutting skills — with the reasons, plus relevant pattern names. Call this at the START of a Ruby/Rails change, then read the skills with get_skill. Uses the semantic graph of this project so a task touching a controller or migration routes accordingly.',
+    description: 'Given a task description (and optionally the file you are working on), returns the smallest set of ruby-agent-skills that apply — primary, secondary, always-on cross-cutting and safety-forced skills — with the reasons, any safety warnings (destructive commands, SQL injection, mass assignment, risky migrations, ...), plus relevant pattern names. Call this at the START of a Ruby/Rails change, then read the skills with get_skill. Uses the semantic graph of this project so a task touching a controller or migration routes accordingly.',
     inputSchema: {
       task: z.string().describe('What the user wants, in their words, e.g. "fix an N+1 in OrdersController#index"'),
       file: z.string().optional().describe('Active file path, if any'),
@@ -314,7 +315,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
       const kinds = [...new Set(selectSeeds(ctx.getSemanticGraph(), { prompt: task, filePath: file, maxSeeds: 8 }).map(e => e.kind))]
       const input = { prompt: task, entityKinds: kinds, context: file }
       const routed = routeSkills(registry.catalog, input, { maxSkills: max_skills ?? 4 })
-      return json({ routed, patterns: suggestPatterns(registry.catalog, input), touches: kinds })
+      return json({ routed, safety: evaluateSafety({ prompt: task, context: file }), patterns: suggestPatterns(registry.catalog, input), touches: kinds })
     },
   }),
   defineTool({

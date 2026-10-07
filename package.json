@@ -1630,7 +1630,7 @@
         "displayName": "Pick the engineering skills for a task",
         "toolReferenceName": "route_skills",
         "canBeReferencedInPrompt": true,
-        "modelDescription": "Given a task description (and optionally the file you are working on), returns the smallest set of ruby-agent-skills that apply — primary, secondary and always-on cross-cutting skills — with the reasons, plus relevant pattern names. Call this at the START of a Ruby/Rails change, then read the skills with get_skill. Uses the semantic graph of this project so a task touching a controller or migration routes accordingly.",
+        "modelDescription": "Given a task description (and optionally the file you are working on), returns the smallest set of ruby-agent-skills that apply — primary, secondary, always-on cross-cutting and safety-forced skills — with the reasons, any safety warnings (destructive commands, SQL injection, mass assignment, risky migrations, ...), plus relevant pattern names. Call this at the START of a Ruby/Rails change, then read the skills with get_skill. Uses the semantic graph of this project so a task touching a controller or migration routes accordingly.",
         "userDescription": "Pick the engineering skills for a task",
         "tags": [
           "rails",
