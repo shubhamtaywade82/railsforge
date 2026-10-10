@@ -51,6 +51,19 @@ describe('DesignPrincipleLinter', () => {
     expect(list.length).toBe(0)
   })
 
+  it('ignores dotted numbers and string literals for Law of Demeter', () => {
+    const lines = [
+      '  def reveal(ip: "203.0.113.10")',
+      "  host = 'api.v1.example.com'",
+      '  version = 1.2',
+    ]
+
+    const list: PrincipleDiagnostic[] = []
+    linter['checkLawOfDemeter'](lines, list)
+
+    expect(list.length).toBe(0)
+  })
+
   it('flags dynamic metaprogramming for KISS principle', () => {
     const lines = [
       'class DynamicModel',

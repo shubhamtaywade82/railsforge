@@ -115,12 +115,14 @@ export class DesignPrincipleLinter implements vscode.CodeActionProvider {
   ])
 
   private checkLawOfDemeter(lines: string[], list: PrincipleDiagnostic[]): void {
-    const demeterRegex = /\b([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+){3,})\b/
+    const demeterRegex = /\b([a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*){3,})\b/
+    const stringLiteralRegex = /(["'])(?:\\.|(?!\1).)*\1/g
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
       if (line.trim().startsWith('#')) {continue}
 
-      const match = demeterRegex.exec(line)
+      // Dotted text inside strings (IPs, hostnames, versions) is data, not a call chain.
+      const match = demeterRegex.exec(line.replace(stringLiteralRegex, '""'))
       if (!match) {continue}
 
       const segments = match[1].split('.')
