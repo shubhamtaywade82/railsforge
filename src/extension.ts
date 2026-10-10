@@ -44,7 +44,7 @@ import { ProjectState } from './util/ProjectState'
 import { VIRTUAL_DOC_KINDS, VIRTUAL_DOC_SCHEME, VirtualDocKind } from './views/VirtualDocs'
 import { VirtualDocsProvider, patternDocUri, virtualDocUri } from './views/VirtualDocsProvider'
 import { showRuntimeSnapshot } from './rails/RuntimeIntrospectionService'
-import { RAILSFORGE_TASK_TYPE, RailsTaskProvider } from './tasks/RailsTaskProvider'
+import { RailsTaskProvider } from './tasks/RailsTaskProvider'
 import { GENERATORS, GeneratorMode, buildGeneratorArgs, parseAttributes, parseGeneratorOutput, validateGeneratorName } from './rails/RailsGenerators'
 import { firstCandidate, projectVersionManager, setVersionManagerSettingProvider, rubyCandidates, rubyTerminalCommand } from './util/RubyCommand'
 import { ShellKind, shellKindFromPath, hasPathSegment } from './util/ShellCommand'
@@ -117,6 +117,16 @@ import { Logger } from './util/Logger'
 import { diffLines, filterFixHunks, applyHunks } from './patch/LineDiff'
 import { rubySyntaxError } from './util/RubySyntax'
 import { handleWorkspaceAutoOptimization, optimizeRailsWorkspace } from './workspace/WorkspaceOptimizer'
+import {
+  ProviderRegistry,
+  PrincipleCodeActionProvider,
+  SemanticIndexAdapter,
+  PatternCatalogAccessAdapter,
+  RefactoringEditProvider,
+  generateConventionalCommit,
+  WorkspaceFsProvider,
+  type EditOperation,
+} from './providers'
 
 
 /** Applies railsForge.log.level and railsForge.log.file immediately, without a reload. */
@@ -196,7 +206,9 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   const analyzers = new RubyAnalyzersProvider()
   context.subscriptions.push(analyzers)
   const testExplorer = new TestExplorerController()
-  context.subscriptions.push(testExplorer)
+  // TestExplorerController registration migrated to ProviderRegistry (TestingApiProvider).
+  // The testExplorer variable stays in scope so extension.ts can call
+  // .discoverWorkspace() / .discoverTestsInDocument() / .getController() directly.
   const serviceExtractor = new ServiceExtractor()
   const queryExtractor = new QueryExtractor()
   const formExtractor = new FormObjectExtractor()
@@ -326,12 +338,9 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     projectPatternIndexer,
   )
 
-  context.subscriptions.push(onConfigChanged(() => {
-    const freshConfig = readConfig()
-    applyLogSettings(freshConfig, workspaceRoot)
-    agent.updateConfig(getAgentConfig(freshConfig))
-    void vscode.commands.executeCommand('setContext', 'railsforge.aiProvider', freshConfig.aiProvider)
-  }))
+  // Config-change handler migrated to providerRegistry.workspaceFs.onConfigChange()
+  // below (after the registry is constructed). The handler refreshes log settings,
+  // agent config, and the railsforge.aiProvider context key.
 
   const embeddingClient = new EmbeddingClient({
     ollamaHost: config.ollamaHost,
@@ -418,12 +427,12 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
       void loadTurboFrames(turboFrameNavigator)
     }, 2000)
 
-    // File watchers are cheap to register, do immediately.
-    watchProjectFiles(context, () => activeProject.root, schemaIndexer, routesIndexer, migrationDiagnostics, (root, kind) => { semanticContexts.get(root).invalidateSemanticGraph(); virtualDocs.refresh(root, [kind, 'graph']) })
-    watchPatternFiles(context, projectPatternIndexer, patternCodeLensProvider, dependencyGraph, dependencyDiagnostics, relatedCodeLensProvider, semanticSearchIndex)
-    watchSpecFiles(context, relatedFilesIndex, relatedCodeLensProvider)
-    watchStimulusControllers(context, stimulusIndexer, () => activeProject.root)
-    watchTurboFrameTemplates(context, turboFrameNavigator)
+    // File watchers are registered after the ProviderRegistry is constructed
+    // (below) so they can use providerRegistry.workspaceFs.createWatcher() instead
+    // of direct vscode.workspace.createFileSystemWatcher() calls. The business
+    // logic (reindex, refresh, etc.) still lives in the watch* helper functions;
+    // only the watcher creation + handler wiring + disposable management has moved
+    // to the WorkspaceFsProvider.
   }
 
   // 3. Activity Bar Tree Views
@@ -454,12 +463,10 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     clearTimeout(patternRefreshTimer)
     patternRefreshTimer = setTimeout(() => { patternIndexCache.clear(); patternCatalogTree.refresh() }, 300)
   }
-  const patternWatcher = vscode.workspace.createFileSystemWatcher('**/{services,queries,forms,policies,decorators,concerns}/**/*.rb')
+  // patternWatcher migrated to providerRegistry.workspaceFs.createWatcher() below
+  // (after the registry is constructed). Only the invalidatePatterns callback and
+  // the patternRefreshTimer cleanup are registered here.
   context.subscriptions.push(
-    patternWatcher,
-    patternWatcher.onDidCreate(invalidatePatterns),
-    patternWatcher.onDidChange(invalidatePatterns),
-    patternWatcher.onDidDelete(invalidatePatterns),
     { dispose: () => clearTimeout(patternRefreshTimer) },
     vscode.commands.registerCommand('railsforge.openPattern', async (id: string) => {
       const root = activeWorkspaceRoot()
@@ -508,11 +515,10 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   const rakeTaskIndexer = new RakeTaskIndexer()
   const rakeTaskTreeProvider = new RakeTaskTreeProvider(rakeTaskIndexer, workspaceRoot)
 
-  context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('railsforge.architectureView', architectureTreeProvider),
-    vscode.window.registerTreeDataProvider('railsforge.patternCatalogView', patternCatalogTree),
-    vscode.window.registerTreeDataProvider('railsforge.rakeTasksView', rakeTaskTreeProvider),
-  )
+  // Tree-view registration migrated to ProviderRegistry (WindowUiProvider).
+  // The tree-provider variables remain in scope so extension.ts can call
+  // .refresh() / .setRoot() on them directly; only the VS Code registration
+  // call has moved into the registry.
   void vscode.commands.executeCommand('setContext', 'railsforge.hasRakefile', workspaceRoot && fs.existsSync(path.join(workspaceRoot, 'Rakefile')))
 
   // Multi-root: schema/routes/env/stimulus/factories/rake are per-project. They are
@@ -668,7 +674,192 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
 
   let lastBrakemanScanOnSave = 0
   let lastSteepScanOnSave = 0
-  vscode.workspace.onDidSaveTextDocument(doc => {
+  // onDidSaveTextDocument handler migrated to ProviderRegistry (WorkspaceFsProvider.onSave).
+  // The handler closure is registered below, after the registry is constructed but
+  // before activate() is called, so the WorkspaceFsProvider's internal saveHandlers
+  // array is populated before the underlying vscode.workspace.onDidSaveTextDocument
+  // listener goes live. The isWorkspaceTrusted() guard from PR #35 is incorporated
+  // into the handler body below.
+
+  // 4. Register Commands
+  registerCommands(
+    context,
+    mvcNavigator,
+    routesIndexer,
+    rubocopProvider,
+    brakemanProvider,
+    bundlerAuditScanner,
+    strongMigrationsAnalyzer,
+    policyNavigator,
+    viewComponentResolver,
+    turboFrameNavigator,
+    refactoringMenu,
+    patternDiagnostics,
+    serviceExtractor,
+    queryExtractor,
+    projectPatternIndexer,
+    agent,
+    principleLinter,
+    relatedFilesIndex,
+    dependencyGraph,
+    persistentIndexes,
+    analyzers,
+    schemaIndexer,
+    env,
+    semanticSearchIndex,
+    rubyDocProvider,
+    devDocsProjects,
+    speculativeFixCache,
+    rakeTaskTreeProvider,
+    rbsIndexes,
+    steepProvider,
+    steepDiagnostics,
+    getAgentConfig,
+  )
+
+  // 5. Chat Participant registration migrated to ProviderRegistry (AiChatProvider).
+  // The RailsChatParticipant.getInstance().createParticipant(...) call is now
+  // wrapped in a factory passed to the registry; the AiChatProvider owns the
+  // disposable lifecycle. The `agent`, `schemaIndexer`, and callback closures
+  // are captured by the factory below.
+
+  // 6. Suggest the ruby-lsp add-on when ruby-lsp is present but the gem isn't
+  if (workspaceRoot) {
+    void suggestRubyLspAddon(context, workspaceRoot)
+  }
+
+  registerAgentIntegrations(context)
+
+  // Read-only project overview documents (railsforge:/routes.md?root=…) and the empty-state view.
+  const virtualDocs = new VirtualDocsProvider(semanticContexts)
+  context.subscriptions.push(
+    virtualDocs,
+    vscode.workspace.registerTextDocumentContentProvider(VIRTUAL_DOC_SCHEME, virtualDocs),
+    vscode.window.registerTreeDataProvider('railsforge.gettingStarted', {
+      getTreeItem: item => item,
+      getChildren: () => [],
+    } satisfies vscode.TreeDataProvider<vscode.TreeItem>),
+    vscode.commands.registerCommand('railsforge.openVirtualDoc', async (preselected?: VirtualDocKind) => {
+      const root = activeWorkspaceRoot()
+      if (!root) {return}
+      const kind = preselected ?? (await vscode.window.showQuickPick(
+        VIRTUAL_DOC_KINDS.map(k => ({ label: k, description: `railsforge:/${k}.md` })),
+        { placeHolder: 'Open which project overview?' },
+      ))?.label as VirtualDocKind | undefined
+      if (!kind) {return}
+      const doc = await vscode.workspace.openTextDocument(virtualDocUri(kind, root))
+      await vscode.window.showTextDocument(doc, { preview: true })
+    }),
+  )
+  // Task Provider registration migrated to ProviderRegistry (enableTerminalTasks).
+
+  // 6. Status Bar
+  const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)
+  statusBar.text = '$(ruby) RailsForge'
+  statusBar.tooltip = 'RailsForge: Active'
+  statusBar.show()
+  context.subscriptions.push(statusBar)
+
+  // 7. Provider Registry - the architectural firewall between VS Code APIs and the
+  //    core engine. Wires the PrincipleCodeActionProvider (canonical example) plus
+  //    the engine adapters (SemanticIndexAdapter wraps PersistentIndexManager +
+  //    DesignPrincipleLinter; PatternCatalogAccessAdapter wraps PatternCatalog +
+  //    ProjectPatternIndexer). Other providers (WorkspaceFs, SourceControl,
+  //    TerminalTasks, WindowUi, TestingApi, AiChat) are opt-in flags that the
+  //    engineering team can flip on as they migrate existing direct registrations
+  //    in extension.ts to the new layer one at a time.
+  const semanticIndexAdapter = new SemanticIndexAdapter(
+    activeProject.root,
+    persistentIndexes.get(activeProject.root) ?? undefined,
+    principleLinter,
+  )
+  const patternCatalogAdapter = new PatternCatalogAccessAdapter(projectPatternIndexer)
+  // Construct the shared RefactoringEditProvider outside the registry closure so its
+  // reference is resolved before the registry's factory arrow function captures it.
+  // This avoids the TS7022 "implicitly has type any" self-reference error.
+  const sharedEditProvider = new RefactoringEditProvider()
+  const providerRegistry = new ProviderRegistry({
+    index: semanticIndexAdapter,
+    catalog: patternCatalogAdapter,
+    workspaceRoot: activeProject.root,
+    // Workspace FS: FileSystemWatcher + onDidSaveTextDocument + onDidChangeConfiguration.
+    // The WorkspaceFsProvider is constructed eagerly in the registry constructor so
+    // that onSave() handlers can be registered before activate() wires up the
+    // underlying vscode.workspace listeners.
+    enableWorkspaceFs: true,
+    languageIntelligence: {
+      // Canonical example: a CodeActionProvider that consumes the SemanticIndex and
+      // PatternCatalog, producing refactoring Quick Fixes ("Extract to Service",
+      // "Fix Demeter Violation", "Inject Dependency", "Clone existing pattern") via
+      // the RefactoringEditProvider (atomic, previewable WorkspaceEdits).
+      codeActions: (index, catalog) => new PrincipleCodeActionProvider(index, catalog, sharedEditProvider),
+    },
+    // Migrated from direct `vscode.tasks.registerTaskProvider` call: the RailsTaskProvider
+    // is now registered via TerminalTasksProvider, which also exposes the background-
+    // terminal automation API (worktree setup, silent rails CLI).
+    enableTerminalTasks: true,
+    taskProviderFactory: () => new RailsTaskProvider(),
+
+    // Source Control: AI-assisted Conventional Commit generation. No existing
+    // `vscode.scm.createSourceControl` call to migrate - this is a new feature.
+    // The provider hooks into the built-in Git extension's input box (no separate
+    // SCM provider is registered). The `railsforge.generateAiCommit` command
+    // (registered in package.json) calls the generator and pushes the result into
+    // the Git SCM input box.
+    enableSourceControl: true,
+    commitMessageGenerator: async (diff, index, catalog) => {
+      const commit = generateConventionalCommit(diff, index, catalog)
+      return commit?.toString()
+    },
+
+    // Window UI: tree-view registration migrated from direct
+    // `vscode.window.registerTreeDataProvider` calls. The three tree providers
+    // (architecture, pattern catalog, rake tasks) are constructed above as local
+    // variables; the factories here just wrap them in `createTreeView` so the
+    // WindowUiProvider owns the disposable lifetime. The provider variables stay
+    // accessible for direct .refresh() / .setRoot() calls from extension.ts.
+    windowUi: {
+      treeViews: {
+        'railsforge.architectureView': () => vscode.window.createTreeView('railsforge.architectureView', { treeDataProvider: architectureTreeProvider }),
+        'railsforge.patternCatalogView': () => vscode.window.createTreeView('railsforge.patternCatalogView', { treeDataProvider: patternCatalogTree }),
+        'railsforge.rakeTasksView': () => vscode.window.createTreeView('railsforge.rakeTasksView', { treeDataProvider: rakeTaskTreeProvider }),
+      },
+    },
+
+    // Testing API: TestExplorerController registration migrated from direct
+    // `context.subscriptions.push(testExplorer)`. The factory returns the
+    // already-constructed TestExplorerController (which implements vscode.Disposable
+    // and internally calls `vscode.tests.createTestController`). The
+    // TestingApiProvider owns the dispose lifecycle; the `testExplorer` variable
+    // stays accessible for direct .discoverWorkspace() / .getController() calls.
+    testing: () => testExplorer,
+
+    // AI Chat: @rails participant registration migrated from direct
+    // `RailsChatParticipant.getInstance().register(...)`. The factory calls the
+    // new `createParticipant` method (which returns the participant without
+    // pushing onto context.subscriptions); the AiChatProvider owns the dispose
+    // lifecycle. The factory throws if the participant can't be created, which
+    // the AiChatProvider catches and logs — chat is an optional surface.
+    chatParticipant: () => {
+      const participant = RailsChatParticipant.getInstance().createParticipant(
+        agent,
+        schemaIndexer,
+        () => env.testFramework,
+        () => projectPatternIndexer.getAllPatterns().map(p => `${p.type}/${p.name}`),
+      )
+      if (!participant) {
+        throw new Error('vscode.chat.createChatParticipant is unavailable or failed')
+      }
+      return participant
+    },
+  })
+
+  // Register the onDidSaveTextDocument handler via the WorkspaceFsProvider before
+  // calling activate(). The handler is stored in the provider's internal
+  // saveHandlers array; activate() then wires up the single underlying
+  // vscode.workspace.onDidSaveTextDocument listener that dispatches to all
+  // registered handlers.
+  providerRegistry.workspaceFs?.onSave(doc => {
     if (doc.languageId !== 'ruby') {return}
     const saveConfig = readConfig()
     // Everything below runs project tooling (RuboCop loads the project's `require:` files, Brakeman and Steep go
@@ -708,90 +899,159 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
         void updateSteepDiagnostics(steepProvider, steepDiagnostics, workspaceRootFor(doc.uri) ?? workspaceRoot)
       }
     }
-  }, null, context.subscriptions)
+  })
 
-  // 4. Register Commands
-  registerCommands(
-    context,
-    mvcNavigator,
-    routesIndexer,
-    rubocopProvider,
-    brakemanProvider,
-    bundlerAuditScanner,
-    strongMigrationsAnalyzer,
-    policyNavigator,
-    viewComponentResolver,
-    turboFrameNavigator,
-    refactoringMenu,
-    patternDiagnostics,
-    serviceExtractor,
-    queryExtractor,
-    projectPatternIndexer,
-    agent,
-    principleLinter,
-    relatedFilesIndex,
-    dependencyGraph,
-    persistentIndexes,
-    analyzers,
-    schemaIndexer,
-    env,
-    semanticSearchIndex,
-    rubyDocProvider,
-    devDocsProjects,
-    speculativeFixCache,
-    rakeTaskTreeProvider,
-    rbsIndexes,
-    steepProvider,
-    steepDiagnostics,
-    getAgentConfig,
-  )
+  providerRegistry.activate()
+  context.subscriptions.push(providerRegistry)
 
-  // 5. Register Chat Participant
-  RailsChatParticipant.getInstance().register(
-    context,
-    agent,
-    schemaIndexer,
-    routesIndexer,
-    () => env.testFramework,
-    () => projectPatternIndexer.getAllPatterns().map(p => `${p.type}/${p.name}`),
-  )
-
-  // 6. Suggest the ruby-lsp add-on when ruby-lsp is present but the gem isn't
-  if (workspaceRoot) {
-    void suggestRubyLspAddon(context, workspaceRoot)
+  // 7b. File watchers - migrated from direct vscode.workspace.createFileSystemWatcher
+  //     calls to providerRegistry.workspaceFs.createWatcher(). The watch* helper
+  //     functions keep their business logic; only the watcher creation + handler
+  //     wiring + disposable management moved to the WorkspaceFsProvider. Registered
+  //     after activate() so the provider's internal disposables list is ready.
+  if (workspaceRoot && providerRegistry.workspaceFs) {
+    const wfs = providerRegistry.workspaceFs
+    watchProjectFiles(wfs, () => activeProject.root, schemaIndexer, routesIndexer, migrationDiagnostics, (root, kind) => { semanticContexts.get(root).invalidateSemanticGraph(); virtualDocs.refresh(root, [kind, 'graph']) })
+    watchPatternFiles(wfs, projectPatternIndexer, patternCodeLensProvider, dependencyGraph, dependencyDiagnostics, relatedCodeLensProvider, semanticSearchIndex)
+    watchSpecFiles(wfs, relatedFilesIndex, relatedCodeLensProvider)
+    watchStimulusControllers(wfs, stimulusIndexer, () => activeProject.root)
+    watchTurboFrameTemplates(wfs, turboFrameNavigator)
   }
 
-  registerAgentIntegrations(context)
+  // 7c. Pattern catalog inline watcher - also migrated to createWatcher. The
+  //     patternWatcher invalidates the pattern index cache and refreshes the tree
+  //     when any Service/Query/Form/Policy/Decorator/Concern file changes.
+  if (providerRegistry.workspaceFs) {
+    providerRegistry.workspaceFs.createWatcher(
+      '**/{services,queries,forms,policies,decorators,concerns}/**/*.rb',
+      {
+        onCreated: invalidatePatterns,
+        onChanged: invalidatePatterns,
+        onDeleted: invalidatePatterns,
+      },
+    )
+  }
 
-  // Read-only project overview documents (railsforge:/routes.md?root=…) and the empty-state view.
-  const virtualDocs = new VirtualDocsProvider(semanticContexts)
-  context.subscriptions.push(
-    virtualDocs,
-    vscode.workspace.registerTextDocumentContentProvider(VIRTUAL_DOC_SCHEME, virtualDocs),
-    vscode.window.registerTreeDataProvider('railsforge.gettingStarted', {
-      getTreeItem: item => item,
-      getChildren: () => [],
-    } satisfies vscode.TreeDataProvider<vscode.TreeItem>),
-    vscode.commands.registerCommand('railsforge.openVirtualDoc', async (preselected?: VirtualDocKind) => {
-      const root = activeWorkspaceRoot()
-      if (!root) {return}
-      const kind = preselected ?? (await vscode.window.showQuickPick(
-        VIRTUAL_DOC_KINDS.map(k => ({ label: k, description: `railsforge:/${k}.md` })),
-        { placeHolder: 'Open which project overview?' },
-      ))?.label as VirtualDocKind | undefined
-      if (!kind) {return}
-      const doc = await vscode.workspace.openTextDocument(virtualDocUri(kind, root))
-      await vscode.window.showTextDocument(doc, { preview: true })
-    }),
-  )
-  context.subscriptions.push(vscode.tasks.registerTaskProvider(RAILSFORGE_TASK_TYPE, new RailsTaskProvider()))
+  // 7d. Config-change handler migrated from direct onConfigChanged() call.
+  //     Refreshes log settings, agent config, and the railsforge.aiProvider
+  //     context key whenever any railsForge.* setting changes.
+  if (providerRegistry.workspaceFs) {
+    providerRegistry.workspaceFs.onConfigChange(() => {
+      const freshConfig = readConfig()
+      applyLogSettings(freshConfig, workspaceRoot)
+      agent.updateConfig(getAgentConfig(freshConfig))
+      void vscode.commands.executeCommand('setContext', 'railsforge.aiProvider', freshConfig.aiProvider)
+    })
+  }
 
-  // 6. Status Bar
-  const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)
-  statusBar.text = '$(ruby) RailsForge'
-  statusBar.tooltip = 'RailsForge: Active'
-  statusBar.show()
-  context.subscriptions.push(statusBar)
+  // 8. AI Conventional Commit - wired after the registry so the command handler can
+  //    access providerRegistry.sourceControl. Runs `git diff --cached` in the
+  //    workspace root, passes the diff to the ConventionalCommitGenerator (which
+  //    classifies files by Rails pattern type via the PatternCatalogAccess), and
+  //    pushes the result into the Git SCM input box.
+  context.subscriptions.push(vscode.commands.registerCommand('railsforge.generateAiCommit', async () => {
+    const root = activeWorkspaceRoot()
+    if (!root) {
+      void vscode.window.showWarningMessage('RailsForge: Open a workspace folder to generate a commit message.')
+      return
+    }
+    let diff: string
+    try {
+      const result = await execFileAsync('git', ['diff', '--cached'], { cwd: root, maxBuffer: 10 * 1024 * 1024 })
+      diff = result.stdout
+    } catch (err) {
+      void vscode.window.showErrorMessage(`RailsForge: Could not read staged diff. Is git installed and are there staged changes? (${err instanceof Error ? err.message : String(err)})`)
+      return
+    }
+    if (!diff.trim()) {
+      void vscode.window.showInformationMessage('RailsForge: No staged changes. Stage files with `git add` first.')
+      return
+    }
+    const message = await providerRegistry.sourceControl?.generateCommitMessage(diff)
+    if (!message) {
+      void vscode.window.showWarningMessage('RailsForge: Could not generate a commit message from the staged diff.')
+      return
+    }
+    await providerRegistry.sourceControl?.setCommitMessage(message)
+  }))
+
+  // 9. Clone Existing Pattern - invoked by the PrincipleCodeActionProvider when
+  //    the user clicks "Clone existing <pattern>" from a Code Action. The argument
+  //    is an array of project pattern instance IDs; the handler shows a QuickPick
+  //    of those patterns, asks for a new class name, and creates a new file based
+  //    on the selected pattern's structure.
+  context.subscriptions.push(vscode.commands.registerCommand('railsforge.clonePattern', async (instanceIds?: string[]) => {
+    const root = activeWorkspaceRoot()
+    if (!root) {
+      void vscode.window.showWarningMessage('RailsForge: Open a workspace folder to clone a pattern.')
+      return
+    }
+
+    const allInstances = patternCatalogAdapter.listProjectInstances()
+    const candidates = (instanceIds ?? [])
+      .map(id => allInstances.find(i => i.id === id))
+      .filter((i): i is NonNullable<typeof i> => i !== undefined)
+
+    if (candidates.length === 0) {
+      void vscode.window.showInformationMessage('RailsForge: No similar patterns found to clone.')
+      return
+    }
+
+    // QuickPick of the candidate patterns
+    const items = candidates.map(i => ({
+      label: i.name,
+      description: i.type,
+      detail: i.filePath,
+      instance: i,
+    }))
+    const selected = await vscode.window.showQuickPick(items, {
+      placeHolder: 'Select a pattern to clone',
+      title: 'Clone Existing Pattern',
+    })
+    if (!selected) {return}
+
+    // Ask for the new class name
+    const newName = await vscode.window.showInputBox({
+      prompt: `Name for the new ${selected.instance.type} (e.g. CheckoutService)`,
+      value: selected.instance.name,
+      validateInput: v => v.trim().length === 0 ? 'Name cannot be empty' : undefined,
+    })
+    if (!newName) {return}
+
+    // Determine the output file path based on the pattern type
+    const dirMap: Record<string, string> = {
+      service: 'app/services',
+      query: 'app/queries',
+      form: 'app/forms',
+      policy: 'app/policies',
+      decorator: 'app/decorators',
+      concern: 'app/concerns',
+    }
+    const dir = dirMap[selected.instance.type] ?? 'app/services'
+    const fileName = newName.replace(/([A-Z])/g, '_$1').replace(/^_/, '').toLowerCase() + '.rb'
+    const newPath = path.join(root, dir, fileName)
+    const newUri = vscode.Uri.file(newPath)
+
+    // Build the new file content from the selected pattern's preview, replacing
+    // the class name. This is a starter — the user will refine it.
+    const preview = selected.instance.preview
+    const newContent = preview.replace(
+      new RegExp(`\\bclass\\s+${selected.instance.name}\\b`),
+      `class ${newName}`,
+    )
+
+    // Use the RefactoringEditProvider to create the file atomically (previewable)
+    const operations: EditOperation[] = [
+      { kind: 'createFile', uri: newUri, contents: newContent, overwrite: false },
+    ]
+    const applied = await sharedEditProvider.apply(operations, {
+      label: `Clone ${selected.instance.name} as ${newName}`,
+    })
+    if (applied) {
+      const doc = await vscode.workspace.openTextDocument(newUri)
+      await vscode.window.showTextDocument(doc)
+    }
+  }))
 
   return {
     getActiveProjectRoot: () => activeProject.root,
@@ -970,8 +1230,7 @@ function loadStimulusControllers(root: string, indexer: StimulusIndexer): void {
   walk(controllersDir)
 }
 
-function watchStimulusControllers(context: vscode.ExtensionContext, indexer: StimulusIndexer, getRoot: () => string): void {
-  const watcher = vscode.workspace.createFileSystemWatcher('**/app/javascript/controllers/**/*_controller.{js,ts}')
+function watchStimulusControllers(wfs: WorkspaceFsProvider, indexer: StimulusIndexer, getRoot: () => string): void {
   const reindex = async (uri: vscode.Uri): Promise<void> => {
     if (isExcludedByConfig(uri.fsPath) || !isInside(getRoot(), uri.fsPath)) {return}
     try {
@@ -981,10 +1240,11 @@ function watchStimulusControllers(context: vscode.ExtensionContext, indexer: Sti
       }
     } catch { /* skip unreadable */ }
   }
-  watcher.onDidChange(uri => void reindex(uri))
-  watcher.onDidCreate(uri => void reindex(uri))
-  watcher.onDidDelete(uri => indexer.removeFile(uri.fsPath))
-  context.subscriptions.push(watcher)
+  wfs.createWatcher('**/app/javascript/controllers/**/*_controller.{js,ts}', {
+    onChanged: uri => void reindex(uri),
+    onCreated: uri => void reindex(uri),
+    onDeleted: uri => indexer.removeFile(uri.fsPath),
+  })
 }
 
 type VsCodeLmApi = { selectChatModels?: (selector?: { family?: string }) => Thenable<vscode.LanguageModelChat[]> }
@@ -1060,8 +1320,7 @@ async function loadTurboFrames(navigator: TurboFrameNavigator): Promise<void> {
   }
 }
 
-function watchTurboFrameTemplates(context: vscode.ExtensionContext, navigator: TurboFrameNavigator): void {
-  const watcher = vscode.workspace.createFileSystemWatcher('**/app/views/**/*.{erb,haml,slim}')
+function watchTurboFrameTemplates(wfs: WorkspaceFsProvider, navigator: TurboFrameNavigator): void {
   const reindex = async (uri: vscode.Uri): Promise<void> => {
     if (isExcludedByConfig(uri.fsPath)) {return}
     try {
@@ -1073,10 +1332,11 @@ function watchTurboFrameTemplates(context: vscode.ExtensionContext, navigator: T
       }
     } catch { /* skip unreadable */ }
   }
-  watcher.onDidChange(uri => void reindex(uri))
-  watcher.onDidCreate(uri => void reindex(uri))
-  watcher.onDidDelete(uri => navigator.removeFile(uri.fsPath))
-  context.subscriptions.push(watcher)
+  wfs.createWatcher('**/app/views/**/*.{erb,haml,slim}', {
+    onChanged: uri => void reindex(uri),
+    onCreated: uri => void reindex(uri),
+    onDeleted: uri => navigator.removeFile(uri.fsPath),
+  })
 }
 
 async function loadProjectPatterns(
@@ -1132,8 +1392,7 @@ async function loadSpecFiles(relatedFilesIndex: RelatedFilesIndex, relatedCodeLe
   relatedCodeLensProvider.refresh()
 }
 
-function watchSpecFiles(context: vscode.ExtensionContext, relatedFilesIndex: RelatedFilesIndex, relatedCodeLensProvider: RelatedCodeLensProvider): void {
-  const watcher = vscode.workspace.createFileSystemWatcher('**/{spec/**/*_spec.rb,test/**/*_test.rb}')
+function watchSpecFiles(wfs: WorkspaceFsProvider, relatedFilesIndex: RelatedFilesIndex, relatedCodeLensProvider: RelatedCodeLensProvider): void {
   let refreshTimer: NodeJS.Timeout | undefined
   const scheduleRefresh = (): void => {
     if (refreshTimer) {clearTimeout(refreshTimer)}
@@ -1152,17 +1411,18 @@ function watchSpecFiles(context: vscode.ExtensionContext, relatedFilesIndex: Rel
       scheduleRefresh()
     } catch { /* skip unreadable */ }
   }
-  watcher.onDidChange(uri => void reindex(uri))
-  watcher.onDidCreate(uri => void reindex(uri))
-  watcher.onDidDelete(uri => {
-    relatedFilesIndex.removeSpecFile(uri.fsPath)
-    scheduleRefresh()
+  wfs.createWatcher('**/{spec/**/*_spec.rb,test/**/*_test.rb}', {
+    onChanged: uri => void reindex(uri),
+    onCreated: uri => void reindex(uri),
+    onDeleted: uri => {
+      relatedFilesIndex.removeSpecFile(uri.fsPath)
+      scheduleRefresh()
+    },
   })
-  context.subscriptions.push(watcher)
 }
 
 function watchPatternFiles(
-  context: vscode.ExtensionContext,
+  wfs: WorkspaceFsProvider,
   indexer: ProjectPatternIndexer,
   codeLensProvider: PatternCodeLensProvider,
   dependencyGraph: MinimalDependencyGraph,
@@ -1170,9 +1430,6 @@ function watchPatternFiles(
   relatedCodeLensProvider: RelatedCodeLensProvider,
   semanticSearchIndex: SemanticSearchIndex,
 ): void {
-  const watcher = vscode.workspace.createFileSystemWatcher(
-    '**/{app,lib}/**/{services,queries,forms,policies,decorators,concerns}/**/*.rb',
-  )
   let rebuildTimer: NodeJS.Timeout | undefined
   const scheduleRebuild = (): void => {
     if (rebuildTimer) {clearTimeout(rebuildTimer)}
@@ -1197,13 +1454,17 @@ function watchPatternFiles(
       scheduleRebuild()
     } catch { /* skip unreadable */ }
   }
-  watcher.onDidChange(uri => void reindex(uri))
-  watcher.onDidCreate(uri => void reindex(uri))
-  watcher.onDidDelete(uri => {
-    indexer.removeFile(uri.fsPath)
-    scheduleRebuild()
-  })
-  context.subscriptions.push(watcher)
+  wfs.createWatcher(
+    '**/{app,lib}/**/{services,queries,forms,policies,decorators,concerns}/**/*.rb',
+    {
+      onChanged: uri => void reindex(uri),
+      onCreated: uri => void reindex(uri),
+      onDeleted: uri => {
+        indexer.removeFile(uri.fsPath)
+        scheduleRebuild()
+      },
+    },
+  )
 }
 
 function refreshOpenDependencyDiagnostics(dependencyDiagnostics: DependencyDiagnosticsProvider): void {
@@ -1476,7 +1737,7 @@ async function verifyOffenseResolved(
 }
 
 function watchProjectFiles(
-  context: vscode.ExtensionContext,
+  wfs: WorkspaceFsProvider,
   getRoot: () => string,
   schemaIndexer: SchemaIndexer,
   routesIndexer: RoutesIndexer,
@@ -1488,46 +1749,46 @@ function watchProjectFiles(
   const inRoot = (uri: vscode.Uri): boolean => isInside(getRoot(), uri.fsPath)
 
   if (readConfig().schemaAutoIndex) {
-    const schemaWatcher = vscode.workspace.createFileSystemWatcher('**/db/schema.rb')
     const refresh = (uri: vscode.Uri): void => {
       if (!inRoot(uri) || isExcludedByConfig(uri.fsPath)) {return}
       void loadSchema(getRoot(), schemaIndexer).then(() => onIndexChanged?.(getRoot(), 'schema'))
     }
-    schemaWatcher.onDidChange(refresh)
-    schemaWatcher.onDidCreate(refresh)
-    schemaWatcher.onDidDelete(uri => {
-      if (!inRoot(uri)) {return}
-      schemaIndexer.parseSchema('')
-      onIndexChanged?.(getRoot(), 'schema')
+    wfs.createWatcher('**/db/schema.rb', {
+      onChanged: refresh,
+      onCreated: refresh,
+      onDeleted: uri => {
+        if (!inRoot(uri)) {return}
+        schemaIndexer.parseSchema('')
+        onIndexChanged?.(getRoot(), 'schema')
+      },
     })
-    context.subscriptions.push(schemaWatcher)
   }
 
   if (readConfig().routesAutoIndex) {
-    const routesWatcher = vscode.workspace.createFileSystemWatcher('**/config/routes.rb')
     const refresh = (uri: vscode.Uri): void => {
       if (!inRoot(uri) || isExcludedByConfig(uri.fsPath)) {return}
       void loadRoutes(getRoot(), routesIndexer).then(() => onIndexChanged?.(getRoot(), 'routes'))
     }
-    routesWatcher.onDidChange(refresh)
-    routesWatcher.onDidCreate(refresh)
-    routesWatcher.onDidDelete(uri => {
-      if (!inRoot(uri)) {return}
-      routesIndexer.parseRoutesDsl('')
-      onIndexChanged?.(getRoot(), 'routes')
+    wfs.createWatcher('**/config/routes.rb', {
+      onChanged: refresh,
+      onCreated: refresh,
+      onDeleted: uri => {
+        if (!inRoot(uri)) {return}
+        routesIndexer.parseRoutesDsl('')
+        onIndexChanged?.(getRoot(), 'routes')
+      },
     })
-    context.subscriptions.push(routesWatcher)
   }
 
-  const migrationWatcher = vscode.workspace.createFileSystemWatcher('**/db/migrate/*.rb')
   const analyzeMigration = (uri: vscode.Uri): void => {
     if (!inRoot(uri) || isExcludedByConfig(uri.fsPath)) {return}
     void vscode.workspace.openTextDocument(uri).then(doc => migrationDiagnostics.updateDiagnostics(doc), () => undefined)
   }
-  migrationWatcher.onDidChange(analyzeMigration)
-  migrationWatcher.onDidCreate(analyzeMigration)
-  migrationWatcher.onDidDelete(uri => migrationDiagnostics.clearFile(uri))
-  context.subscriptions.push(migrationWatcher)
+  wfs.createWatcher('**/db/migrate/*.rb', {
+    onChanged: analyzeMigration,
+    onCreated: analyzeMigration,
+    onDeleted: uri => migrationDiagnostics.clearFile(uri),
+  })
 }
 
 function registerCommands(

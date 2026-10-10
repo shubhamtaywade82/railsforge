@@ -23,6 +23,17 @@ export class DesignPrincipleLinter implements vscode.CodeActionProvider {
   private diagnosticCollection = vscode.languages.createDiagnosticCollection('railsforge-principles')
   private metadataByDoc: Map<string, PrincipleDiagnostic[]> = new Map()
 
+  /**
+   * Public read accessor for the most recently computed diagnostics for a given
+   * document URI. Returns an empty array if the document has not been analyzed yet
+   * (e.g. before the first save or cursor move). Used by the provider layer's
+   * `SemanticIndexAdapter` so the `PrincipleCodeActionProvider` can surface Quick
+   * Fixes for violations without re-running the linter.
+   */
+  diagnosticsFor(uri: vscode.Uri): PrincipleDiagnostic[] {
+    return this.metadataByDoc.get(uri.toString()) ?? []
+  }
+
   updateDiagnostics(document: vscode.TextDocument): void {
     if (document.languageId !== 'ruby' || document.isUntitled) {
       return
