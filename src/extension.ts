@@ -125,6 +125,7 @@ import {
   RefactoringEditProvider,
   generateConventionalCommit,
   WorkspaceFsProvider,
+  type EditOperation,
 } from './providers'
 
 
@@ -972,6 +973,84 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
       return
     }
     await providerRegistry.sourceControl?.setCommitMessage(message)
+  }))
+
+  // 9. Clone Existing Pattern - invoked by the PrincipleCodeActionProvider when
+  //    the user clicks "Clone existing <pattern>" from a Code Action. The argument
+  //    is an array of project pattern instance IDs; the handler shows a QuickPick
+  //    of those patterns, asks for a new class name, and creates a new file based
+  //    on the selected pattern's structure.
+  context.subscriptions.push(vscode.commands.registerCommand('railsforge.clonePattern', async (instanceIds?: string[]) => {
+    const root = activeWorkspaceRoot()
+    if (!root) {
+      void vscode.window.showWarningMessage('RailsForge: Open a workspace folder to clone a pattern.')
+      return
+    }
+
+    const allInstances = patternCatalogAdapter.listProjectInstances()
+    const candidates = (instanceIds ?? [])
+      .map(id => allInstances.find(i => i.id === id))
+      .filter((i): i is NonNullable<typeof i> => i !== undefined)
+
+    if (candidates.length === 0) {
+      void vscode.window.showInformationMessage('RailsForge: No similar patterns found to clone.')
+      return
+    }
+
+    // QuickPick of the candidate patterns
+    const items = candidates.map(i => ({
+      label: i.name,
+      description: i.type,
+      detail: i.filePath,
+      instance: i,
+    }))
+    const selected = await vscode.window.showQuickPick(items, {
+      placeHolder: 'Select a pattern to clone',
+      title: 'Clone Existing Pattern',
+    })
+    if (!selected) {return}
+
+    // Ask for the new class name
+    const newName = await vscode.window.showInputBox({
+      prompt: `Name for the new ${selected.instance.type} (e.g. CheckoutService)`,
+      value: selected.instance.name,
+      validateInput: v => v.trim().length === 0 ? 'Name cannot be empty' : undefined,
+    })
+    if (!newName) {return}
+
+    // Determine the output file path based on the pattern type
+    const dirMap: Record<string, string> = {
+      service: 'app/services',
+      query: 'app/queries',
+      form: 'app/forms',
+      policy: 'app/policies',
+      decorator: 'app/decorators',
+      concern: 'app/concerns',
+    }
+    const dir = dirMap[selected.instance.type] ?? 'app/services'
+    const fileName = newName.replace(/([A-Z])/g, '_$1').replace(/^_/, '').toLowerCase() + '.rb'
+    const newPath = path.join(root, dir, fileName)
+    const newUri = vscode.Uri.file(newPath)
+
+    // Build the new file content from the selected pattern's preview, replacing
+    // the class name. This is a starter — the user will refine it.
+    const preview = selected.instance.preview
+    const newContent = preview.replace(
+      new RegExp(`\\bclass\\s+${selected.instance.name}\\b`),
+      `class ${newName}`,
+    )
+
+    // Use the RefactoringEditProvider to create the file atomically (previewable)
+    const operations: EditOperation[] = [
+      { kind: 'createFile', uri: newUri, contents: newContent, overwrite: false },
+    ]
+    const applied = await sharedEditProvider.apply(operations, {
+      label: `Clone ${selected.instance.name} as ${newName}`,
+    })
+    if (applied) {
+      const doc = await vscode.workspace.openTextDocument(newUri)
+      await vscode.window.showTextDocument(doc)
+    }
   }))
 
   return {
