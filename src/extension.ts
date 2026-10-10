@@ -326,12 +326,9 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     projectPatternIndexer,
   )
 
-  context.subscriptions.push(onConfigChanged(() => {
-    const freshConfig = readConfig()
-    applyLogSettings(freshConfig, workspaceRoot)
-    agent.updateConfig(getAgentConfig(freshConfig))
-    void vscode.commands.executeCommand('setContext', 'railsforge.aiProvider', freshConfig.aiProvider)
-  }))
+  // Config-change handler migrated to providerRegistry.workspaceFs.onConfigChange()
+  // below (after the registry is constructed). The handler refreshes log settings,
+  // agent config, and the railsforge.aiProvider context key.
 
   const embeddingClient = new EmbeddingClient({
     ollamaHost: config.ollamaHost,
@@ -887,6 +884,18 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
         onDeleted: invalidatePatterns,
       },
     )
+  }
+
+  // 7d. Config-change handler migrated from direct onConfigChanged() call.
+  //     Refreshes log settings, agent config, and the railsforge.aiProvider
+  //     context key whenever any railsForge.* setting changes.
+  if (providerRegistry.workspaceFs) {
+    providerRegistry.workspaceFs.onConfigChange(() => {
+      const freshConfig = readConfig()
+      applyLogSettings(freshConfig, workspaceRoot)
+      agent.updateConfig(getAgentConfig(freshConfig))
+      void vscode.commands.executeCommand('setContext', 'railsforge.aiProvider', freshConfig.aiProvider)
+    })
   }
 
   // 8. AI Conventional Commit - wired after the registry so the command handler can
