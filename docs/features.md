@@ -32,6 +32,14 @@
    - [F-19 Standalone Ruby & Gem Support](#f-19-standalone-ruby--gem-support)
    - [F-20 Editing Aids: Endwise, ERB Tags & Gem Lens](#f-20-editing-aids-endwise-erb-tags--gem-lens)
    - [F-21 Project-Type-Aware Tooling & Full Settings Configurability](#f-21-project-type-aware-tooling--full-settings-configurability)
+   - [F-22 AI-Assisted Conventional Commits](#f-22-ai-assisted-conventional-commits)
+   - [F-23 Restricted Mode & Workspace Trust](#f-23-restricted-mode--workspace-trust)
+   - [F-24 Agent Tool Loop with Self-Repair](#f-24-agent-tool-loop-with-self-repair)
+   - [F-25 Skill Routing & Safety Rules](#f-25-skill-routing--safety-rules)
+   - [F-26 Type Checking (Steep & RBS)](#f-26-type-checking-steep--rbs)
+   - [F-27 Code Analyzers (Reek, Flog, Flay, Debride, Standard)](#f-27-code-analyzers-reek-flog-flay-debride-standard)
+   - [F-28 Rails Runtime Introspection](#f-28-rails-runtime-introspection)
+   - [F-29 Provider Layer Architecture](#f-29-provider-layer-architecture)
 5. [Keybindings Reference](#5-keybindings-reference)
 6. [Command Palette Reference](#6-command-palette-reference)
 7. [Configuration Reference](#7-configuration-reference)
@@ -46,11 +54,16 @@
 RailsForge replaces a fragmented toolchain of 8–12 separate extensions with a **single, deeply integrated platform** for Ruby and Rails development. It provides:
 
 - **Rails-aware intelligence** grounded in the live `db/schema.rb` and `config/routes.rb`
-- **Static analysis** via RuboCop, Brakeman, Bundler-Audit, and Strong Migrations
+- **Static analysis** via RuboCop, Brakeman, Bundler-Audit, Strong Migrations, Reek, Flog, Flay, Debride, and Standard
 - **Architectural tooling**: SOLID/DRY/KISS principle enforcement, pattern extraction, dependency graph analysis
 - **Testing integration**: RSpec/Minitest runner, FactoryBot jump-to-definition, VS Code Test Explorer
-- **AI agent** (`@rails`) backed by local Ollama — grounded in your schema, routes, and existing patterns
+- **Type checking**: Steep and RBS integration with hover, go-to-definition, and signature generation
+- **AI agent** (`@rails`) backed by local Ollama, cloud providers (OpenAI, Anthropic), or VS Code's Language Model API — grounded in your schema, routes, and existing patterns, with an autonomous tool-use loop and `ruby -c` syntax verification
+- **Skill routing & safety rules**: AI requests are routed to the most relevant engineering skills, with safety-forced warnings for destructive operations
 - **MCP server** so any MCP-capable AI client (Cursor, Claude Code, etc.) can query the same project context
+- **Workspace Trust**: Restricted Mode blocks all project code execution in untrusted workspaces
+- **AI-assisted Conventional Commits**: generates commit messages from staged diffs, classified by Rails pattern type
+- **Provider layer architecture**: every VS Code API call is wrapped behind dedicated Provider classes that consume engine interfaces, keeping the core engine testable without the VS Code runtime
 
 RailsForge is a **companion** to Shopify's `ruby-lsp`, not a replacement. Install both.
 
@@ -114,6 +127,14 @@ RailsForge activates on any of:
 | F-19 | Standalone Ruby & Gem Support | `environment/EnvironmentDetector` |
 | F-20 | Editing Aids: Endwise, ERB Tags & Gem Lens | `editing/EndwiseProvider`, `editing/ErbTagCompletionProvider`, `gems/GemLensProvider`, `gems/RubyGemsClient` |
 | F-21 | Project-Type-Aware Tooling & Full Settings Configurability | `config/RailsForgeConfig`, `docs/OpenApiSkeletonGenerator`, `gems/GemVersionBumper`, `util/LruCache` |
+| F-22 | AI-Assisted Conventional Commits | `providers/ConventionalCommitGenerator`, `providers/SourceControlProvider` |
+| F-23 | Restricted Mode & Workspace Trust | `workspace/Trust`, `workspace/ProjectTerminal`, `util/ProjectProcess` |
+| F-24 | Agent Tool Loop with Self-Repair | `agent/AgentLoop`, `agent/LoopTools`, `util/RubySyntax` |
+| F-25 | Skill Routing & Safety Rules | `skills/SkillRouter`, `skills/SkillContextBuilder`, `skills/SafetyRules` |
+| F-26 | Type Checking (Steep & RBS) | `types/SteepProvider`, `types/RBSIndex`, `types/RBSHoverProvider`, `types/RBSDefinitionProvider` |
+| F-27 | Code Analyzers | `lint/RubyAnalyzersProvider`, `lint/AnalyzerParsers` |
+| F-28 | Rails Runtime Introspection | `rails/RuntimeIntrospector`, `rails/RuntimeIntrospectionService` |
+| F-29 | Provider Layer Architecture | `providers/ProviderRegistry`, `providers/WorkspaceFsProvider`, `providers/LanguageIntelligenceProvider`, `providers/TerminalTasksProvider`, `providers/AiChatProvider`, `providers/TestingApiProvider`, `providers/WindowUiProvider`, `providers/SourceControlProvider`, `providers/RefactoringEditProvider`, `providers/PrincipleCodeActionProvider` |
 
 ---
 
@@ -518,18 +539,25 @@ The system prompt is constructed dynamically from:
 | `@rails /migrate` | Generate a safe, reversible ActiveRecord migration with index optimizations |
 | `@rails /optimize` | Analyze queries, detect N+1 risks, and suggest eager-loading fixes |
 
-#### Self-Repairing Agent Loop
+#### Self-Repairing Agent Loop (F-24)
 
-Propose code → run `rubocop` / `rspec` → capture failures → auto-repair until clean (configurable via `railsForge.agent.autoRepair`).
+The `@rails` agent can autonomously use tools (read files, run RuboCop, run RSpec, apply patches) in a loop until the task is complete — with `ruby -c` syntax verification between steps. Configurable via `railsForge.agent.toolLoop`, `railsForge.agent.maxToolSteps`, and `railsForge.agent.verifyRubySyntax`. See F-24 for full details.
 
 #### Configuration
 
 ```json
+"railsForge.ai.provider": "ollama",
 "railsForge.ollama.host": "http://localhost:11434",
 "railsForge.ollama.model": "qwen2.5-coder:14b"
 ```
 
-Recommended models: `qwen2.5-coder:14b` (best) or `qwen2.5-coder:7b` (faster, lower RAM).
+**AI providers:**
+- `"ollama"` (default) — local, private, no API key needed
+- `"openai"` — OpenAI-compatible endpoints (OpenRouter, self-hosted vLLM)
+- `"anthropic"` — Anthropic Claude models
+- `"vscode-lm"` — VS Code's Language Model API (Copilot or any Language Model provider extension); no API key stored by RailsForge
+
+Recommended Ollama models: `qwen2.5-coder:14b` (best) or `qwen2.5-coder:7b` (faster, lower RAM).
 
 ---
 
@@ -683,6 +711,282 @@ Every `railsForge.*` setting is a real, wired-up control (not a declared-but-unu
 
 ---
 
+### F-22 AI-Assisted Conventional Commits
+
+**Source:** [`providers/ConventionalCommitGenerator.ts`](src/providers/ConventionalCommitGenerator.ts), [`providers/SourceControlProvider.ts`](src/providers/SourceControlProvider.ts)
+
+Generates a [Conventional Commit](https://www.conventionalcommits.org/) message from your staged `git diff`, classified by Rails pattern type.
+
+**How it works:**
+1. Runs `git diff --cached` in the workspace root
+2. Parses the diff into per-file entries (path, status, additions, deletions)
+3. Infers the commit type (`feat`, `fix`, `refactor`, `test`, `chore`) from file paths and change types
+4. Infers the scope from newly-added pattern instances first (a new Service Object takes scope priority), then from the primary file, then from the Rails directory segment
+5. Pushes the result into the Git SCM input box (the same API Copilot uses), with clipboard fallback
+
+**How to use:**
+- Click the ✨ sparkle button in the Source Control view title bar or input box
+- Or run **RailsForge: Generate Conventional Commit** from the Command Palette
+- The generated message appears in the commit input box — edit it before committing
+
+**Example output:**
+```
+feat(service): add CheckoutService
+refactor(controller): update OrdersController
+test: add checkout_spec
+```
+
+**Scope inference priority:**
+1. Newly-added pattern instances (Service/Query/Form/Policy) matched against the `PatternCatalogAccess`
+2. Primary file (most diff lines) matched against project patterns
+3. Rails directory segment (`app/services` → `service`, `app/controllers` → `controller`)
+4. Special paths (`db/migrate` → `migration`, `config/routes.rb` → `routes`, `spec/` → `test`)
+
+---
+
+### F-23 Restricted Mode & Workspace Trust
+
+**Source:** [`workspace/Trust.ts`](src/workspace/Trust.ts), [`workspace/ProjectTerminal.ts`](src/workspace/ProjectTerminal.ts), [`util/ProjectProcess.ts`](src/util/ProjectProcess.ts)
+
+RailsForge respects VS Code's Workspace Trust system. When a workspace is in Restricted Mode (untrusted), all features that execute project code are blocked.
+
+**What works in Restricted Mode (read-only tier):**
+- Navigation (MVC, schema peek, routes, partials, Stimulus, Turbo)
+- Semantic graph and pattern catalog
+- Virtual documents (routes, schema, runtime, toolchain overviews)
+- AI chat (grounded in already-indexed data)
+- Design principle diagnostics (static analysis only)
+
+**What is blocked in Restricted Mode:**
+- RuboCop, Brakeman, bundler-audit, Steep, analyzers (run project code)
+- Rails console, REPL evaluation, `rails generate`/`destroy`
+- Test execution and debugging (`rdbg`)
+- `rails runner` runtime introspection
+- Terminals and task execution
+- File save hooks that trigger project tooling
+
+**Trust-gated wrappers (enforced by `test/TrustGuard.test.ts`):**
+- `createProjectTerminal()` / `sendToTerminal()` — all terminal creation goes through these wrappers, which call `assertTrusted()` before `vscode.window.createTerminal()`
+- `ProjectProcess` — all `child_process` usage (`execFile`, `spawn`) goes through `assertTrusted()`
+- A static analysis test (`TrustGuard.test.ts`) scans the entire `src/` tree to ensure no raw `vscode.window.createTerminal`, `terminal.sendText`, `child_process`, `startDebugging`, or `executeTask` calls bypass the wrappers
+
+**How to use:**
+- Open a workspace → VS Code prompts to trust it
+- Click "Trust" → all features activate
+- Click "Don't trust" → Restricted Mode (read-only features only)
+- The Architecture sidebar shows trust status
+
+---
+
+### F-24 Agent Tool Loop with Self-Repair
+
+**Source:** [`agent/AgentLoop.ts`](src/agent/AgentLoop.ts), [`agent/LoopTools.ts`](src/agent/LoopTools.ts), [`util/RubySyntax.ts`](src/util/RubySyntax.ts)
+
+The `@rails` agent can autonomously use tools (read files, run RuboCop, run RSpec, apply patches) in a loop until the task is complete — with Ruby syntax verification between steps.
+
+**How it works:**
+1. The agent receives a prompt (e.g., `/fix` or a free-form request)
+2. It generates a response that may include tool calls
+3. Each tool call is executed (read file, run linter, apply patch)
+4. The result is fed back into the agent
+5. The loop continues until the agent signals completion or `maxToolSteps` is reached
+6. Between steps, `ruby -c` syntax verification catches malformed code before it's applied
+
+**Tools available to the agent:**
+- `get_schema` / `list_routes` / `list_patterns` / `find_similar_pattern` / `get_dependencies` / `find_duplicate_methods` — the same MCP tools exposed to external clients
+- `get_runtime_introspection` — real associations, validations, callbacks from a booted Rails app
+- `get_gem_documentation` — RubyGems docs lookup
+- `route_skills` — picks the most relevant engineering skills for the task
+
+**Configuration:**
+
+```json
+"railsForge.agent.toolLoop": true,
+"railsForge.agent.maxToolSteps": 3,
+"railsForge.agent.verifyRubySyntax": true
+```
+
+- `toolLoop`: enable/disable the autonomous tool-use loop
+- `maxToolSteps`: maximum number of tool iterations before the agent stops (prevents infinite loops)
+- `verifyRubySyntax`: run `ruby -c` on generated code before applying it (catches syntax errors early)
+
+**Self-repair flow:**
+```
+User prompt → Agent generates code → ruby -c syntax check →
+Apply patch → Run RuboCop → If offenses → Agent fixes →
+Run RSpec → If failures → Agent fixes → Done
+```
+
+---
+
+### F-25 Skill Routing & Safety Rules
+
+**Source:** [`skills/SkillRouter.ts`](src/skills/SkillRouter.ts), [`skills/SkillContextBuilder.ts`](src/skills/SkillContextBuilder.ts), [`skills/SafetyRules.ts`](src/skills/SafetyRules.ts), [`skills/SkillCatalog.ts`](src/skills/SkillCatalog.ts), [`skills/SkillRegistry.ts`](src/skills/SkillRegistry.ts)
+
+Routes each AI request to the most relevant engineering skills (bundled, pinned Ruby/Rails domain documentation), with safety-forced rules that warn about destructive operations.
+
+**How it works:**
+1. The `route_skills` tool (also exposed as an MCP/Language Model tool) takes a task description and optionally the active file
+2. It returns the smallest set of skills that apply: primary, secondary, and always-on cross-cutting skills
+3. Safety-forced skills are injected when the task involves destructive commands, SQL injection risks, mass assignment, or risky migrations
+4. The agent reads the matched skills with `get_skill` before generating code
+
+**Bundled skill domains:**
+- `rails-action-controller` — request handling, parameters, responses, sessions, callbacks, exceptions
+- `rails-active-record` — persistence, relations, queries, callbacks, testing, bulk writes, loading, security, tenant scope
+- `ruby-clean-code` — SOLID, DRY, KISS, YAGNI, Demeter
+
+**Safety rules:**
+- Destructive commands (`drop_table`, `delete_all`, `destroy`) → safety warning injected
+- SQL injection risk (`where("... #{}")`) → safety warning injected
+- Mass assignment risk (`new(params)`) → safety warning injected
+- Risky migrations (`remove_column`, `rename_column`) → safety warning injected
+
+**Configuration:**
+
+```json
+"railsForge.skills.enabled": true,
+"railsForge.skills.maxPerRequest": 4,
+"railsForge.skills.extraPaths": []
+```
+
+- `enabled`: toggle skill routing on/off
+- `maxPerRequest`: maximum domain skills injected per request (cross-cutting skills like `ruby-clean-code` are always included)
+- `extraPaths`: additional skill directories to load beyond the bundled set
+
+---
+
+### F-26 Type Checking (Steep & RBS)
+
+**Source:** [`types/SteepProvider.ts`](src/types/SteepProvider.ts), [`types/RBSIndex.ts`](src/types/RBSIndex.ts), [`types/RBSHoverProvider.ts`](src/types/RBSHoverProvider.ts), [`types/RBSDefinitionProvider.ts`](src/types/RBSDefinitionProvider.ts)
+
+Integration with [Steep](https://github.com/soutaro/steep) (Ruby type checker) and [RBS](https://github.com/ruby/rbs) (Ruby type signature language).
+
+**Steep integration:**
+- **Command:** `RailsForge: Run Steep Type Check` (`railsforge.runSteepCheck`)
+- **On-save scanning:** optionally re-run Steep on every save (debounced to 30s)
+- Results appear as diagnostics in the Problems panel
+
+**RBS integration:**
+- **Hover** over a method/class with an RBS signature → see the type signature
+- **Ctrl+Click** on a typed constant → jump to its `.rbs` signature file
+- **Command:** `RailsForge: Generate RBS Signatures for File` (`railsforge.generateRBS`) — generates a starter `.rbs` skeleton for the active file
+- RBS files are read from the configured signature directory (default: `sig/`)
+
+**Configuration:**
+
+```json
+"railsForge.types.steepEnabled": false,
+"railsForge.types.steepScanOnSave": false,
+"railsForge.types.rbsSigDir": "sig"
+```
+
+- `steepEnabled`: enable Steep diagnostics (requires Steep installed in the project)
+- `steepScanOnSave`: re-run Steep on save (debounced to 30s)
+- `rbsSigDir`: directory (relative to workspace root) where RBS signature files are read from
+
+---
+
+### F-27 Code Analyzers (Reek, Flog, Flay, Debride, Standard)
+
+**Source:** [`lint/RubyAnalyzersProvider.ts`](src/lint/RubyAnalyzersProvider.ts), [`lint/AnalyzerParsers.ts`](src/lint/AnalyzerParsers.ts)
+
+Runs optional Ruby code quality analyzers beyond RuboCop, with findings surfaced in the Problems panel.
+
+**Supported analyzers:**
+
+| Analyzer | What it detects |
+|----------|----------------|
+| **Reek** | Code smells (duplicate method calls, feature envy, too many statements, etc.) |
+| **Flog** | Complexity score per method (higher = more complex) |
+| **Flay** | Duplicate/duplicated code blocks across the codebase |
+| **Debride** | Unused methods and constants |
+| **Standard** | Standard Ruby style enforcement |
+
+**How to use:**
+1. Install the analyzer gem(s) in your project: `gem install reek flog flay debride standard`
+2. **Command:** `RailsForge: Run Code Analyzers` (`railsforge.runAnalyzers`)
+3. Select which analyzers to run (or configure `railsForge.analyzers.enabled`)
+4. Findings appear in the Problems panel
+5. **Command:** `RailsForge: Clear Code Analyzer Findings` (`railsforge.clearAnalyzers`) — clears all analyzer diagnostics
+
+**Configuration:**
+
+```json
+"railsForge.analyzers.enabled": ["reek", "flog"],
+"railsForge.analyzers.flogThreshold": 20,
+"railsForge.analyzers.paths": ["app", "lib"]
+```
+
+- `enabled`: array of analyzer names to run (empty = all installed)
+- `flogThreshold`: Flog complexity score at or above which a method is reported (default: 20)
+- `paths`: project-relative paths the analyzers scan (default: `["app", "lib"]`)
+
+---
+
+### F-28 Rails Runtime Introspection
+
+**Source:** [`rails/RuntimeIntrospector.ts`](src/rails/RuntimeIntrospector.ts), [`rails/RuntimeIntrospectionService.ts`](src/rails/RuntimeIntrospectionService.ts)
+
+Boots the actual Rails app (via `rails runner`) and reads real runtime metadata: associations, validations, callbacks, routes, and middleware. This catches things static analysis can't — e.g., `has_many` associations defined via concerns, dynamic callbacks, or middleware added by engines.
+
+**How it works:**
+1. Runs `rails runner` with a script that introspects `ActiveRecord::Base.descendants`, `Application.routes`, etc.
+2. Caches the result in `.railsforge/runtime.json`
+3. The cached metadata is used to ground the `@rails` agent and the MCP `get_runtime_introspection` tool
+4. Trust- and consent-gated: only runs in trusted workspaces, and only when explicitly invoked or `runtime.introspection.enabled` is true
+
+**How to use:**
+- **Command:** `RailsForge: Show Rails Runtime Introspection` (`railsforge.showRuntimeIntrospection`) — displays the cached metadata
+- **Command:** `RailsForge: Refresh Rails Runtime Introspection (boots the app)` (`railsforge.refreshRuntimeIntrospection`) — re-boots the app and refreshes the cache
+- The `@rails` agent and MCP clients automatically use the cached introspection when available
+
+**Configuration:**
+
+```json
+"railsForge.runtime.introspection.enabled": false
+```
+
+- Default: `false` (opt-in, since it boots the full Rails app which can take several seconds)
+
+---
+
+### F-29 Provider Layer Architecture
+
+**Source:** [`providers/`](src/providers/) directory (15 modules)
+
+The `src/providers/` layer is the architectural firewall between the VS Code Extension API and RailsForge's core engine. It wraps every `vscode.*` API call behind dedicated Provider classes that consume the `SemanticIndex` and `PatternCatalogAccess` interfaces, keeping the core engine testable without the VS Code runtime.
+
+**Design principle:** No raw `vscode.*` calls in business logic. Every `register*` API is wrapped in a Provider class that consumes the engine via interfaces.
+
+**Provider classes:**
+
+| Provider | VS Code API Surface | Responsibility |
+|----------|---------------------|----------------|
+| `LanguageIntelligenceProvider` | `vscode.languages.*` | Code actions, hover, code lens, diagnostics, completion, definition, reference, document symbol, rename, formatting, folding range, call hierarchy, inlay hints (18 register* APIs) |
+| `TestingApiProvider` | `vscode.tests.*` | Native Test Explorer integration (TestController, TestRunProfile) |
+| `AiChatProvider` | `vscode.chat.*`, `vscode.lm.*` | `@rails` chat participant registration + Language Model selection |
+| `RefactoringEditProvider` | `vscode.WorkspaceEdit`, `workspace.applyEdit` | Atomic, previewable, undoable multi-file edits |
+| `WindowUiProvider` | `vscode.window.*` | Tree views, QuickPick, InputBox, Webview panels, progress, messages |
+| `WorkspaceFsProvider` | `vscode.workspace.*` | FileSystemWatcher, configuration, save hooks, multi-root support |
+| `SourceControlProvider` | `vscode.scm.*` | AI-assisted Conventional Commit generation (F-22) |
+| `TerminalTasksProvider` | `vscode.tasks.*`, `window.createTerminal` | Task discovery + trust-gated terminal automation |
+| `PrincipleCodeActionProvider` | `vscode.CodeActionProvider` | Canonical example: consumes `SemanticIndex` + `PatternCatalogAccess`, produces refactoring Quick Fixes |
+| `ProviderRegistry` | *(orchestrator)* | Single entry point for `extension.ts`; owns every provider's lifecycle |
+
+**Engine firewall interfaces:**
+- `SemanticIndex` — read-only access to the AST/SQLite index, dependency graph, duplicate methods, principle violations
+- `PatternCatalogAccess` — read-only access to the pattern catalog and the project's own pattern instances
+- `EngineAdapters.ts` — the only file in `src/providers/` that imports concrete engine classes (`PersistentIndexManager`, `PatternCatalog`, `DesignPrincipleLinter`), bridging them to the firewall interfaces
+
+**Semantic token types (contribution point):**
+RailsForge registers 10 custom semantic token types for Rails-specific syntax highlighting:
+- `rails-association`, `rails-callback`, `rails-validation`, `rails-scope`, `rails-route-helper`, `rails-migration-method`, `rails-stimulus-target`, `rails-view-helper`, `rails-policy-method`, `rails-service-entrypoint`
+
+Plus 4 token modifiers: `deprecated`, `internal`, `readonly`, `cached`
+
+---
+
 ## 5. Keybindings Reference
 
 | Action | Linux / Windows | macOS | Command ID |
@@ -691,19 +995,37 @@ Every `railsForge.*` setting is a real, wired-up control (not a declared-but-unu
 | Go to Controller | `Alt+R C` | `Cmd+Alt+R C` | `railsforge.goToController` |
 | Go to View | `Alt+R V` | `Cmd+Alt+R V` | `railsforge.goToView` |
 | Go to Spec / Test | `Alt+R S` | `Cmd+Alt+R S` | `railsforge.goToSpec` |
-| Go to Policy | `Alt+R P` | `Cmd+Alt+R P` | `railsforge.goToPolicy` |
 | Search Routes | `Alt+R R` | `Cmd+Alt+R R` | `railsforge.searchRoutes` |
+| Open DevDocs | `Alt+R D` | `Cmd+Alt+R D` | `railsforge.openDevDocs` |
+| Evaluate Selection in REPL | `Alt+R E` | `Cmd+Alt+R E` | `railsforge.evaluateInREPL` |
 
-All keybindings require `editorTextFocus` (except Route Search which is global).
+> **Note:** `Go to Policy` (`Alt+R P`) is listed in the F-02 feature reference but is not bound by default in `package.json` keybindings — it's available via the Command Palette and shows up when Pundit/CanCanCan is detected in `Gemfile.lock`.
+
+All keybindings require `editorTextFocus` (except Route Search, DevDocs, and REPL evaluation which are global).
 
 ---
 
 ## 6. Command Palette Reference
 
+### Architecture & Refactoring
+
 | Command Title | Command ID |
 | :--- | :--- |
 | Scan Workspace for Patterns, Smells & Safety | `railsforge.scanWorkspaceArchitecture` |
 | Refactor Selection (Design Patterns) | `railsforge.refactorSelection` |
+| Extract Selection to Service Object | `railsforge.extractService` |
+| Extract Selection to Query Object | `railsforge.extractQuery` |
+| Generate New Service Object | `railsforge.generateServiceObject` |
+| Clone Existing Pattern | `railsforge.clonePattern` |
+| Fix All Deterministic Principle Violations in File | `railsforge.fixAllInFile` |
+| Show Similar Patterns in This Project | `railsforge.showSimilarPatterns` |
+| Show Related Files (Services, Queries, Policies, Specs) | `railsforge.showRelatedFiles` |
+| Optimize Rails Workspace Performance | `railsforge.optimizeWorkspacePerformance` |
+
+### Navigation
+
+| Command Title | Command ID |
+| :--- | :--- |
 | Go to Matching Model | `railsforge.goToModel` |
 | Go to Matching Controller | `railsforge.goToController` |
 | Go to Matching View | `railsforge.goToView` |
@@ -712,23 +1034,86 @@ All keybindings require `editorTextFocus` (except Route Search which is global).
 | Go to ViewComponent | `railsforge.goToComponent` |
 | Search Rails Routes | `railsforge.searchRoutes` |
 | Peek Model Schema | `railsforge.showSchemaPeek` |
+| Open Design Pattern Explanation | `railsforge.openPattern` |
+| Explain Pattern in Chat | `railsforge.explainPattern` |
+
+### Static Analysis & Security
+
+| Command Title | Command ID |
+| :--- | :--- |
 | RuboCop Autocorrect File | `railsforge.rubocopAutocorrect` |
+| Apply Community RuboCop Style Guide (Shopify/GitLab/Airbnb) | `railsforge.applyRubocopStyleGuide` |
 | Run Brakeman Security Scan | `railsforge.runBrakeman` |
 | Run Gemfile.lock Security Audit (bundle-audit) | `railsforge.runBundleAudit` |
+| Run Code Analyzers (Reek, Flog, Flay, Debride, Standard) | `railsforge.runAnalyzers` |
+| Clear Code Analyzer Findings | `railsforge.clearAnalyzers` |
 | Check Migration Safety (Strong Migrations) | `railsforge.analyzeMigration` |
-| Extract Selection to Service Object | `railsforge.extractService` |
-| Extract Selection to Query Object | `railsforge.extractQuery` |
-| Show Similar Patterns in This Project | `railsforge.showSimilarPatterns` |
-| Show Related Files (Services, Queries, Policies, Specs) | `railsforge.showRelatedFiles` |
+| Run Steep Type Check | `railsforge.runSteepCheck` |
+| Generate RBS Signatures for File | `railsforge.generateRBS` |
+
+### Search & Dependencies
+
+| Command Title | Command ID |
+| :--- | :--- |
 | Semantic Search (find similar code by meaning) | `railsforge.semanticSearch` |
 | Find Near-Duplicate Methods (DRY) | `railsforge.findDuplicateMethods` |
 | Show Circular Dependencies | `railsforge.showDependencyCycles` |
-| Fix All Deterministic Principle Violations in File | `railsforge.fixAllInFile` |
+
+### Rails Generators & Console
+
+| Command Title | Command ID |
+| :--- | :--- |
+| Rails Generate... | `railsforge.generate` |
+| Rails Destroy... | `railsforge.destroyGenerated` |
+| Open Console (Pry/IRB/Rails) | `railsforge.openRailsConsole` |
+| Evaluate Selection in REPL | `railsforge.evaluateInREPL` |
+| Refresh Rake Tasks | `railsforge.refreshRakeTasks` |
+
+### Documentation
+
+| Command Title | Command ID |
+| :--- | :--- |
+| Open DevDocs | `railsforge.openDevDocs` |
+| Open Gem Documentation | `railsforge.openRubyDoc` |
+| Update Offline DevDocs Cache | `railsforge.updateDevDocs` |
+| Open Project Overview (routes, schema, runtime, toolchain) | `railsforge.openVirtualDoc` |
+
+### Runtime Introspection
+
+| Command Title | Command ID |
+| :--- | :--- |
+| Show Rails Runtime Introspection | `railsforge.showRuntimeIntrospection` |
+| Refresh Rails Runtime Introspection (boots the app) | `railsforge.refreshRuntimeIntrospection` |
+
+### AI & MCP
+
+| Command Title | Command ID |
+| :--- | :--- |
+| Generate Conventional Commit | `railsforge.generateAiCommit` |
 | Export Cursor Rules & Register MCP Server | `railsforge.exportCursorRules` |
+| Copy System Prompt for Cline / Continue / Claude Dev | `railsforge.copySystemPrompt` |
+| Apply Chat Response (diff/create/replace) | `railsforge.applyChatResponse` |
 | Set AI Provider API Key | `railsforge.setAiApiKey` |
-| Generate OpenAPI Skeleton | `railsforge.generateApiDocs` |
+
+### Environment & Diagnostics
+
+| Command Title | Command ID |
+| :--- | :--- |
+| Diagnose Environment | `railsforge.diagnoseEnvironment` |
+| Show Output Logs | `railsforge.showLogs` |
+
+### Gem Publishing (gem projects only)
+
+| Command Title | Command ID |
+| :--- | :--- |
 | Bump Gem Version | `railsforge.bumpGemVersion` |
 | Release Gem (`bundle exec rake release`) | `railsforge.releaseGem` |
+
+### API Documentation
+
+| Command Title | Command ID |
+| :--- | :--- |
+| Generate OpenAPI Skeleton | `railsforge.generateApiDocs` |
 
 Several commands only appear in the Command Palette for the relevant project type or configuration (see the settings table below and `package.json`'s `menus.commandPalette`) — e.g. `goToModel`/`goToController`/`searchRoutes`/`runBrakeman`/`analyzeMigration`/`showSchemaPeek`/`extractQuery` only show for Rails apps (`monolith`/`api_only`), `goToView` only for `monolith`, `generateApiDocs` only when `apiDocs.enabled` is true, `bumpGemVersion`/`releaseGem` only for `gem`, `setAiApiKey` only when `ai.provider` isn't `"ollama"`, and `goToPolicy`/`goToComponent` only when Pundit/ViewComponent are detected in `Gemfile.lock`. Every command still runs fine if invoked another way (e.g. a keybinding) regardless of this filtering — it only affects Command Palette clutter.
 
@@ -740,33 +1125,126 @@ All settings live under the `railsForge.*` namespace and can be set at either th
 
 Settings marked **"requires reload"** are read once at activation (or when a provider/watcher is constructed) rather than watched live; change them, then run **Developer: Reload Window**. Everything else takes effect on the very next action (next save, next scan, next command run) with no reload needed.
 
+### Workspace & Project Detection
+
 | Setting | Type | Default | Reload? | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `railsForge.excludePatterns` | `string[]` | see below | Live for scans; existing watchers need reload | Glob patterns excluded from every workspace scan — schema/route/pattern indexing, the AST index, live re-indexing on save, and (read from `.vscode/settings.json`) the standalone MCP server. Default: `node_modules`, `vendor`, `tmp`, `log`, `.git`, `coverage`, `public/assets`, `public/packs` |
-| `railsForge.projectType.override` | `"auto"` \| `"monolith"` \| `"api_only"` \| `"gem"` \| `"script"` | `"auto"` | **Requires reload** | Forces a project type over auto-detection. Controls which commands/keybindings the Command Palette shows (see §8's `menus.commandPalette`) |
-| `railsForge.rubocop.autocorrectOnSave` | `boolean` | `false` | Live | Run RuboCop autocorrect (mode per `rubocop.mode`) on every Ruby file save |
-| `railsForge.rubocop.mode` | `"safe"` \| `"unsafe"` | `"safe"` | Live | RuboCop autocorrect mode: `-a` (safe) or `-A` (unsafe) — used by both the manual command and `autocorrectOnSave` |
-| `railsForge.brakeman.scanOnSave` | `boolean` | `false` | Live | Run a Brakeman scan in the background on save (Rails only), debounced to at most once per 30s, silent when clean |
-| `railsForge.testing.framework` | `"rspec"` \| `"minitest"` | `"rspec"` | Live | Tie-breaker for Run/Debug Test when a test file's path doesn't say `spec/` or `test/` |
+| `railsForge.excludePatterns` | `string[]` | see below | Live for scans; existing watchers need reload | Glob patterns excluded from every workspace scan. Default: `node_modules`, `vendor`, `tmp`, `log`, `.git`, `coverage`, `public/assets`, `public/packs` |
+| `railsForge.projectType.override` | `"auto"` \| `"monolith"` \| `"api_only"` \| `"gem"` \| `"script"` | `"auto"` | **Requires reload** | Forces a project type over auto-detection. Controls which commands/keybindings the Command Palette shows |
+| `railsForge.ruby.versionManager` | `"auto"` \| `"mise"` \| `"asdf"` \| `"rbenv"` \| `"rvm"` \| `"chruby"` | `"auto"` | **Requires reload** | Version manager used to run project tools (RuboCop, Rails, RSpec, Brakeman, ...). `auto` = detect from environment |
+| `railsForge.performance.autoOptimizeWorkspace` | `"auto"` \| `"off"` \| `"on"` | `"auto"` | Live | How RailsForge optimizes VS Code performance (file watcher and search exclusions) for large Rails workspaces |
+| `railsForge.log.level` | `"debug"` \| `"info"` \| `"warn"` \| `"error"` | `"info"` | Live | Verbosity of the RailsForge output channel (View → Output → RailsForge) |
+| `railsForge.log.file` | `boolean` | `false` | Live | Mirror every log line to `<workspace>/.railsforge/railsforge.log` |
+
+### Schema & Routes Indexing
+
+| Setting | Type | Default | Reload? | Description |
+| :--- | :--- | :--- | :--- | :--- |
 | `railsForge.schema.autoIndex` | `boolean` | `true` | **Requires reload** | Auto-rebuild schema index when `db/schema.rb` changes |
 | `railsForge.routes.autoIndex` | `boolean` | `true` | **Requires reload** | Auto-rebuild route index when `config/routes.rb` changes |
+
+### Linting & Security
+
+| Setting | Type | Default | Reload? | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `railsForge.rubocop.autocorrectOnSave` | `boolean` | `false` | Live | Run RuboCop autocorrect (mode per `rubocop.mode`) on every Ruby file save |
+| `railsForge.rubocop.mode` | `"safe"` \| `"unsafe"` | `"safe"` | Live | RuboCop autocorrect mode: `-a` (safe) or `-A` (unsafe) |
+| `railsForge.brakeman.scanOnSave` | `boolean` | `false` | Live | Run a Brakeman scan in the background on save (Rails only), debounced to at most once per 30s |
+| `railsForge.analyzers.enabled` | `string[]` | `[]` | Live | Analyzers run by "Run Code Analyzers" (empty = all installed). Options: `reek`, `flog`, `flay`, `debride`, `standard` |
+| `railsForge.analyzers.flogThreshold` | `number` | `20` | Live | Flog complexity score at or above which a method is reported |
+| `railsForge.analyzers.paths` | `string[]` | `["app","lib"]` | Live | Project-relative paths the analyzers scan |
+
+### Type Checking (Steep & RBS)
+
+| Setting | Type | Default | Reload? | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `railsForge.types.steepEnabled` | `boolean` | `false` | **Requires reload** | Enable Steep type-checker diagnostics (requires Steep installed in the project) |
+| `railsForge.types.steepScanOnSave` | `boolean` | `false` | Live | Re-run Steep in the background on Ruby file save when `steepEnabled` is true (debounced to 30s) |
+| `railsForge.types.rbsSigDir` | `string` | `"sig"` | **Requires reload** | Directory (relative to workspace root) RBS signature files are read from |
+
+### Testing
+
+| Setting | Type | Default | Reload? | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `railsForge.testing.framework` | `"rspec"` \| `"minitest"` | `"rspec"` | Live | Tie-breaker for Run/Debug Test when a test file's path doesn't say `spec/` or `test/` |
+
+### Runtime Introspection
+
+| Setting | Type | Default | Reload? | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `railsForge.runtime.introspection.enabled` | `boolean` | `false` | **Requires reload** | Enable Rails runtime introspection via `rails runner`. Opt-in — boots the full Rails app which can take several seconds |
+
+### AI Provider
+
+| Setting | Type | Default | Reload? | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `railsForge.ai.provider` | `"ollama"` \| `"openai"` \| `"anthropic"` \| `"vscode-lm"` | `"ollama"` | **Requires reload** | Backend for the `@rails` agent. Cloud providers send prompts/code to that provider's API. `vscode-lm` uses VS Code's model picker (Copilot or any Language Model provider) — no API key stored by RailsForge |
+| `railsForge.ai.vscodeLm.family` | `string` | `""` | **Requires reload** | Preferred model family (e.g. `gpt-4o`, `claude-sonnet`) when `ai.provider` is `"vscode-lm"` |
+| `railsForge.ai.openai.model` | `string` | `"gpt-4o-mini"` | **Requires reload** | Model used when `ai.provider` is `"openai"` |
+| `railsForge.ai.openai.baseUrl` | `string` | `"https://api.openai.com"` | **Requires reload** | Base URL for OpenAI-compatible endpoints (OpenRouter, self-hosted vLLM). The agent appends `/v1/chat/completions` |
+| `railsForge.ai.anthropic.model` | `string` | `"claude-sonnet-4-5"` | **Requires reload** | Model used when `ai.provider` is `"anthropic"` |
+| `railsForge.ai.temperature` | `number` | `0.2` | **Requires reload** | Sampling temperature for every provider. 0.2 keeps AI fixes deterministic; raise toward 1.0 for more creative chat |
+| `railsForge.ai.maxTokens` | `number` | `2048` | **Requires reload** | Max generated tokens per response (`num_predict` on Ollama, `max_tokens` on cloud) |
+| `railsForge.ai.timeoutMs` | `number` | `120000` | **Requires reload** | Per-request timeout for `@rails` agent calls |
+
+### Ollama Settings (Ollama provider only)
+
+| Setting | Type | Default | Reload? | Description |
+| :--- | :--- | :--- | :--- | :--- |
 | `railsForge.ollama.host` | `string` | `"http://localhost:11434"` | **Requires reload** | URL of the local Ollama instance |
 | `railsForge.ollama.model` | `string` | `"qwen2.5-coder:14b"` | **Requires reload** | Default chat model for `@rails` AI agent when `ai.provider` is `"ollama"` |
-| `railsForge.ollama.embeddingModel` | `string` | `"nomic-embed-text"` | Live | Embedding model for Semantic Search (pull separately) |
-| `railsForge.ollama.numCtx` | `number` | `8192` | **Requires reload** | Ollama context window for the `@rails` agent. Small models default to ~2048-4096, which truncates the system prompt + file content and caused malformed AI fixes; 8192 fits prompt + diff instructions (16384 for files over ~200 lines). Ollama-only |
-| `railsForge.ollama.keepAlive` | `string` | `"30m"` | **Requires reload** | How long the Ollama model stays loaded after a request, so AI-fix/chat calls skip cold-start load. Ollama-only |
-| `railsForge.ollama.repeatPenalty` | `number` | `1.15` | **Requires reload** | Ollama repeat penalty — suppresses the repetition loops small local models fall into (1.0 disables). Ollama-only |
-| `railsForge.ollama.minP` | `number` | `0.05` | **Requires reload** | Ollama min_p filter — keeps high-probability tokens, drops noise, better quality on small models. Ollama-only |
-| `railsForge.ai.provider` | `"ollama"` \| `"openai"` \| `"anthropic"` | `"ollama"` | **Requires reload** | Backend for the `@rails` agent. Cloud providers send prompts/code to that provider's API |
-| `railsForge.ai.openai.model` | `string` | `"gpt-4o-mini"` | **Requires reload** | Model used when `ai.provider` is `"openai"` |
-| `railsForge.ai.openai.baseUrl` | `string` | `"https://api.openai.com"` | **Requires reload** | Base URL for OpenAI-compatible endpoints (OpenRouter, self-hosted vLLM, OSS model gateways). The agent appends `/v1/chat/completions` |
-| `railsForge.ai.anthropic.model` | `string` | `"claude-sonnet-4-5"` | **Requires reload** | Model used when `ai.provider` is `"anthropic"` |
-| `railsForge.ai.temperature` | `number` | `0.2` | **Requires reload** | Sampling temperature for every provider — 0.2 keeps AI fixes deterministic; raise toward 1.0 for more creative chat |
-| `railsForge.ai.maxTokens` | `number` | `2048` | **Requires reload** | Max generated tokens per response (`num_predict` on Ollama, `max_tokens` on cloud). Caps rambling on 4B models; cloud models can take 4096+ |
-| `railsForge.ai.timeoutMs` | `number` | `120000` | **Requires reload** | Per-request timeout for `@rails` agent calls, so a hung Ollama/cloud endpoint can't block a fix or chat turn |
-| `railsForge.mcp.enabled` | `boolean` | `true` | Live | Whether "Export Cursor Rules" also registers the MCP server in `.cursor/mcp.json` (the `.mdc` rules file is always written) |
+| `railsForge.ollama.embeddingModel` | `string` | `"nomic-embed-text"` | Live | Embedding model for Semantic Search (pull separately: `ollama pull nomic-embed-text`) |
+| `railsForge.ollama.numCtx` | `number` | `8192` | **Requires reload** | Ollama context window (`num_ctx`). 8192 fits prompt + diff instructions |
+| `railsForge.ollama.keepAlive` | `string` | `"30m"` | **Requires reload** | How long the Ollama model stays loaded after a request (`keep_alive`) |
+| `railsForge.ollama.repeatPenalty` | `number` | `1.15` | **Requires reload** | Ollama repeat penalty — suppresses repetition loops in small local models (1.0 disables) |
+| `railsForge.ollama.minP` | `number` | `0.05` | **Requires reload** | Ollama min_p filter — keeps high-probability tokens, drops noise |
+
+### Agent & Skills
+
+| Setting | Type | Default | Reload? | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `railsForge.agent.toolLoop` | `boolean` | `true` | Live | Enable the autonomous tool-use loop for the `@rails` agent (F-24) |
+| `railsForge.agent.maxToolSteps` | `number` | `3` | Live | Maximum tool iterations before the agent stops (prevents infinite loops) |
+| `railsForge.agent.verifyRubySyntax` | `boolean` | `true` | Live | Run `ruby -c` on generated code before applying it (catches syntax errors early) |
+| `railsForge.skills.enabled` | `boolean` | `true` | **Requires reload** | Route each AI request to the most relevant ruby-agent-skills (bundled, pinned) |
+| `railsForge.skills.maxPerRequest` | `number` | `4` | Live | Maximum domain skills injected per request (cross-cutting skills like `ruby-clean-code` are always included) |
+| `railsForge.skills.extraPaths` | `string[]` | `[]` | **Requires reload** | Additional skill directories to load beyond the bundled set |
+| `railsForge.legal.skills.enabled` | `boolean` | `false` | **Requires reload** | Enable legal-domain AI guardrails inspired by the lawve-ai/awesome-legal-skills collection |
+
+### MCP & API Docs
+
+| Setting | Type | Default | Reload? | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `railsForge.mcp.enabled` | `boolean` | `true` | Live | Whether "Export Cursor Rules" also registers the MCP server in `.cursor/mcp.json` |
 | `railsForge.apiDocs.enabled` | `boolean` | `true` | Live (Command Palette visibility needs reload) | Whether "Generate OpenAPI Skeleton" is available |
-| `railsForge.performance.cacheSize` | `number` | `200` | **Requires reload** | Max entries in RailsForge's bounded caches (Gem Lens lookups, semantic-search embeddings) before LRU eviction |
+
+### Documentation Hovers (APIDock, DevDocs, RubyDoc)
+
+| Setting | Type | Default | Reload? | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `railsForge.apidock.enabled` | `boolean` | `true` | Live | Append apidock.com's top-rated community note to Rails DSL hovers |
+| `railsForge.apidock.baseUrl` | `string` | `"https://apidock.com"` | **Requires reload** | Base URL for apidock.com lookups. Override to point at a mirror |
+| `railsForge.apidock.requestTimeoutMs` | `number` | `5000` | Live | Timeout for an apidock.com hover lookup, in milliseconds |
+| `railsForge.apidock.cacheTtlHours` | `number` | `24` | Live | How long a fetched APIDock note is cached before re-fetching, in hours |
+| `railsForge.apidock.customMappings` | `array` | `[]` | Live | Extra/overriding entries for the hovered-word → apidock.com Class/method lookup |
+| `railsForge.devdocs.baseUrl` | `string` | `"https://devdocs.io"` | **Requires reload** | Base URL loaded by "Open DevDocs" |
+| `railsForge.devdocs.openBesideActiveEditor` | `boolean` | `true` | Live | Open the DevDocs panel beside the active editor (false = same column) |
+| `railsForge.devdocs.offlineEnabled` | `boolean` | `true` | **Requires reload** | Download the project's Ruby/Rails DevDocs docsets to `.railsforge/devdocs/` |
+| `railsForge.devdocs.dataBaseUrl` | `string` | `"https://documents.devdocs.io"` | **Requires reload** | Base URL DevDocs docset data is downloaded from |
+| `railsForge.devdocs.fetchTimeoutMs` | `number` | `30000` | Live | Timeout for downloading a DevDocs docset file, in milliseconds |
+| `railsForge.devdocs.rubySlug` | `string` | `""` | Live | DevDocs docset slug for offline Ruby core docs, e.g. `ruby~3.3`. Empty = auto-detect |
+| `railsForge.devdocs.railsSlug` | `string` | `""` | Live | DevDocs docset slug for offline Rails docs, e.g. `rails~7.1`. Empty = auto-detect |
+| `railsForge.rubydoc.enabled` | `boolean` | `true` | Live | Whether "Open Gem Documentation" and the `get_gem_documentation` MCP tool are available |
+| `railsForge.rubydoc.baseUrl` | `string` | `"https://www.rubydoc.info"` | **Requires reload** | Base URL for rubydoc.info gem documentation lookups |
+| `railsForge.rubydoc.requestTimeoutMs` | `number` | `6000` | Live | Timeout for a rubydoc.info lookup, in milliseconds |
+| `railsForge.rubydoc.cacheTtlDays` | `number` | `7` | Live | How long a fetched gem doc entry is cached before re-fetching, in days |
+| `railsForge.rubydoc.namespaceMappings` | `array` | `[]` | Live | Extra/overriding entries for the constant-namespace → gem-name lookup |
+
+### Performance
+
+| Setting | Type | Default | Reload? | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `railsForge.performance.cacheSize` | `number` | `200` | **Requires reload** | Max entries in RailsForge's bounded caches (Gem Lens, semantic-search embeddings) before LRU eviction |
 
 **Cloud AI API keys** are never stored in `settings.json` — run **RailsForge: Set AI Provider API Key** (after setting `railsForge.ai.provider` to `"openai"` or `"anthropic"`) and the key is stored in VS Code's encrypted `SecretStorage`, scoped per provider.
 
@@ -778,34 +1256,66 @@ Settings marked **"requires reload"** are read once at activation (or when a pro
 
 ```
 Extension Host (extension.ts)
+│
+├── Provider Layer (src/providers/ — VS Code API firewall)
+│   ├── ProviderRegistry           ← single entry point; owns lifecycle
+│   ├── LanguageIntelligenceProvider  ← wraps vscode.languages.* (18 APIs)
+│   ├── WorkspaceFsProvider        ← wraps vscode.workspace.* (watchers, config, save)
+│   ├── WindowUiProvider           ← wraps vscode.window.* (tree views, QuickPick, webviews)
+│   ├── TerminalTasksProvider      ← wraps vscode.tasks.* + createTerminal (trust-gated)
+│   ├── TestingApiProvider         ← wraps vscode.tests.*
+│   ├── AiChatProvider             ← wraps vscode.chat.* + vscode.lm.*
+│   ├── SourceControlProvider      ← wraps vscode.scm.* (Conventional Commits)
+│   ├── RefactoringEditProvider    ← wraps vscode.WorkspaceEdit + applyEdit
+│   ├── PrincipleCodeActionProvider ← canonical example (consumes SemanticIndex)
+│   ├── ConventionalCommitGenerator ← pure-function diff analysis
+│   ├── SemanticIndex              ← engine firewall interface (no vscode import)
+│   ├── PatternCatalogAccess       ← engine firewall interface
+│   └── EngineAdapters             ← bridges PersistentIndexManager / PatternCatalog
+│                                    / DesignPrincipleLinter to the interfaces
+│
+├── Workspace Trust (F-23)
+│   ├── Trust                     ← isWorkspaceTrusted() / assertTrusted()
+│   ├── ProjectTerminal           ← trust-gated createTerminal / sendText
+│   └── ProjectProcess            ← trust-gated child_process (execFile / spawn)
+│
 ├── Rails Intelligence
-│   ├── SchemaIndexer          ← parses db/schema.rb
-│   ├── RoutesIndexer          ← parses config/routes.rb
-│   ├── MVCNavigator           ← Alt+R keybindings
-│   ├── ViewPartialResolver    ← Ctrl+Click on render
+│   ├── SchemaIndexer             ← parses db/schema.rb
+│   ├── RoutesIndexer             ← parses config/routes.rb
+│   ├── MVCNavigator              ← Alt+R keybindings
+│   ├── ViewPartialResolver       ← Ctrl+Click on render
 │   ├── ViewPartialDefinitionProvider
-│   └── ViewComponentResolver  ← ViewComponent jump
+│   ├── ViewComponentResolver     ← ViewComponent jump
+│   ├── RuntimeIntrospector       ← rails runner introspection (F-28)
+│   └── RuntimeIntrospectionService
 │
 ├── Hotwire
-│   ├── StimulusIndexer        ← app/javascript/controllers/
+│   ├── StimulusIndexer           ← app/javascript/controllers/
 │   ├── StimulusCompletionProvider
-│   ├── StimulusDefinitionProvider  ← Ctrl+Click data-controller/data-action
+│   ├── StimulusDefinitionProvider ← Ctrl+Click data-controller/data-action
 │   ├── TurboFrameNavigator
 │   └── TurboFrameDefinitionProvider ← Ctrl+Click turbo_frame_tag / turbo-frame
 │
 ├── Lint & Security
-│   ├── RuboCopProvider        ← live diagnostics + quick fixes
-│   ├── BrakemanProvider       ← on-demand / on-save scan
-│   ├── BundlerAuditScanner    ← CVE check on Gemfile.lock
-│   └── RailsDeprecationLinter
+│   ├── RuboCopProvider           ← live diagnostics + quick fixes
+│   ├── BrakemanProvider          ← on-demand / on-save scan
+│   ├── BundlerAuditScanner       ← CVE check on Gemfile.lock
+│   ├── RailsDeprecationLinter
+│   └── RubyAnalyzersProvider     ← Reek, Flog, Flay, Debride, Standard (F-27)
+│
+├── Type Checking (F-26)
+│   ├── SteepProvider             ← Steep type checker integration
+│   ├── RBSIndex                  ← RBS signature index
+│   ├── RBSHoverProvider          ← RBS hover tooltips
+│   └── RBSDefinitionProvider     ← Ctrl+Click to .rbs files
 │
 ├── Principles & Patterns
-│   ├── DesignPrincipleLinter  ← SOLID/DRY/KISS/YAGNI/Demeter
-│   ├── ProjectPatternIndexer  ← living pattern catalog
+│   ├── DesignPrincipleLinter     ← SOLID/DRY/KISS/YAGNI/Demeter
+│   ├── ProjectPatternIndexer     ← living pattern catalog
 │   └── PatternCodeLensProvider
 │
 ├── Refactoring
-│   ├── ServiceExtractor       ← atomic WorkspaceEdit
+│   ├── ServiceExtractor          ← atomic WorkspaceEdit
 │   ├── QueryExtractor
 │   ├── FormObjectExtractor
 │   ├── ValueObjectExtractor
@@ -813,51 +1323,70 @@ Extension Host (extension.ts)
 │   └── SpecFileGenerator
 │
 ├── Graph & Relations
-│   ├── MinimalDependencyGraph ← regex-based collaborator graph
+│   ├── MinimalDependencyGraph    ← regex-based collaborator graph
 │   ├── RelatedFilesIndex
 │   ├── RelatedCodeLensProvider
-│   └── RelatedHoverProvider
+│   ├── RelatedHoverProvider
+│   └── Freshness                 ← graph provenance tracking
 │
 ├── Testing
-│   ├── TestExplorerController ← VS Code Test API
-│   ├── TestCodeLensProvider   ← ▶ Run / 🐞 Debug
+│   ├── TestExplorerController    ← VS Code Test API
+│   ├── TestCodeLensProvider      ← ▶ Run / 🐞 Debug
 │   └── FactoryBotResolver
 │
 ├── Search
-│   ├── EmbeddingClient        ← Ollama /api/embeddings
-│   └── SemanticSearchIndex    ← cosine similarity + keyword fallback
+│   ├── EmbeddingClient           ← Ollama /api/embeddings
+│   └── SemanticSearchIndex       ← cosine similarity + keyword fallback
 │
 ├── AST Index (Worker Thread)
-│   ├── indexer.worker.ts      ← off-thread parsing + SQLite writes
-│   ├── RubyAstParser          ← tree-sitter-ruby
-│   ├── PersistentIndexer      ← better-sqlite3 (NAPI 10+ only)
+│   ├── indexer.worker.ts         ← off-thread parsing + SQLite writes
+│   ├── RubyAstParser             ← tree-sitter-ruby
+│   ├── PersistentIndexer         ← better-sqlite3 (NAPI 10+ only)
 │   ├── DuplicateMethodDetector
 │   └── PersistentDependencyGraph
 │
-├── AI Agent
-│   ├── RailsAgent             ← Ollama chat client
-│   ├── RailsRAGContext        ← prompt grounding builder
-│   └── RailsChatParticipant   ← @rails VS Code Chat
+├── AI Agent (F-15, F-24)
+│   ├── RailsAgent                ← Ollama/OpenAI/Anthropic/vscode-lm chat client
+│   ├── RailsRAGContext           ← prompt grounding builder
+│   ├── RailsChatParticipant      ← @rails VS Code Chat
+│   ├── AgentLoop                 ← autonomous tool-use loop
+│   ├── LoopTools                 ← tool definitions for the agent
+│   ├── SpeculativeFixCache       ← pre-generates fixes for common offenses
+│   └── RubySyntax                ← ruby -c syntax verification
+│
+├── Skills (F-25)
+│   ├── SkillRouter               ← routes AI request to relevant skills
+│   ├── SkillContextBuilder       ← builds skill context for the prompt
+│   ├── SkillCatalog              ← bundled skill metadata
+│   ├── SkillRegistry             ← skill loading + caching
+│   └── SafetyRules               ← destructive-command / SQL injection warnings
 │
 ├── MCP Server (dist/mcp/server.js — separate process)
-│   └── Exposes 6 tools via stdio MCP protocol
+│   └── Exposes 7 tools via stdio MCP protocol
+│       (get_schema, list_routes, list_patterns, find_similar_pattern,
+│        get_dependencies, find_duplicate_methods, get_runtime_introspection)
 │
 ├── Editing Aids
-│   ├── EndwiseProvider         ← auto-`end` on Enter
-│   ├── ErbTagCompletionProvider ← `<%` tag expansion
-│   ├── GemLensProvider         ← Gemfile hover
-│   └── RubyGemsClient          ← rubygems.org API, LRU cache
+│   ├── EndwiseProvider           ← auto-`end` on Enter
+│   ├── ErbTagCompletionProvider  ← `<%` tag expansion
+│   ├── GemLensProvider           ← Gemfile hover
+│   └── RubyGemsClient            ← rubygems.org API, LRU cache
 │
 ├── Config & Project-Type Tooling
-│   ├── RailsForgeConfig        ← single read point for every railsForge.* setting
-│   ├── EnvironmentDetector     ← + projectType detection/override
-│   ├── OpenApiSkeletonGenerator ← Generate OpenAPI Skeleton
-│   ├── GemVersionBumper        ← Bump Gem Version
-│   └── LruCache                ← generic bounded cache (Gem Lens, Semantic Search)
+│   ├── RailsForgeConfig          ← single read point for every railsForge.* setting
+│   ├── EnvironmentDetector       ← + projectType detection/override
+│   ├── OpenApiSkeletonGenerator  ← Generate OpenAPI Skeleton
+│   ├── GemVersionBumper          ← Bump Gem Version
+│   └── LruCache                  ← generic bounded cache (Gem Lens, Semantic Search)
+│
+├── Diagnostics
+│   ├── Diagnostics               ← unified diagnostic collection
+│   └── collect                   ← diagnostic collection helpers
 │
 └── Views (Activity Bar)
     ├── RailsArchitectureTreeProvider
-    └── PatternCatalogTreeProvider
+    ├── PatternCatalogTreeProvider
+    └── VirtualDocsProvider        ← railsforge:/ virtual documents
 ```
 
 ---
@@ -906,5 +1435,14 @@ RailsForge is a **companion** to Shopify's `ruby-lsp` — not a replacement.
 | 16 | Endwise auto-`end`, ERB tag-expansion, Gem Lens hover | ✅ Done |
 | 17 | Project-type detection (monolith/api_only/gem/script) | ✅ Done |
 | 18 | Full settings.json configurability: excludePatterns, project-type override + Command Palette gating, cloud AI providers, MCP toggle, API doc generator, gem publishing, bounded LRU caches | ✅ Done |
+| 19 | Restricted Mode / Workspace Trust gate: trust-gated wrappers for terminals, child_process, debug sessions, task execution; TrustGuard static analysis test enforces no bypasses | ✅ Done |
+| 20 | Agent tool loop with self-repair: autonomous tool-use (`AgentLoop`, `LoopTools`), `ruby -c` syntax verification between steps, configurable `maxToolSteps` | ✅ Done |
+| 21 | Skill routing & safety rules: `route_skills` MCP/LM tool, safety-forced rules for destructive commands / SQL injection / mass assignment / risky migrations | ✅ Done |
+| 22 | Compatibility & mutation testing: per-file v8 coverage floors, Stryker mutation testing, restricted-host test suite, compatibility table verified by `test/Compatibility.test.ts` | ✅ Done |
+| 23 | Provider layer architecture (F-29): `src/providers/` firewall with 10 Provider classes wrapping every VS Code API domain; `SemanticIndex` + `PatternCatalogAccess` interfaces decouple engine from VS Code; all FileSystemWatchers, save hooks, tree views, chat participant, test explorer, task provider, and SCM migrated to the provider layer | ✅ Done |
+| 24 | AI-assisted Conventional Commits (F-22): `ConventionalCommitGenerator` pure-function diff analyzer, `SourceControlProvider` hooks into built-in Git extension's input box, `generateAiCommit` command + SCM menu entries | ✅ Done |
+| 25 | Semantic token types: 10 Rails-specific token types (`rails-association`, `rails-callback`, `rails-validation`, `rails-scope`, `rails-route-helper`, `rails-migration-method`, `rails-stimulus-target`, `rails-view-helper`, `rails-policy-method`, `rails-service-entrypoint`) + 4 token modifiers (`deprecated`, `internal`, `readonly`, `cached`) | ✅ Done |
 
 **Package:** `railsforge.vsix` (~11 MB) — verified end-to-end with `vsce package --no-dependencies`.
+
+**Testing:** 702 unit tests (vite), host tests (`@vscode/test-electron`), restricted-mode tests, compatibility tests, and mutation tests (Stryker). Per-file v8 coverage floors enforced via `pnpm run coverage`.
