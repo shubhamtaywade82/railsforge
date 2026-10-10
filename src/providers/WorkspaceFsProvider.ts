@@ -123,6 +123,48 @@ export class WorkspaceFsProvider implements vscode.Disposable {
   }
 
   /**
+   * Create a FileSystemWatcher for an arbitrary glob pattern and wire up handlers.
+   * The watcher's disposable lifetime is owned by this provider - callers do NOT
+   * need to push the returned Disposable onto context.subscriptions (it is
+   * automatically disposed when the provider is disposed).
+   *
+   * This is the migration target for all the standalone `vscode.workspace.
+   * createFileSystemWatcher` calls in extension.ts. The business logic (reindex,
+   * refresh, etc.) stays in extension.ts; only the watcher creation + handler
+   * wiring + disposable management moves here.
+   *
+   * @param globPattern The glob pattern to watch, e.g. 'db/schema.rb' or
+   *                     'app/services/something.rb'. Note: avoid writing glob
+   *                     double-star sequences in this JSDoc - the asterisk-slash
+   *                     sequence prematurely terminates the comment block.
+   * @param handlers Optional handlers for create/change/delete events.
+   * @returns A Disposable that disposes just this watcher (the provider also
+   *          retains a reference and will dispose it on provider dispose).
+   */
+  createWatcher(
+    globPattern: string,
+    handlers: {
+      onCreated?: (uri: vscode.Uri) => void
+      onChanged?: (uri: vscode.Uri) => void
+      onDeleted?: (uri: vscode.Uri) => void
+    } = {},
+  ): vscode.Disposable {
+    const watcher = vscode.workspace.createFileSystemWatcher(globPattern)
+    if (handlers.onCreated) {
+      watcher.onDidCreate(handlers.onCreated, null, this.disposables)
+    }
+    if (handlers.onChanged) {
+      watcher.onDidChange(handlers.onChanged, null, this.disposables)
+    }
+    if (handlers.onDeleted) {
+      watcher.onDidDelete(handlers.onDeleted, null, this.disposables)
+    }
+    this.watchers.push(watcher)
+    this.disposables.push(watcher)
+    return watcher
+  }
+
+  /**
    * Read a `railsForge.*` setting with optional default. Wraps
    * `workspace.getConfiguration('railsforge').get<T>(key, default)`.
    */

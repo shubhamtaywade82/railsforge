@@ -118,6 +118,7 @@ import {
   PatternCatalogAccessAdapter,
   RefactoringEditProvider,
   generateConventionalCommit,
+  WorkspaceFsProvider,
 } from './providers'
 
 const execFileAsync = promisify(execFile)
@@ -417,12 +418,12 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
       void loadTurboFrames(turboFrameNavigator)
     }, 2000)
 
-    // File watchers are cheap to register, do immediately.
-    watchProjectFiles(context, () => activeProject.root, schemaIndexer, routesIndexer, migrationDiagnostics, (root, kind) => { semanticContexts.get(root).invalidateSemanticGraph(); virtualDocs.refresh(root, [kind, 'graph']) })
-    watchPatternFiles(context, projectPatternIndexer, patternCodeLensProvider, dependencyGraph, dependencyDiagnostics, relatedCodeLensProvider, semanticSearchIndex)
-    watchSpecFiles(context, relatedFilesIndex, relatedCodeLensProvider)
-    watchStimulusControllers(context, stimulusIndexer, () => activeProject.root)
-    watchTurboFrameTemplates(context, turboFrameNavigator)
+    // File watchers are registered after the ProviderRegistry is constructed
+    // (below) so they can use providerRegistry.workspaceFs.createWatcher() instead
+    // of direct vscode.workspace.createFileSystemWatcher() calls. The business
+    // logic (reindex, refresh, etc.) still lives in the watch* helper functions;
+    // only the watcher creation + handler wiring + disposable management has moved
+    // to the WorkspaceFsProvider.
   }
 
   // 3. Activity Bar Tree Views
@@ -453,12 +454,10 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     clearTimeout(patternRefreshTimer)
     patternRefreshTimer = setTimeout(() => { patternIndexCache.clear(); patternCatalogTree.refresh() }, 300)
   }
-  const patternWatcher = vscode.workspace.createFileSystemWatcher('**/{services,queries,forms,policies,decorators,concerns}/**/*.rb')
+  // patternWatcher migrated to providerRegistry.workspaceFs.createWatcher() below
+  // (after the registry is constructed). Only the invalidatePatterns callback and
+  // the patternRefreshTimer cleanup are registered here.
   context.subscriptions.push(
-    patternWatcher,
-    patternWatcher.onDidCreate(invalidatePatterns),
-    patternWatcher.onDidChange(invalidatePatterns),
-    patternWatcher.onDidDelete(invalidatePatterns),
     { dispose: () => clearTimeout(patternRefreshTimer) },
     vscode.commands.registerCommand('railsforge.openPattern', async (id: string) => {
       const root = activeWorkspaceRoot()
@@ -862,6 +861,34 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   providerRegistry.activate()
   context.subscriptions.push(providerRegistry)
 
+  // 7b. File watchers - migrated from direct vscode.workspace.createFileSystemWatcher
+  //     calls to providerRegistry.workspaceFs.createWatcher(). The watch* helper
+  //     functions keep their business logic; only the watcher creation + handler
+  //     wiring + disposable management moved to the WorkspaceFsProvider. Registered
+  //     after activate() so the provider's internal disposables list is ready.
+  if (workspaceRoot && providerRegistry.workspaceFs) {
+    const wfs = providerRegistry.workspaceFs
+    watchProjectFiles(wfs, () => activeProject.root, schemaIndexer, routesIndexer, migrationDiagnostics, (root, kind) => { semanticContexts.get(root).invalidateSemanticGraph(); virtualDocs.refresh(root, [kind, 'graph']) })
+    watchPatternFiles(wfs, projectPatternIndexer, patternCodeLensProvider, dependencyGraph, dependencyDiagnostics, relatedCodeLensProvider, semanticSearchIndex)
+    watchSpecFiles(wfs, relatedFilesIndex, relatedCodeLensProvider)
+    watchStimulusControllers(wfs, stimulusIndexer, () => activeProject.root)
+    watchTurboFrameTemplates(wfs, turboFrameNavigator)
+  }
+
+  // 7c. Pattern catalog inline watcher - also migrated to createWatcher. The
+  //     patternWatcher invalidates the pattern index cache and refreshes the tree
+  //     when any Service/Query/Form/Policy/Decorator/Concern file changes.
+  if (providerRegistry.workspaceFs) {
+    providerRegistry.workspaceFs.createWatcher(
+      '**/{services,queries,forms,policies,decorators,concerns}/**/*.rb',
+      {
+        onCreated: invalidatePatterns,
+        onChanged: invalidatePatterns,
+        onDeleted: invalidatePatterns,
+      },
+    )
+  }
+
   // 8. AI Conventional Commit - wired after the registry so the command handler can
   //    access providerRegistry.sourceControl. Runs `git diff --cached` in the
   //    workspace root, passes the diff to the ConventionalCommitGenerator (which
@@ -1023,8 +1050,7 @@ function loadStimulusControllers(root: string, indexer: StimulusIndexer): void {
   walk(controllersDir)
 }
 
-function watchStimulusControllers(context: vscode.ExtensionContext, indexer: StimulusIndexer, getRoot: () => string): void {
-  const watcher = vscode.workspace.createFileSystemWatcher('**/app/javascript/controllers/**/*_controller.{js,ts}')
+function watchStimulusControllers(wfs: WorkspaceFsProvider, indexer: StimulusIndexer, getRoot: () => string): void {
   const reindex = async (uri: vscode.Uri): Promise<void> => {
     if (isExcludedByConfig(uri.fsPath) || !isInside(getRoot(), uri.fsPath)) {return}
     try {
@@ -1034,10 +1060,11 @@ function watchStimulusControllers(context: vscode.ExtensionContext, indexer: Sti
       }
     } catch { /* skip unreadable */ }
   }
-  watcher.onDidChange(uri => void reindex(uri))
-  watcher.onDidCreate(uri => void reindex(uri))
-  watcher.onDidDelete(uri => indexer.removeFile(uri.fsPath))
-  context.subscriptions.push(watcher)
+  wfs.createWatcher('**/app/javascript/controllers/**/*_controller.{js,ts}', {
+    onChanged: uri => void reindex(uri),
+    onCreated: uri => void reindex(uri),
+    onDeleted: uri => indexer.removeFile(uri.fsPath),
+  })
 }
 
 type VsCodeLmApi = { selectChatModels?: (selector?: { family?: string }) => Thenable<vscode.LanguageModelChat[]> }
@@ -1113,8 +1140,7 @@ async function loadTurboFrames(navigator: TurboFrameNavigator): Promise<void> {
   }
 }
 
-function watchTurboFrameTemplates(context: vscode.ExtensionContext, navigator: TurboFrameNavigator): void {
-  const watcher = vscode.workspace.createFileSystemWatcher('**/app/views/**/*.{erb,haml,slim}')
+function watchTurboFrameTemplates(wfs: WorkspaceFsProvider, navigator: TurboFrameNavigator): void {
   const reindex = async (uri: vscode.Uri): Promise<void> => {
     if (isExcludedByConfig(uri.fsPath)) {return}
     try {
@@ -1126,10 +1152,11 @@ function watchTurboFrameTemplates(context: vscode.ExtensionContext, navigator: T
       }
     } catch { /* skip unreadable */ }
   }
-  watcher.onDidChange(uri => void reindex(uri))
-  watcher.onDidCreate(uri => void reindex(uri))
-  watcher.onDidDelete(uri => navigator.removeFile(uri.fsPath))
-  context.subscriptions.push(watcher)
+  wfs.createWatcher('**/app/views/**/*.{erb,haml,slim}', {
+    onChanged: uri => void reindex(uri),
+    onCreated: uri => void reindex(uri),
+    onDeleted: uri => navigator.removeFile(uri.fsPath),
+  })
 }
 
 async function loadProjectPatterns(
@@ -1185,8 +1212,7 @@ async function loadSpecFiles(relatedFilesIndex: RelatedFilesIndex, relatedCodeLe
   relatedCodeLensProvider.refresh()
 }
 
-function watchSpecFiles(context: vscode.ExtensionContext, relatedFilesIndex: RelatedFilesIndex, relatedCodeLensProvider: RelatedCodeLensProvider): void {
-  const watcher = vscode.workspace.createFileSystemWatcher('**/{spec/**/*_spec.rb,test/**/*_test.rb}')
+function watchSpecFiles(wfs: WorkspaceFsProvider, relatedFilesIndex: RelatedFilesIndex, relatedCodeLensProvider: RelatedCodeLensProvider): void {
   let refreshTimer: NodeJS.Timeout | undefined
   const scheduleRefresh = (): void => {
     if (refreshTimer) {clearTimeout(refreshTimer)}
@@ -1205,17 +1231,18 @@ function watchSpecFiles(context: vscode.ExtensionContext, relatedFilesIndex: Rel
       scheduleRefresh()
     } catch { /* skip unreadable */ }
   }
-  watcher.onDidChange(uri => void reindex(uri))
-  watcher.onDidCreate(uri => void reindex(uri))
-  watcher.onDidDelete(uri => {
-    relatedFilesIndex.removeSpecFile(uri.fsPath)
-    scheduleRefresh()
+  wfs.createWatcher('**/{spec/**/*_spec.rb,test/**/*_test.rb}', {
+    onChanged: uri => void reindex(uri),
+    onCreated: uri => void reindex(uri),
+    onDeleted: uri => {
+      relatedFilesIndex.removeSpecFile(uri.fsPath)
+      scheduleRefresh()
+    },
   })
-  context.subscriptions.push(watcher)
 }
 
 function watchPatternFiles(
-  context: vscode.ExtensionContext,
+  wfs: WorkspaceFsProvider,
   indexer: ProjectPatternIndexer,
   codeLensProvider: PatternCodeLensProvider,
   dependencyGraph: MinimalDependencyGraph,
@@ -1223,9 +1250,6 @@ function watchPatternFiles(
   relatedCodeLensProvider: RelatedCodeLensProvider,
   semanticSearchIndex: SemanticSearchIndex,
 ): void {
-  const watcher = vscode.workspace.createFileSystemWatcher(
-    '**/{app,lib}/**/{services,queries,forms,policies,decorators,concerns}/**/*.rb',
-  )
   let rebuildTimer: NodeJS.Timeout | undefined
   const scheduleRebuild = (): void => {
     if (rebuildTimer) {clearTimeout(rebuildTimer)}
@@ -1250,13 +1274,17 @@ function watchPatternFiles(
       scheduleRebuild()
     } catch { /* skip unreadable */ }
   }
-  watcher.onDidChange(uri => void reindex(uri))
-  watcher.onDidCreate(uri => void reindex(uri))
-  watcher.onDidDelete(uri => {
-    indexer.removeFile(uri.fsPath)
-    scheduleRebuild()
-  })
-  context.subscriptions.push(watcher)
+  wfs.createWatcher(
+    '**/{app,lib}/**/{services,queries,forms,policies,decorators,concerns}/**/*.rb',
+    {
+      onChanged: uri => void reindex(uri),
+      onCreated: uri => void reindex(uri),
+      onDeleted: uri => {
+        indexer.removeFile(uri.fsPath)
+        scheduleRebuild()
+      },
+    },
+  )
 }
 
 function refreshOpenDependencyDiagnostics(dependencyDiagnostics: DependencyDiagnosticsProvider): void {
@@ -1630,7 +1658,7 @@ async function verifyOffenseResolved(
 }
 
 function watchProjectFiles(
-  context: vscode.ExtensionContext,
+  wfs: WorkspaceFsProvider,
   getRoot: () => string,
   schemaIndexer: SchemaIndexer,
   routesIndexer: RoutesIndexer,
@@ -1642,46 +1670,46 @@ function watchProjectFiles(
   const inRoot = (uri: vscode.Uri): boolean => isInside(getRoot(), uri.fsPath)
 
   if (readConfig().schemaAutoIndex) {
-    const schemaWatcher = vscode.workspace.createFileSystemWatcher('**/db/schema.rb')
     const refresh = (uri: vscode.Uri): void => {
       if (!inRoot(uri) || isExcludedByConfig(uri.fsPath)) {return}
       void loadSchema(getRoot(), schemaIndexer).then(() => onIndexChanged?.(getRoot(), 'schema'))
     }
-    schemaWatcher.onDidChange(refresh)
-    schemaWatcher.onDidCreate(refresh)
-    schemaWatcher.onDidDelete(uri => {
-      if (!inRoot(uri)) {return}
-      schemaIndexer.parseSchema('')
-      onIndexChanged?.(getRoot(), 'schema')
+    wfs.createWatcher('**/db/schema.rb', {
+      onChanged: refresh,
+      onCreated: refresh,
+      onDeleted: uri => {
+        if (!inRoot(uri)) {return}
+        schemaIndexer.parseSchema('')
+        onIndexChanged?.(getRoot(), 'schema')
+      },
     })
-    context.subscriptions.push(schemaWatcher)
   }
 
   if (readConfig().routesAutoIndex) {
-    const routesWatcher = vscode.workspace.createFileSystemWatcher('**/config/routes.rb')
     const refresh = (uri: vscode.Uri): void => {
       if (!inRoot(uri) || isExcludedByConfig(uri.fsPath)) {return}
       void loadRoutes(getRoot(), routesIndexer).then(() => onIndexChanged?.(getRoot(), 'routes'))
     }
-    routesWatcher.onDidChange(refresh)
-    routesWatcher.onDidCreate(refresh)
-    routesWatcher.onDidDelete(uri => {
-      if (!inRoot(uri)) {return}
-      routesIndexer.parseRoutesDsl('')
-      onIndexChanged?.(getRoot(), 'routes')
+    wfs.createWatcher('**/config/routes.rb', {
+      onChanged: refresh,
+      onCreated: refresh,
+      onDeleted: uri => {
+        if (!inRoot(uri)) {return}
+        routesIndexer.parseRoutesDsl('')
+        onIndexChanged?.(getRoot(), 'routes')
+      },
     })
-    context.subscriptions.push(routesWatcher)
   }
 
-  const migrationWatcher = vscode.workspace.createFileSystemWatcher('**/db/migrate/*.rb')
   const analyzeMigration = (uri: vscode.Uri): void => {
     if (!inRoot(uri) || isExcludedByConfig(uri.fsPath)) {return}
     void vscode.workspace.openTextDocument(uri).then(doc => migrationDiagnostics.updateDiagnostics(doc), () => undefined)
   }
-  migrationWatcher.onDidChange(analyzeMigration)
-  migrationWatcher.onDidCreate(analyzeMigration)
-  migrationWatcher.onDidDelete(uri => migrationDiagnostics.clearFile(uri))
-  context.subscriptions.push(migrationWatcher)
+  wfs.createWatcher('**/db/migrate/*.rb', {
+    onChanged: analyzeMigration,
+    onCreated: analyzeMigration,
+    onDeleted: uri => migrationDiagnostics.clearFile(uri),
+  })
 }
 
 function registerCommands(
