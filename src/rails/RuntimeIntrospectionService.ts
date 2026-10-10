@@ -7,14 +7,12 @@
 import * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
+import { execFileAsync } from '../util/ProjectProcess'
 import { rubyCandidates } from '../util/RubyCommand'
 import { readConfig } from '../config/RailsForgeConfig'
 import { Logger } from '../util/Logger'
 import { INTROSPECTION_SCRIPT, RuntimeSnapshot, formatSnapshotMarkdown, parseIntrospectionOutput } from './RuntimeIntrospector'
 
-const execFileAsync = promisify(execFile)
 
 export function runtimeCachePath(root: string): string {
   return path.join(root, '.railsforge', 'runtime.json')

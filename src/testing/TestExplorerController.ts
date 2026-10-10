@@ -10,9 +10,10 @@
  */
 
 import * as vscode from 'vscode'
+import { createProjectTerminal, sendToTerminal, startProjectDebugging } from '../workspace/ProjectTerminal'
+import { isWorkspaceTrusted } from '../workspace/Trust'
 import * as path from 'path'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
+import { execFileAsync } from '../util/ProjectProcess'
 import { activeWorkspaceRoot, workspaceRootFor } from '../workspace/activeRoot'
 import { rubyCandidates } from '../util/RubyCommand'
 import { buildExcludeGlob, readConfig } from '../config/RailsForgeConfig'
@@ -22,7 +23,6 @@ import { parseMinitestOutput, parseRspecJson } from './TestResultParsers'
 import { LeafRef, Outcome, mapMinitestOutcomes, mapRspecOutcomes } from './TestOutcomeMapper'
 import { RDBG_EXTENSION_ID, buildRdbgLaunchConfig } from './RdbgConfig'
 
-const execFileAsync = promisify(execFile)
 const TEST_GLOB = '**/*_{spec,test}.rb'
 const ALWAYS_EXCLUDED = ['**/node_modules/**', '**/vendor/**', '**/.git/**']
 
@@ -141,8 +141,17 @@ export class TestExplorerController implements vscode.Disposable {
     return plan
   }
 
+  /** Running tests executes project code; in Restricted Mode say so in the test output and stop. */
+  private refuseUntrusted(run: vscode.TestRun): boolean {
+    if (isWorkspaceTrusted()) {return false}
+    run.appendOutput('RailsForge: running tests executes project code, which is disabled in Restricted Mode. Trust this workspace to enable it.\r\n')
+    run.end()
+    return true
+  }
+
   private async runHandler(request: vscode.TestRunRequest, token: vscode.CancellationToken): Promise<void> {
     const run = this.testController.createTestRun(request)
+    if (this.refuseUntrusted(run)) {return}
     const excluded = new Set((request.exclude ?? []).map(i => i.id))
     try {
       // Sequential: parallel test processes against one dev database collide.
@@ -247,6 +256,7 @@ export class TestExplorerController implements vscode.Disposable {
 
   private async debugHandler(request: vscode.TestRunRequest, token: vscode.CancellationToken): Promise<void> {
     const run = this.testController.createTestRun(request)
+    if (this.refuseUntrusted(run)) {return}
     try {
       const [first] = request.include ?? []
       const item = first ?? (() => { let any: vscode.TestItem | undefined; this.testController.items.forEach(i => { any ??= i }); return any })()
@@ -281,7 +291,7 @@ export async function debugRubyCommand(uri: vscode.Uri, tool: string, args: stri
   if (vscode.extensions.getExtension(RDBG_EXTENSION_ID)) {
     const folder = vscode.workspace.getWorkspaceFolder(uri)
     const config = buildRdbgLaunchConfig(`RailsForge: debug ${path.basename(uri.fsPath)}`, root, command.command, command.args)
-    const started = await vscode.debug.startDebugging(folder, config)
+    const started = await startProjectDebugging(folder, config)
     if (started) {return}
     vscode.window.showWarningMessage('RailsForge: the rdbg debug session did not start; falling back to a terminal.')
   } else {
@@ -291,7 +301,7 @@ export async function debugRubyCommand(uri: vscode.Uri, tool: string, args: stri
     )
     if (choice === 'Install') {void vscode.commands.executeCommand('workbench.extensions.installExtension', RDBG_EXTENSION_ID)}
   }
-  const terminal = vscode.window.createTerminal({ name: 'RailsForge rdbg', cwd: root })
+  const terminal = createProjectTerminal({ name: 'RailsForge rdbg', cwd: root })
   terminal.show()
-  terminal.sendText(`rdbg -n -c -- ${[command.command, ...command.args].map(a => (/\s/.test(a) ? `"${a}"` : a)).join(' ')}`)
+  sendToTerminal(terminal, `rdbg -n -c -- ${[command.command, ...command.args].map(a => (/\s/.test(a) ? `"${a}"` : a)).join(' ')}`)
 }

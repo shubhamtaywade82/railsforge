@@ -7,12 +7,10 @@
 import * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
+import { execFileAsync } from '../util/ProjectProcess'
 import { rubyCandidates } from '../util/RubyCommand'
 import { AnalyzerFinding, AnalyzerId, FindingSeverity, analyzerCommand, parseAnalyzerOutput } from './AnalyzerParsers'
 
-const execFileAsync = promisify(execFile)
 
 export type AnalyzerStatus = 'ok' | 'unavailable' | 'failed'
 export interface AnalyzerRunResult {

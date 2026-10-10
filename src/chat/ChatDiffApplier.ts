@@ -13,7 +13,7 @@
 import * as vscode from 'vscode'
 import * as path from 'path'
 import { parseUnifiedDiff, applyUnifiedHunks } from '../patch/UnifiedDiff'
-import { diffLines, applyHunks } from '../extension'
+import { diffLines, applyHunks } from '../patch/LineDiff'
 import { Logger } from '../util/Logger'
 import { resolveWithinRoot } from '../util/WorkspacePath'
 
@@ -27,15 +27,24 @@ export function looksLikeDiff(text: string): boolean {
   return /^@@ -/m.test(text) || /^--- /m.test(text) || /^\+\+\+ /m.test(text) || /^diff --git /m.test(text)
 }
 
-/** Strips markdown code fences from model output. */
-function stripFences(text: string): string {
-  let cleaned = text.trim()
-  // Remove <think>...</think> blocks (some models emit these)
+/** Removes <think>...</think> blocks (some models emit these). */
+function stripThink(text: string): string {
+  const cleaned = text.trim()
   if (/^[\s\S]*?<\/think>/.test(cleaned)) {
     const outside = cleaned.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
-    cleaned = outside.length > 0 ? outside : cleaned.replace(/<\/?think>/g, '').trim()
+    return outside.length > 0 ? outside : cleaned.replace(/<\/?think>/g, '').trim()
   }
-  return cleaned.replace(/^```(?:ruby|diff)?\n?/, '').replace(/\n?```$/, '').trim()
+  return cleaned
+}
+
+/** Strips markdown code fences from model output. */
+function stripFences(text: string): string {
+  return stripThink(text).replace(/^```(?:ruby|diff)?\n?/, '').replace(/\n?```$/, '').trim()
+}
+
+/** File content proposed by the model, normalised to end with exactly one newline (Ruby convention). */
+function asFileContent(text: string): string {
+  return `${stripFences(text)}\n`
 }
 
 /**
@@ -120,9 +129,9 @@ export async function applyFullFileReplacement(
 ): Promise<ApplyDiffResult> {
   const document = await vscode.workspace.openTextDocument(targetUri)
   const fullText = document.getText()
-  const cleaned = stripFences(newContent)
+  const cleaned = asFileContent(newContent)
 
-  if (cleaned === fullText) {
+  if (cleaned === fullText || cleaned === `${fullText}\n` || `${cleaned}\n` === fullText) {
     return { applied: false, message: 'The proposed content is identical to the current file — no changes.' }
   }
 
@@ -137,7 +146,7 @@ export async function createNewFile(
   workspaceRoot: string,
   suggestedPath?: string,
 ): Promise<ApplyDiffResult> {
-  const cleaned = stripFences(content)
+  const cleaned = asFileContent(content)
   const target = suggestedPath || await vscode.window.showInputBox({
     prompt: 'Enter relative file path (e.g. app/services/my_service.rb)',
     value: 'app/services/',
@@ -188,7 +197,9 @@ export async function smartApplyResponse(
 ): Promise<ApplyDiffResult> {
   const { workspaceRoot, activeFileUri, command, selection } = options
   const cleaned = stripFences(responseText)
-  const blocks = extractCodeBlocks(cleaned)
+  // Blocks come from the raw response: stripFences removes the outer fences (and mangles a
+  // ```ruby:path header), which would leave a single-block response with no blocks at all.
+  const blocks = extractCodeBlocks(stripThink(responseText))
 
   // Commands that typically CREATE new files
   const createCommands = new Set(['service', 'scaffold', 'migrate', 'form'])

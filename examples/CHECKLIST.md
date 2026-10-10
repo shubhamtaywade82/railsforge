@@ -12,10 +12,10 @@ The extension package is built at `railsforge.vsix`.
 
 ```bash
 # For VS Code
-code --install-extension /home/nemesis/project/ai-workspace/ruby-rails-extension/railsforge.vsix --force
+code --install-extension ./railsforge.vsix --force
 
 # For Cursor
-cursor --install-extension /home/nemesis/project/ai-workspace/ruby-rails-extension/railsforge.vsix --force
+cursor --install-extension ./railsforge.vsix --force
 ```
 
 ### Option B: Via IDE User Interface (UI)

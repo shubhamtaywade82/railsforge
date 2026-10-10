@@ -8,3 +8,8 @@ out/
 .railsforge/
 .ruby-lsp/
 package-lock.json
+
+# coverage / mutation output
+coverage/
+reports/
+.stryker-tmp/

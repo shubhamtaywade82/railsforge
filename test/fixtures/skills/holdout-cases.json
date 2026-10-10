@@ -1,0 +1,273 @@
+[
+ {
+  "id": "h001",
+  "prompt": "Our checkout page takes 8 seconds because of too many database queries",
+  "expectAny": [
+   "rails-performance",
+   "rails-active-record",
+   "ruby-performance"
+  ]
+ },
+ {
+  "id": "h002",
+  "prompt": "Users keep getting logged out randomly, check the session handling",
+  "expectAny": [
+   "rails-authentication",
+   "rails-security",
+   "rails-action-controller"
+  ]
+ },
+ {
+  "id": "h003",
+  "prompt": "I need to rename a column in production without downtime",
+  "expectAny": [
+   "rails-database-engineering"
+  ]
+ },
+ {
+  "id": "h004",
+  "prompt": "Which gems do I need for background processing and how to monitor the queue",
+  "expectAny": [
+   "rails-active-job",
+   "rails-observability",
+   "rails-production-runtime"
+  ]
+ },
+ {
+  "id": "h005",
+  "prompt": "The JSON from our API sometimes returns 500 instead of 422 on bad input",
+  "expectAny": [
+   "rails-action-controller",
+   "rails-api-integration",
+   "rails-validations"
+  ]
+ },
+ {
+  "id": "h006",
+  "prompt": "Add uploads of profile pictures with image variants",
+  "expectAny": [
+   "rails-active-storage"
+  ]
+ },
+ {
+  "id": "h007",
+  "prompt": "Make admins able to impersonate users safely",
+  "expectAny": [
+   "rails-authorization",
+   "rails-authentication",
+   "rails-security"
+  ]
+ },
+ {
+  "id": "h008",
+  "prompt": "Write a class that wraps the Stripe client behind our own interface",
+  "expectAny": [
+   "rails-api-integration",
+   "ruby-dependency-injection",
+   "ruby-api-design",
+   "ruby-gems-io-services"
+  ]
+ },
+ {
+  "id": "h009",
+  "prompt": "This spec fails only when run with the whole suite",
+  "expectAny": [
+   "rails-test-engineering"
+  ]
+ },
+ {
+  "id": "h010",
+  "prompt": "Introduce a value object for money amounts",
+  "expectAny": [
+   "ruby-domain-modeling",
+   "ruby-data-types",
+   "ruby-poro"
+  ]
+ },
+ {
+  "id": "h011",
+  "prompt": "Refactor this controller that has grown to 400 lines",
+  "expectAny": [
+   "rails-action-controller",
+   "rails-architecture",
+   "ruby-clean-code",
+   "ruby-service-objects"
+  ]
+ },
+ {
+  "id": "h012",
+  "prompt": "Turn this callback chain into explicit workflow code",
+  "expectAny": [
+   "rails-active-model",
+   "rails-active-support",
+   "ruby-service-objects",
+   "rails-architecture",
+   "ruby-method-design"
+  ]
+ },
+ {
+  "id": "h013",
+  "prompt": "How do I stream a large CSV export without loading it all in memory",
+  "expectAny": [
+   "rails-action-controller",
+   "ruby-enumerables",
+   "ruby-performance",
+   "ruby-gems-io-services",
+   "rails-performance"
+  ]
+ },
+ {
+  "id": "h014",
+  "prompt": "Set up cache invalidation for the product listing",
+  "expectAny": [
+   "rails-caching"
+  ]
+ },
+ {
+  "id": "h015",
+  "prompt": "The app runs out of database connections under load",
+  "expectAny": [
+   "rails-database-engineering",
+   "rails-production-runtime",
+   "rails-performance"
+  ]
+ },
+ {
+  "id": "h016",
+  "prompt": "Protect the admin routes with constraints",
+  "expectAny": [
+   "rails-routing",
+   "rails-authorization"
+  ]
+ },
+ {
+  "id": "h017",
+  "prompt": "Improve the error messages shown on the signup form",
+  "expectAny": [
+   "rails-validations",
+   "rails-i18n",
+   "rails-action-view",
+   "rails-active-model"
+  ]
+ },
+ {
+  "id": "h018",
+  "prompt": "Run something every night to purge expired sessions",
+  "expectAny": [
+   "rails-operational-tasks-maintenance",
+   "rails-active-job"
+  ]
+ },
+ {
+  "id": "h019",
+  "prompt": "Document the module with YARD and keep the public API small",
+  "expectAny": [
+   "ruby-api-design",
+   "ruby-gem-development",
+   "ruby-clean-code"
+  ]
+ },
+ {
+  "id": "h020",
+  "prompt": "Handle a race condition when two users book the same seat",
+  "expectAny": [
+   "rails-database-engineering",
+   "ruby-concurrency",
+   "rails-active-record",
+   "rails-reliability-engineering"
+  ]
+ },
+ {
+  "id": "h021",
+  "prompt": "Why does bundle install fail on the new laptop",
+  "expectAny": [
+   "ruby-toolchain",
+   "ruby-gems-io-services",
+   "ruby-runtime-compatibility"
+  ]
+ },
+ {
+  "id": "h022",
+  "prompt": "Enforce that users can only see their own invoices",
+  "expectAny": [
+   "rails-authorization",
+   "rails-security"
+  ]
+ },
+ {
+  "id": "h023",
+  "prompt": "Add a feature flag system",
+  "expectAny": [
+   "rails-architecture",
+   "rails-initialization-configuration-engineering",
+   "ruby-api-design",
+   "rails-staff-principal-architecture"
+  ]
+ },
+ {
+  "id": "h024",
+  "prompt": "Our Sidekiq jobs are retrying forever and duplicating emails",
+  "expectAny": [
+   "rails-active-job",
+   "rails-reliability-engineering",
+   "rails-action-mailer"
+  ]
+ },
+ {
+  "id": "h025",
+  "prompt": "Switch from sprockets to importmaps",
+  "expectAny": [
+   "rails-asset-build-engineering"
+  ]
+ },
+ {
+  "id": "h026",
+  "prompt": "Translate the UI into Spanish",
+  "expectAny": [
+   "rails-i18n"
+  ]
+ },
+ {
+  "id": "h027",
+  "prompt": "Add health checks and graceful shutdown for the container",
+  "expectAny": [
+   "rails-production-runtime",
+   "rails-observability",
+   "rails-reliability-engineering"
+  ]
+ },
+ {
+  "id": "h028",
+  "prompt": "Write the migration and model for storing user preferences as JSON",
+  "expectAny": [
+   "rails-data-modeling",
+   "rails-database-engineering",
+   "rails-active-record"
+  ]
+ },
+ {
+  "id": "h029",
+  "prompt": "A form needs to update a user and their address together",
+  "expectAny": [
+   "rails-active-model",
+   "rails-action-controller",
+   "rails-active-record",
+   "rails-associations"
+  ]
+ },
+ {
+  "id": "h030",
+  "prompt": "Make this Ruby method easier to read",
+  "expectAny": [
+   "ruby-method-design",
+   "ruby-clean-code"
+  ]
+ },
+ {
+  "id": "h031",
+  "prompt": "Explain how Rack middleware ordering affects requests",
+  "expectAny": [
+   "rails-rack-middleware-engineering"
+  ]
+ }
+]

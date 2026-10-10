@@ -2,11 +2,9 @@
  * BrakemanProvider - Runs Brakeman security analysis on Rails projects
  */
 
-import { execFile } from 'child_process'
-import { promisify } from 'util'
+import { execFileAsync } from '../util/ProjectProcess'
 import { firstCandidate } from '../util/RubyCommand'
 
-const execFileAsync = promisify(execFile)
 
 export interface BrakemanWarning {
   warning_type: string

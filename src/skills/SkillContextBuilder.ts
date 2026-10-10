@@ -8,6 +8,7 @@
 
 import { SkillRegistry } from './SkillRegistry'
 import { RoutedSkill, RouteInput, suggestPatterns } from './SkillRouter'
+import { evaluateSafety } from './SafetyRules'
 
 export interface SkillContextOptions {
   /** Hard cap on the whole block. Default 6000 chars (~1.5k tokens). */
@@ -58,7 +59,10 @@ export function buildSkillContext(
   input: RouteInput,
   options: SkillContextOptions = {},
 ): string {
-  if (routed.length === 0 || !registry.available) {return ''}
+  // Safety notes stand on their own: a destructive command with no matching skill still gets its warning.
+  const findings = evaluateSafety({ prompt: input.prompt, context: input.context })
+  const safety = findings.length === 0 ? '' : `### Safety notes for this request\n${findings.map(f => `- (${f.rule}) ${f.warning}`).join('\n')}`
+  if (routed.length === 0 || !registry.available) {return safety}
   const budget = options.maxChars ?? 6000
   const source = registry.source
   const header = [
@@ -66,8 +70,9 @@ export function buildSkillContext(
     'Apply these skills to this task. Prefer repository evidence over generic habits, keep the change minimal, and never claim verification you did not run.',
   ].join('\n')
 
+  // Safety notes come first and are never clipped by the skill budget: they are short and decisive.
   const blocks: string[] = []
-  let used = header.length
+  let used = header.length + safety.length
   const primaries = routed.filter(r => r.role === 'primary')
 
   for (const skill of routed) {
@@ -115,5 +120,5 @@ export function buildSkillContext(
     footer.push(`Relevant patterns (ask for them by name via the get_skill tool): ${patterns.join(', ')}`)
   }
 
-  return [header, ...blocks, ...footer].join('\n\n').slice(0, budget + 400)
+  return [header, ...(safety ? [safety] : []), ...blocks, ...footer].join('\n\n').slice(0, budget + 400 + safety.length)
 }

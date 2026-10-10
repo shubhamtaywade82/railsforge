@@ -19,6 +19,7 @@
 import * as vscode from 'vscode'
 import { SemanticIndex } from './SemanticIndex'
 import { PatternCatalogAccess } from './PatternCatalogAccess'
+import { createProjectTerminal, sendToTerminal } from '../workspace/ProjectTerminal'
 
 /** Stable task type - must match `contributes.taskDefinitions` in package.json. */
 export const RAILSFORGE_TASK_TYPE = 'railsforge'
@@ -67,14 +68,16 @@ export class TerminalTasksProvider implements vscode.Disposable {
    */
   createBackgroundTerminal(command: string, cwd?: string, name = 'RailsForge'): vscode.Terminal {
     const root = cwd ?? this.workspaceRoot
-    const terminal = vscode.window.createTerminal({
+    // Use the trust-gated wrappers (createProjectTerminal / sendToTerminal) so that
+    // Restricted Mode blocks terminal creation - required by the TrustGuard test.
+    const terminal = createProjectTerminal({
       name,
       cwd: root,
       hideFromUser: true, // silent - the user does not see this terminal
     })
     this.terminals.push(terminal)
     terminal.show(false)
-    terminal.sendText(command, true)
+    sendToTerminal(terminal, command, true)
     return terminal
   }
 
@@ -101,13 +104,14 @@ export class TerminalTasksProvider implements vscode.Disposable {
    */
   runInForeground(command: string, cwd?: string, name = 'RailsForge'): vscode.Terminal {
     const root = cwd ?? this.workspaceRoot
-    const terminal = vscode.window.createTerminal({
+    // Use the trust-gated wrappers so Restricted Mode blocks terminal creation.
+    const terminal = createProjectTerminal({
       name,
       cwd: root,
     })
     this.terminals.push(terminal)
     terminal.show(true)
-    terminal.sendText(command, true)
+    sendToTerminal(terminal, command, true)
     return terminal
   }
 

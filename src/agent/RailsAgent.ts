@@ -9,6 +9,8 @@ import { ProjectPatternIndexer } from '../patterns/ProjectPatternIndexer'
 
 import { OllamaClient } from '@nemesis-oss/ollama-sdk'
 import { parseUnifiedDiff } from '../patch/UnifiedDiff'
+import { LoopTool, runAgentLoop } from './AgentLoop'
+import { checkRubySyntax } from '../util/RubySyntax'
 
 /** True when `text` carries unified-diff markers, even if it failed to parse as one. */
 function looksLikeDiff(text: string): boolean {
@@ -100,12 +102,26 @@ export interface RailsAgentConfig {
    */
   skillContext?: (request: { prompt: string; command?: string; fileName?: string; workspaceRoot?: string; diagnosticMessage?: string }) => string | Promise<string>
   /**
+   * Read-only tools the bounded tool loop may call for the project at `workspaceRoot`
+   * (see LoopTools.ts). Injected so this class stays free of fs/vscode.
+   */
+  loopTools?: (workspaceRoot: string | undefined) => LoopTool[]
+  toolLoop?: ToolLoopSettings
+  /**
    * Host-provided logging callback (wired in extension.ts to the RailsForge
    * logger) so this class stays vscode-free. 'debug' carries AI request/response
    * summaries and diff-parse results, 'trace' carries raw provider payloads,
    * 'warn' carries model-call failures whose reason would otherwise be swallowed.
    */
   log?: (level: 'debug' | 'trace' | 'warn', message: string) => void
+}
+
+export interface ToolLoopSettings {
+  enabled: boolean
+  /** Tool calls allowed before the model must answer. */
+  maxSteps: number
+  /** Syntax-check (`ruby -c`) Ruby code blocks in the answer and allow one repair round. */
+  verifySyntax: boolean
 }
 
 export interface RailsAgentContext {
@@ -158,15 +174,8 @@ export class RailsAgent {
     this.config = { ...this.config, ...newConfig }
   }
 
-  async run(prompt: string, context: RailsAgentContext): Promise<RailsAgentResult> {
-    const startedAt = Date.now()
-    if (context.isolated) {
-      const systemPrompt = ISOLATED_SYSTEM_PROMPT
-      const provider = this.config.provider ?? 'ollama'
-      this.log('debug', `[AI] ${provider} isolated request: model=${this.modelFor(provider)}, prompt=${prompt.length} chars`)
-      const { success, response } = await this.chatCompletion(systemPrompt, prompt)
-      return { success, response, iterations: success ? 1 : 0 }
-    }
+  /** Fills in the semantic-graph and skill context hooks (best effort: a failing hook never fails the request). */
+  private async enrich(prompt: string, context: RailsAgentContext): Promise<RailsAgentContext> {
     if (context.semanticContext === undefined && this.config.semanticContext) {
       try {
         context = { ...context, semanticContext: await this.config.semanticContext({ prompt: `${prompt}\n${context.diagnosticMessage ?? ''}`, fileName: context.fileName, workspaceRoot: context.workspaceRoot }) }
@@ -181,11 +190,42 @@ export class RailsAgent {
         this.log('warn', `[AI] skill context unavailable: ${err instanceof Error ? err.message : String(err)}`)
       }
     }
+    return context
+  }
+
+  async run(prompt: string, context: RailsAgentContext): Promise<RailsAgentResult> {
+    const startedAt = Date.now()
+    if (context.isolated) {
+      const systemPrompt = ISOLATED_SYSTEM_PROMPT
+      const provider = this.config.provider ?? 'ollama'
+      this.log('debug', `[AI] ${provider} isolated request: model=${this.modelFor(provider)}, prompt=${prompt.length} chars`)
+      const { success, response } = await this.chatCompletion(systemPrompt, prompt)
+      return { success, response, iterations: success ? 1 : 0 }
+    }
+    context = await this.enrich(prompt, context)
     const systemPrompt = context.isFix
       ? this.buildFixSystemPrompt(context.diagnosticMessage ?? '', context)
       : this.buildSystemPrompt(context)
     const provider = this.config.provider ?? 'ollama'
     this.log('debug', `[AI] ${provider} request: model=${this.modelFor(provider)}, prompt=${prompt.length} chars, system=${systemPrompt.length} chars`)
+
+    // Bounded tool loop + Ruby syntax verification for ordinary requests. Fix flows need a bare
+    // diff/snippet back, so they keep the single-completion path.
+    const loop = this.config.toolLoop
+    const tools = !context.isFix && loop?.enabled ? this.config.loopTools?.(context.workspaceRoot) ?? [] : []
+    if (!context.isFix && loop?.enabled && (tools.length > 0 || loop.verifySyntax)) {
+      const result = await runAgentLoop({
+        system: systemPrompt,
+        prompt,
+        complete: (system, user) => this.chatCompletion(system, user),
+        tools,
+        syntax: loop.verifySyntax ? code => checkRubySyntax(code) : undefined,
+        options: { maxSteps: loop.maxSteps },
+        log: message => this.log('debug', message),
+      })
+      this.log('debug', `[AI] ${provider} loop finished in ${Date.now() - startedAt}ms: ${result.steps.length} tool call(s), stopped=${result.stopped}${result.verification ? `, ruby blocks checked=${result.verification.checked}, failed=${result.verification.failed.length}` : ''}`)
+      return { success: result.success, response: result.response, iterations: result.steps.length + 1 }
+    }
 
     const { success, response } = await this.chatCompletion(systemPrompt, prompt)
     this.log('debug', `[AI] ${provider} response in ${Date.now() - startedAt}ms (${response.length} chars): ${truncate(response, 4000)}`)

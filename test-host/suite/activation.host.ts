@@ -139,6 +139,17 @@ describe('RailsForge in a real Extension Host', function () {
     assert.ok(text.includes('```ruby'), 'example missing')
   })
 
+  it('diagnoses the environment in an editor, with no secrets and the native modules judged', async () => {
+    await openFile('rails_a', 'app/models/alphas.rb')
+    await vscode.commands.executeCommand('railsforge.diagnoseEnvironment')
+    const text = vscode.window.activeTextEditor?.document.getText() ?? ''
+    assert.ok(text.startsWith('# RailsForge diagnostics'), text.slice(0, 80))
+    assert.ok(text.includes('## Findings') && text.includes('## Environment'), text)
+    assert.ok(/better-sqlite3/.test(text) && /tree-sitter/.test(text), 'native module findings missing')
+    assert.ok(text.includes('rails_a'), 'active project not reported')
+    assert.ok(!/sk-[A-Za-z0-9]{10,}/.test(text), 'looks like a key leaked')
+  })
+
   it('serves read-only virtual project documents per root', async () => {
     const folders = vscode.workspace.workspaceFolders ?? []
     const a = folders.find(f => f.uri.fsPath.endsWith('rails_a'))!.uri.fsPath

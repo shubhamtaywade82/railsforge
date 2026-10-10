@@ -8,20 +8,42 @@
   "icon": "media/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/shubhamtaywade82/ruby-rails-extension"
+    "url": "https://github.com/shubhamtaywade82/railsforge"
   },
   "bugs": {
-    "url": "https://github.com/shubhamtaywade82/ruby-rails-extension/issues"
+    "url": "https://github.com/shubhamtaywade82/railsforge/issues"
   },
-  "homepage": "https://github.com/shubhamtaywade82/ruby-rails-extension#readme",
+  "homepage": "https://github.com/shubhamtaywade82/railsforge#readme",
   "engines": {
     "vscode": "^1.96.0",
     "node": ">=20"
   },
   "capabilities": {
     "untrustedWorkspaces": {
-      "supported": false,
-      "description": "RailsForge runs project tooling (RuboCop, Bundler, Rails, test runners, rake) and project-defined configuration, which can execute code from the workspace. Open the folder as trusted to enable it."
+      "supported": "limited",
+      "description": "In Restricted Mode RailsForge is read-only: navigation, schema/routes, the semantic graph, the pattern catalog, virtual documents and AI chat work, but nothing that runs project code does (RuboCop, Bundler, Rails, rake, test runners, debugging, terminals, rails runner). Settings that choose which program or server RailsForge talks to are ignored from the workspace until it is trusted.",
+      "restrictedConfigurations": [
+        "railsForge.ollama.host",
+        "railsForge.ai.provider",
+        "railsForge.ai.openai.baseUrl",
+        "railsForge.apidock.baseUrl",
+        "railsForge.rubydoc.baseUrl",
+        "railsForge.devdocs.baseUrl",
+        "railsForge.devdocs.dataBaseUrl",
+        "railsForge.ruby.versionManager",
+        "railsForge.testing.framework",
+        "railsForge.rubocop.autocorrectOnSave",
+        "railsForge.rubocop.mode",
+        "railsForge.brakeman.scanOnSave",
+        "railsForge.types.steepEnabled",
+        "railsForge.types.steepScanOnSave",
+        "railsForge.analyzers.enabled",
+        "railsForge.analyzers.paths",
+        "railsForge.runtime.introspection.enabled",
+        "railsForge.skills.extraPaths",
+        "railsForge.types.rbsSigDir",
+        "railsForge.mcp.enabled"
+      ]
     }
   },
   "categories": [
@@ -66,7 +88,10 @@
     "skills:fetch": "node scripts/fetch-skills.mjs",
     "test:host:stable": "pnpm run compile && tsc -p tsconfig.host.json && vscode-test --label stable",
     "native-smoke": "node scripts/native-smoke.cjs",
-    "vsix-smoke": "tsc -p tsconfig.host.json && node scripts/vsix-smoke.mjs"
+    "vsix-smoke": "tsc -p tsconfig.host.json && node scripts/vsix-smoke.mjs",
+    "coverage": "vitest run --coverage",
+    "mutation": "node scripts/mutation.mjs",
+    "test:restricted": "tsc -p tsconfig.host.json && node scripts/restricted-host-test.mjs && node scripts/restricted-host-test.mjs --trusted"
   },
   "contributes": {
     "languages": [
@@ -476,6 +501,23 @@
           "default": true,
           "description": "Route each AI request to the most relevant ruby-agent-skills (bundled, pinned release) and inject their rules into the prompt. The same skills are available to agent mode via the railsforge_get_skill / railsforge_route_skills tools."
         },
+        "railsForge.agent.toolLoop": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Let the AI look things up with a few read-only RailsForge tools (schema, routes, semantic graph, skills, patterns) before answering. Bounded by `railsForge.agent.maxToolSteps`; no tool can write, run project code or reach the network. Turn off for a single plain completion."
+        },
+        "railsForge.agent.maxToolSteps": {
+          "type": "integer",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 8,
+          "markdownDescription": "Most tool calls the AI may make for one request before it must answer."
+        },
+        "railsForge.agent.verifyRubySyntax": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Syntax-check Ruby code blocks in AI answers with `ruby -c` (parse only, nothing is executed). A failing block gets one automatic repair attempt; anything still failing is flagged in the answer. Skipped silently when `ruby` is not on the PATH."
+        },
         "railsForge.skills.maxPerRequest": {
           "type": "number",
           "default": 4,
@@ -647,6 +689,7 @@
       {
         "command": "railsforge.releaseGem",
         "title": "RailsForge: Release Gem (bundle exec rake release)",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
@@ -677,6 +720,7 @@
       {
         "command": "railsforge.fixAllInFile",
         "title": "RailsForge: Fix All Deterministic Principle Violations in File",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
@@ -732,16 +776,19 @@
       {
         "command": "railsforge.rubocopAutocorrect",
         "title": "RailsForge: RuboCop Autocorrect File",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
         "command": "railsforge.runBrakeman",
         "title": "RailsForge: Run Brakeman Security Scan",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
         "command": "railsforge.runBundleAudit",
         "title": "RailsForge: Run Gemfile.lock Security Audit (bundle-audit)",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
@@ -757,6 +804,11 @@
       {
         "command": "railsforge.goToComponent",
         "title": "RailsForge: Go to ViewComponent",
+        "category": "RailsForge"
+      },
+      {
+        "command": "railsforge.diagnoseEnvironment",
+        "title": "RailsForge: Diagnose Environment",
         "category": "RailsForge"
       },
       {
@@ -794,11 +846,13 @@
       {
         "command": "railsforge.refreshRuntimeIntrospection",
         "title": "RailsForge: Refresh Rails Runtime Introspection (boots the app)",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
         "command": "railsforge.runAnalyzers",
         "title": "RailsForge: Run Code Analyzers (Reek, Flog, Flay, Debride, Standard)",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
@@ -808,12 +862,14 @@
       },
       {
         "command": "railsforge.generate",
-        "title": "RailsForge: Rails Generate\u2026",
+        "title": "RailsForge: Rails Generate…",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
         "command": "railsforge.destroyGenerated",
-        "title": "RailsForge: Rails Destroy\u2026",
+        "title": "RailsForge: Rails Destroy…",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
@@ -839,17 +895,20 @@
       {
         "command": "railsforge.refreshRakeTasks",
         "title": "RailsForge: Refresh Rake Tasks",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge",
         "icon": "$(refresh)"
       },
       {
         "command": "railsforge.openRailsConsole",
         "title": "RailsForge: Open Console (Pry/IRB/Rails)",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
         "command": "railsforge.evaluateInREPL",
         "title": "RailsForge: Evaluate Selection in REPL",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
@@ -860,11 +919,13 @@
       {
         "command": "railsforge.runSteepCheck",
         "title": "RailsForge: Run Steep Type Check",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
         "command": "railsforge.generateRBS",
         "title": "RailsForge: Generate RBS Signatures for File",
+        "enablement": "isWorkspaceTrusted",
         "category": "RailsForge"
       },
       {
@@ -1655,7 +1716,7 @@
         "displayName": "Pick the engineering skills for a task",
         "toolReferenceName": "route_skills",
         "canBeReferencedInPrompt": true,
-        "modelDescription": "Given a task description (and optionally the file you are working on), returns the smallest set of ruby-agent-skills that apply \u2014 primary, secondary and always-on cross-cutting skills \u2014 with the reasons, plus relevant pattern names. Call this at the START of a Ruby/Rails change, then read the skills with get_skill. Uses the semantic graph of this project so a task touching a controller or migration routes accordingly.",
+        "modelDescription": "Given a task description (and optionally the file you are working on), returns the smallest set of ruby-agent-skills that apply — primary, secondary, always-on cross-cutting and safety-forced skills — with the reasons, any safety warnings (destructive commands, SQL injection, mass assignment, risky migrations, ...), plus relevant pattern names. Call this at the START of a Ruby/Rails change, then read the skills with get_skill. Uses the semantic graph of this project so a task touching a controller or migration routes accordingly.",
         "userDescription": "Pick the engineering skills for a task",
         "tags": [
           "rails",
@@ -1757,6 +1818,11 @@
       }
     ],
     "viewsWelcome": [
+      {
+        "view": "railsforge.rakeTasksView",
+        "contents": "RailsForge is in read-only mode because this workspace is not trusted, so Rake tasks are not listed or run.\n[Manage Workspace Trust](command:workbench.trust.manage)",
+        "when": "railsforge.restricted"
+      },
       {
         "view": "railsforge.rakeTasksView",
         "contents": "No Rake tasks were found. Rake may not be installed in this project's bundle, or the Rakefile defines no described tasks.\n[Refresh](command:railsforge.refreshRakeTasks)\n[Show Logs](command:railsforge.showLogs)"
@@ -1918,11 +1984,13 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@stryker-mutator/core": "^10.0.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^26.6.4",
     "@types/vscode": "~1.96.0",
     "@typescript-eslint/eslint-plugin": "^8.71.0",
     "@typescript-eslint/parser": "^8.67.0",
+    "@vitest/coverage-v8": "5.0.3",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.0.0",
