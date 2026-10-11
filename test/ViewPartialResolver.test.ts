@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import * as fs from 'fs'
+import * as path from 'path'
 import { ViewPartialResolver, extractRenderPathAtPosition } from '../src/rails/ViewPartialResolver'
 
 vi.mock('fs', () => ({
@@ -7,6 +8,9 @@ vi.mock('fs', () => ({
 }))
 
 const mockExistsSync = fs.existsSync as unknown as ReturnType<typeof vi.fn>
+
+const ROOT = path.resolve(path.sep, 'workspace')
+const p = (...segments: string[]) => path.join(ROOT, ...segments)
 
 describe('extractRenderPathAtPosition', () => {
   it('resolves the path from a plain render call', () => {
@@ -63,89 +67,97 @@ describe('ViewPartialResolver', () => {
   })
 
   it('returns null for empty render path', () => {
-    expect(resolver.resolvePartialPath('', '/app/views/users/show.html.erb', '/workspace')).toBeNull()
+    expect(resolver.resolvePartialPath('', p('app', 'views', 'users', 'show.html.erb'), ROOT)).toBeNull()
   })
 
   it('returns null for whitespace-only render path', () => {
-    expect(resolver.resolvePartialPath('   ', '/app/views/users/show.html.erb', '/workspace')).toBeNull()
+    expect(resolver.resolvePartialPath('   ', p('app', 'views', 'users', 'show.html.erb'), ROOT)).toBeNull()
   })
 
   it('returns null for quote-only render path', () => {
-    expect(resolver.resolvePartialPath('""', '/app/views/users/show.html.erb', '/workspace')).toBeNull()
+    expect(resolver.resolvePartialPath('""', p('app', 'views', 'users', 'show.html.erb'), ROOT)).toBeNull()
   })
 
   it('resolves a simple partial in the same view directory', () => {
-    mockExistsSync.mockImplementation((p: string) => p === '/workspace/app/views/users/_card.html.erb')
-    const result = resolver.resolvePartialPath('card', '/workspace/app/views/users/show.html.erb', '/workspace')
-    expect(result).toBe('/workspace/app/views/users/_card.html.erb')
+    const expected = p('app', 'views', 'users', '_card.html.erb')
+    mockExistsSync.mockImplementation((file: string) => file === expected)
+    const result = resolver.resolvePartialPath('card', p('app', 'views', 'users', 'show.html.erb'), ROOT)
+    expect(result).toBe(expected)
   })
 
   it('resolves a namespaced partial path', () => {
-    mockExistsSync.mockImplementation((p: string) => p === '/workspace/app/views/shared/_navbar.html.erb')
-    const result = resolver.resolvePartialPath('shared/navbar', '/workspace/app/views/users/show.html.erb', '/workspace')
-    expect(result).toBe('/workspace/app/views/shared/_navbar.html.erb')
+    const expected = p('app', 'views', 'shared', '_navbar.html.erb')
+    mockExistsSync.mockImplementation((file: string) => file === expected)
+    const result = resolver.resolvePartialPath('shared/navbar', p('app', 'views', 'users', 'show.html.erb'), ROOT)
+    expect(result).toBe(expected)
   })
 
   it('uses workspace views directory when current file is not in app/views', () => {
-    mockExistsSync.mockImplementation((p: string) => p === '/workspace/app/views/_form.html.erb')
-    const result = resolver.resolvePartialPath('form', '/workspace/app/controllers/users_controller.rb', '/workspace')
-    expect(result).toBe('/workspace/app/views/_form.html.erb')
+    const expected = p('app', 'views', '_form.html.erb')
+    mockExistsSync.mockImplementation((file: string) => file === expected)
+    const result = resolver.resolvePartialPath('form', p('app', 'controllers', 'users_controller.rb'), ROOT)
+    expect(result).toBe(expected)
   })
 
   it('tries all extensions in order', () => {
-    // First extension (.html.erb) doesn't exist, second (.erb) does
-    mockExistsSync.mockImplementation((p: string) => p === '/workspace/app/views/users/_card.erb')
-    const result = resolver.resolvePartialPath('card', '/workspace/app/views/users/show.html.erb', '/workspace')
-    expect(result).toBe('/workspace/app/views/users/_card.erb')
+    const expected = p('app', 'views', 'users', '_card.erb')
+    mockExistsSync.mockImplementation((file: string) => file === expected)
+    const result = resolver.resolvePartialPath('card', p('app', 'views', 'users', 'show.html.erb'), ROOT)
+    expect(result).toBe(expected)
   })
 
   it('tries haml extension', () => {
-    mockExistsSync.mockImplementation((p: string) => p === '/workspace/app/views/users/_card.html.haml')
-    const result = resolver.resolvePartialPath('card', '/workspace/app/views/users/show.html.erb', '/workspace')
-    expect(result).toBe('/workspace/app/views/users/_card.html.haml')
+    const expected = p('app', 'views', 'users', '_card.html.haml')
+    mockExistsSync.mockImplementation((file: string) => file === expected)
+    const result = resolver.resolvePartialPath('card', p('app', 'views', 'users', 'show.html.erb'), ROOT)
+    expect(result).toBe(expected)
   })
 
   it('tries slim extension', () => {
-    mockExistsSync.mockImplementation((p: string) => p === '/workspace/app/views/users/_card.slim')
-    const result = resolver.resolvePartialPath('card', '/workspace/app/views/users/show.html.erb', '/workspace')
-    expect(result).toBe('/workspace/app/views/users/_card.slim')
+    const expected = p('app', 'views', 'users', '_card.slim')
+    mockExistsSync.mockImplementation((file: string) => file === expected)
+    const result = resolver.resolvePartialPath('card', p('app', 'views', 'users', 'show.html.erb'), ROOT)
+    expect(result).toBe(expected)
   })
 
   it('falls back to non-partial filename when no partial found', () => {
-    // None of the _card.* files exist, but card.html.erb does
-    mockExistsSync.mockImplementation((p: string) => p === '/workspace/app/views/users/card.html.erb')
-    const result = resolver.resolvePartialPath('card', '/workspace/app/views/users/show.html.erb', '/workspace')
-    expect(result).toBe('/workspace/app/views/users/card.html.erb')
+    const expected = p('app', 'views', 'users', 'card.html.erb')
+    mockExistsSync.mockImplementation((file: string) => file === expected)
+    const result = resolver.resolvePartialPath('card', p('app', 'views', 'users', 'show.html.erb'), ROOT)
+    expect(result).toBe(expected)
   })
 
   it('falls back to non-partial for namespaced paths', () => {
-    // _navbar doesn't exist in shared/, but navbar.html.erb does
-    mockExistsSync.mockImplementation((p: string) => p === '/workspace/app/views/shared/navbar.html.erb')
-    const result = resolver.resolvePartialPath('shared/navbar', '/workspace/app/views/users/show.html.erb', '/workspace')
-    expect(result).toBe('/workspace/app/views/shared/navbar.html.erb')
+    const expected = p('app', 'views', 'shared', 'navbar.html.erb')
+    mockExistsSync.mockImplementation((file: string) => file === expected)
+    const result = resolver.resolvePartialPath('shared/navbar', p('app', 'views', 'users', 'show.html.erb'), ROOT)
+    expect(result).toBe(expected)
   })
 
   it('returns null when no file exists for any extension', () => {
     mockExistsSync.mockReturnValue(false)
-    const result = resolver.resolvePartialPath('nonexistent', '/workspace/app/views/users/show.html.erb', '/workspace')
+    const result = resolver.resolvePartialPath('nonexistent', p('app', 'views', 'users', 'show.html.erb'), ROOT)
     expect(result).toBeNull()
   })
 
   it('strips quotes and colons from render path', () => {
-    mockExistsSync.mockImplementation((p: string) => p === '/workspace/app/views/users/_card.html.erb')
-    const result = resolver.resolvePartialPath('"card"', '/workspace/app/views/users/show.html.erb', '/workspace')
-    expect(result).toBe('/workspace/app/views/users/_card.html.erb')
+    const expected = p('app', 'views', 'users', '_card.html.erb')
+    mockExistsSync.mockImplementation((file: string) => file === expected)
+    const result = resolver.resolvePartialPath('"card"', p('app', 'views', 'users', 'show.html.erb'), ROOT)
+    expect(result).toBe(expected)
   })
 
   it('strips single quotes from render path', () => {
-    mockExistsSync.mockImplementation((p: string) => p === '/workspace/app/views/users/_card.html.erb')
-    const result = resolver.resolvePartialPath("'card'", '/workspace/app/views/users/show.html.erb', '/workspace')
-    expect(result).toBe('/workspace/app/views/users/_card.html.erb')
+    const expected = p('app', 'views', 'users', '_card.html.erb')
+    mockExistsSync.mockImplementation((file: string) => file === expected)
+    const result = resolver.resolvePartialPath("'card'", p('app', 'views', 'users', 'show.html.erb'), ROOT)
+    expect(result).toBe(expected)
   })
 
   it('handles deeply nested partial paths', () => {
-    mockExistsSync.mockImplementation((p: string) => p === '/workspace/app/views/admin/dashboard/_stats.html.erb')
-    const result = resolver.resolvePartialPath('admin/dashboard/stats', '/workspace/app/views/users/show.html.erb', '/workspace')
-    expect(result).toBe('/workspace/app/views/admin/dashboard/_stats.html.erb')
+    const expected = p('app', 'views', 'admin', 'dashboard', '_stats.html.erb')
+    mockExistsSync.mockImplementation((file: string) => file === expected)
+    const result = resolver.resolvePartialPath('admin/dashboard/stats', p('app', 'views', 'users', 'show.html.erb'), ROOT)
+    expect(result).toBe(expected)
   })
 })

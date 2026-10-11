@@ -137,7 +137,7 @@ describe('DevDocsFetcher', () => {
     expect(fs.readFileSync(path.join(slugDir, 'index.json'), 'utf8')).toBe('cached-index')
   })
 
-  it('returns false when write fails (e.g. read-only dir)', async () => {
+  it.skipIf(process.platform === 'win32')('returns false when write fails (e.g. read-only dir)', async () => {
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve('[]') })
       .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve('{}') }),

@@ -161,8 +161,8 @@ describe('PersistentIndexManager', () => {
     if (result.status !== 'ready') {return}
     expect(fs.existsSync(path.join(tmpDir, '.railsforge'))).toBe(true)
     expect(mocks.mockClientCreate).toHaveBeenCalledWith(
-      '/ext/dist/indexer/indexer.worker.js',
-      path.join(tmpDir, '.railsforge/index.sqlite3'),
+      path.join('/ext', 'dist', 'indexer', 'indexer.worker.js'),
+      path.join(tmpDir, '.railsforge', 'index.sqlite3'),
     )
     expect(mocks.mockIndexFile).toHaveBeenCalledWith(
       path.join(tmpDir, 'app/models/user.rb'),

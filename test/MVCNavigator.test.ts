@@ -37,8 +37,8 @@ describe('MVCNavigator', () => {
 
   it('pluralizes model names ending in consonant+y to ies for companion paths', () => {
     const paths = mvc.getCompanionPaths('/path/to/my_app/app/models/category.rb', root)
-    expect(paths.controller).toBe('/path/to/my_app/app/controllers/categories_controller.rb')
-    expect(paths.viewDir).toBe('/path/to/my_app/app/views/categories')
+    expect(paths.controller).toBe(native('/path/to/my_app/app/controllers/categories_controller.rb'))
+    expect(paths.viewDir).toBe(native('/path/to/my_app/app/views/categories'))
   })
 
   it('identifies helper, service, serializer, and policy files', () => {
@@ -72,14 +72,14 @@ describe('MVCNavigator', () => {
 
   it('calculates companion paths for a helper file', () => {
     const paths = mvc.getCompanionPaths('/path/to/my_app/app/helpers/orders_helper.rb', root)
-    expect(paths.model).toBe('/path/to/my_app/app/models/order.rb')
-    expect(paths.helper).toBe('/path/to/my_app/app/helpers/orders_helper.rb')
+    expect(paths.model).toBe(native('/path/to/my_app/app/models/order.rb'))
+    expect(paths.helper).toBe(native('/path/to/my_app/app/helpers/orders_helper.rb'))
   })
 
   it('calculates companion paths for a service file', () => {
     const paths = mvc.getCompanionPaths('/path/to/my_app/app/services/payment_service.rb', root)
-    expect(paths.model).toBe('/path/to/my_app/app/models/payment.rb')
-    expect(paths.service).toBe('/path/to/my_app/app/services/payment_service.rb')
+    expect(paths.model).toBe(native('/path/to/my_app/app/models/payment.rb'))
+    expect(paths.service).toBe(native('/path/to/my_app/app/services/payment_service.rb'))
   })
 
   it('extracts resource info for spec and test files', () => {
@@ -105,6 +105,6 @@ describe('MVCNavigator', () => {
 
   it('singularizes names ending in ies', () => {
     const paths = mvc.getCompanionPaths('/path/to/my_app/app/models/country.rb', root)
-    expect(paths.controller).toBe('/path/to/my_app/app/controllers/countries_controller.rb')
+    expect(paths.controller).toBe(native('/path/to/my_app/app/controllers/countries_controller.rb'))
   })
 })

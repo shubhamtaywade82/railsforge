@@ -160,7 +160,7 @@ describe('Logger', () => {
     expect(appendLine).toHaveBeenCalled()
   })
 
-  it('disables log file when mkdir fails (parent is a file, not a directory)', async () => {
+  it.skipIf(process.platform === 'win32')('disables log file when mkdir fails (parent is a file, not a directory)', async () => {
     Logger.setLevel('debug')
     const appendLine = vi.fn()
     Logger['channel'] = {

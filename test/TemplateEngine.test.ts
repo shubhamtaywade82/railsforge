@@ -48,7 +48,7 @@ describe('findCustomTemplate', () => {
     expect(findCustomTemplate(tmpRoot, 'query')).toBeNull()
   })
 
-  it('returns null when the template file exists but cannot be read', () => {
+  it.skipIf(process.platform === 'win32')('returns null when the template file exists but cannot be read', () => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'railsforge-tmpl-'))
     fs.mkdirSync(path.join(tmpRoot, '.railsforge', 'templates'), { recursive: true })
     const filePath = path.join(tmpRoot, '.railsforge', 'templates', 'service.erb')
