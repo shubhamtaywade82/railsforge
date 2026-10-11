@@ -92,4 +92,52 @@ describe('SemanticSearchIndex', () => {
     const results = await index.search('charge a card')
     expect(results.every(r => r.pattern.name !== 'ChargeCardService')).toBe(true)
   })
+
+  it('ranks and sorts multiple semantic results by score', async () => {
+    const indexer = new ProjectPatternIndexer()
+    indexer.indexFile('/repo/app/services/charge_card_service.rb', files['/repo/app/services/charge_card_service.rb'])
+    indexer.indexFile('/repo/app/services/payment_service.rb', `
+class PaymentService < ApplicationService
+  def call
+    PaymentGateway.charge(@user, @amount)
+  end
+end
+`)
+    const embed: EmbedFn = async text => fakeEmbed(text)
+    const index = new SemanticSearchIndex(indexer, embed)
+
+    const results = await index.search('charge a payment card')
+    expect(results.length).toBeGreaterThan(1)
+    expect(results[0].matchedBy).toBe('semantic')
+    // Verify results are sorted by descending score
+    for (let i = 1; i < results.length; i++) {
+      expect(results[i - 1].score).toBeGreaterThanOrEqual(results[i].score)
+    }
+  })
+
+  it('ranks and sorts multiple keyword results by score', async () => {
+    const indexer = new ProjectPatternIndexer()
+    indexer.indexFile('/repo/app/services/send_welcome_email_service.rb', `
+class SendWelcomeEmailService < ApplicationService
+  def call
+    UserMailer.welcome_email(@user).deliver_later
+  end
+end
+`)
+    indexer.indexFile('/repo/app/services/send_password_reset_email_service.rb', `
+class SendPasswordResetEmailService < ApplicationService
+  def call
+    UserMailer.password_reset_email(@user).deliver_later
+  end
+end
+`)
+    const index = new SemanticSearchIndex(indexer, async () => null)
+
+    const results = await index.search('email')
+    expect(results.length).toBeGreaterThan(1)
+    expect(results.every(r => r.matchedBy === 'keyword')).toBe(true)
+    for (let i = 1; i < results.length; i++) {
+      expect(results[i - 1].score).toBeGreaterThanOrEqual(results[i].score)
+    }
+  })
 })

@@ -152,6 +152,74 @@ DEPENDENCIES
 
       fs.rmSync(tmpDir, { recursive: true, force: true })
     })
+
+    it('detects Ruby version from .tool-versions', () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'railsforge-toolver-'))
+      fs.writeFileSync(path.join(tmpDir, '.tool-versions'), 'node 20.11.0\nruby 3.2.2\n')
+
+      expect(detector.detectEnvironment(tmpDir).rubyVersion).toBe('3.2.2')
+
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('detects Ruby version from .rbenv-version', () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'railsforge-rbenv-'))
+      fs.writeFileSync(path.join(tmpDir, '.rbenv-version'), '3.1.4\n')
+
+      expect(detector.detectEnvironment(tmpDir).rubyVersion).toBe('3.1.4')
+
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('detects binstubs in the bin directory', () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'railsforge-binstub-'))
+      fs.mkdirSync(path.join(tmpDir, 'bin'), { recursive: true })
+      fs.writeFileSync(path.join(tmpDir, 'bin', 'rails'), '#!/bin/bash')
+      fs.writeFileSync(path.join(tmpDir, 'bin', 'rspec'), '#!/bin/bash')
+
+      const env = detector.detectEnvironment(tmpDir)
+      expect(env.binstubs.has('rails')).toBe(true)
+      expect(env.binstubs.has('rspec')).toBe(true)
+
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('detects Ruby version from .ruby-version file (strips ruby- prefix)', () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'railsforge-rubyver-'))
+      fs.writeFileSync(path.join(tmpDir, '.ruby-version'), 'ruby-3.2.2\n')
+
+      expect(detector.detectEnvironment(tmpDir).rubyVersion).toBe('3.2.2')
+
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('uses binstub path when the bin file exists on disk', () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'railsforge-binstub-real-'))
+      fs.mkdirSync(path.join(tmpDir, 'bin'), { recursive: true })
+      fs.writeFileSync(path.join(tmpDir, 'bin', 'rails'), '#!/bin/bash')
+
+      const env = {
+        rubyVersion: '3.3.0',
+        hasRails: true,
+        railsVersion: '7.1.0',
+        majorRailsVersion: 7,
+        hasHotwire: true,
+        hasTurbo: true,
+        hasStimulus: true,
+        hasPundit: false,
+        hasViewComponent: false,
+        hasStrongMigrations: false,
+        hasBrakeman: false,
+        hasPry: false,
+        testFramework: 'rspec' as const,
+        binstubs: new Set(['rails']),
+        projectType: 'monolith' as const,
+      }
+
+      expect(detector.getCommandPrefix('rails', env, tmpDir)).toBe('bin/rails')
+
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    })
   })
 })
 

@@ -45,4 +45,42 @@ end
     const dangers = analyzer.analyzeMigration(migration)
     expect(dangers.length).toBe(0)
   })
+
+  it('detects dangerous remove_column without prior ignore', () => {
+    const migration = `
+class RemoveStatusFromOrders < ActiveRecord::Migration[7.1]
+  def change
+    remove_column :orders, :status
+  end
+end
+`
+    const dangers = analyzer.analyzeMigration(migration)
+    expect(dangers.some(d => d.ruleId === 'MIG-REMOVE-001')).toBe(true)
+  })
+
+  it('detects dangerous change_column', () => {
+    const migration = `
+class ChangeOrdersTotalToString < ActiveRecord::Migration[7.1]
+  def change
+    change_column :orders, :total, :string
+  end
+end
+`
+    const dangers = analyzer.analyzeMigration(migration)
+    expect(dangers.some(d => d.ruleId === 'MIG-CHANGE-001')).toBe(true)
+  })
+
+  it('detects dangerous rename_column and rename_table', () => {
+    const migration = `
+class RenameUserToAccount < ActiveRecord::Migration[7.1]
+  def change
+    rename_column :users, :email, :email_address
+    rename_table :users, :accounts
+  end
+end
+`
+    const dangers = analyzer.analyzeMigration(migration)
+    const renames = dangers.filter(d => d.ruleId === 'MIG-RENAME-001')
+    expect(renames.length).toBe(2)
+  })
 })

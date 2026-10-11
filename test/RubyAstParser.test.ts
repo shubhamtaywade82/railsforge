@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { RubyAstParser } from '../src/indexer/RubyAstParser'
 
 const parser = new RubyAstParser()
@@ -84,5 +84,74 @@ end
 `
     const classes = parser.parseClasses(code)
     expect(classes.map(c => c.name)).toEqual(['Foo', 'Bar'])
+  })
+
+  it('marks methods after a bare private identifier as non-public, and captures class-level calls', () => {
+    const code = `
+class Foo
+  private
+
+  def secret; end
+
+  validate!
+end
+`
+    const [klass] = parser.parseClasses(code)
+    expect(klass.methods.find(m => m.name === 'secret')?.isPublic).toBe(false)
+    expect(klass.calls.map(c => c.method)).toContain('validate!')
+  })
+
+  it('returns empty array when parser throws an error', () => {
+    // Force the parser to throw by mocking the parse method
+    const origProto = Object.getPrototypeOf(parser)
+    const origParser = (parser as any).parser
+    ;(parser as any).parser = {
+      parse: () => { throw new Error('forced parse failure') },
+      setLanguage: () => {},
+    }
+    const result = parser.parseClasses('class Foo; end')
+    expect(result).toEqual([])
+    // Restore
+    ;(parser as any).parser = origParser
+  })
+
+  it('detects private keyword when parsed as a call node', () => {
+    // In some tree-sitter-ruby versions, `private` can be parsed as a call node
+    // rather than an identifier. This test ensures both paths work.
+    const code = `
+class Foo
+  private
+
+  def hidden_method
+    true
+  end
+end
+`
+    const [klass] = parser.parseClasses(code)
+    const hidden = klass.methods.find(m => m.name === 'hidden_method')
+    expect(hidden).toBeDefined()
+    expect(hidden?.isPublic).toBe(false)
+  })
+
+  it('returns empty array when the internal parser is null (catches TypeError)', () => {
+    // Use a fresh instance to avoid polluting the shared parser
+    const p = new RubyAstParser()
+    ;(p as any).parser = null
+    const result = p.parseClasses('class Foo; end')
+    expect(result).toEqual([])
+  })
+
+  it('handles protected keyword and marks subsequent methods as non-public', () => {
+    const code = `
+class Foo
+  protected
+
+  def guarded_method
+    1
+  end
+end
+`
+    const [klass] = parser.parseClasses(code)
+    expect(klass.methods.find(m => m.name === 'guarded_method')?.isPublic).toBe(false)
   })
 })

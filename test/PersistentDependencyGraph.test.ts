@@ -15,7 +15,17 @@ function seedEdges(db: ReturnType<typeof openIndexDatabase>, edges: Array<{ from
 
 // See src/indexer/database.ts: better-sqlite3 requires Node >= 22.14, and loading it
 // on an older runtime aborts the process rather than throwing a catchable error.
-describe.skipIf(!isPersistentIndexSupported())('PersistentDependencyGraph', () => {
+function sqliteBindingsLoadable(): boolean {
+  if (!isPersistentIndexSupported()) {return false}
+  try {
+    openIndexDatabase(':memory:').close()
+    return true
+  } catch {
+    return false
+  }
+}
+
+describe.skipIf(!sqliteBindingsLoadable())('PersistentDependencyGraph', () => {
   it('returns collaborators and callers for a symbol', () => {
     const db = openIndexDatabase(':memory:')
     seedEdges(db, [{ from: 'CreateOrderService', to: 'PaymentGatewayService' }])

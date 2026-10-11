@@ -25,7 +25,8 @@ export class ViewPartialResolver {
       targetDir = path.join(workspaceRoot, 'app', 'views', ...parts)
     } else {
       const currentDir = path.dirname(currentFilePath)
-      targetDir = currentDir.includes('/app/views')
+      const viewsSegment = `${path.sep}app${path.sep}views`
+      targetDir = currentDir.includes(viewsSegment)
         ? currentDir
         : path.join(workspaceRoot, 'app', 'views')
       partialName = `_${clean}`

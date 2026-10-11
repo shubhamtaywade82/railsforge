@@ -8,7 +8,12 @@ const nativeSupportMocks = vi.hoisted(() => ({
 vi.mock('child_process', () => ({ execSync: nativeSupportMocks.execSync }))
 vi.mock('fs', () => ({ readFileSync: nativeSupportMocks.readFileSync }))
 
-import { isPersistentIndexSupported, getPersistentIndexSupport, resetPersistentIndexSupportCache } from '../src/indexer/nativeSupport'
+import {
+  isPersistentIndexSupported,
+  getPersistentIndexSupport,
+  resetPersistentIndexSupportCache,
+  getLinuxGlibcVersion,
+} from '../src/indexer/nativeSupport'
 
 describe('isPersistentIndexSupported', () => {
   const originalNapi = process.versions.napi
@@ -102,6 +107,52 @@ describe('isPersistentIndexSupported on Linux with a mocked process.report', () 
       configurable: true,
     })
     expect(isPersistentIndexSupported()).toBe(false)
+  })
+
+  it('parses GLIBC version from libc binary when process.report and ldd are unavailable', () => {
+    Object.defineProperty(process, 'report', { value: undefined, configurable: true })
+    const glibcVersionStr = 'GLIBC_2.33\0GLIBC_2.31\0'
+    const buf = Buffer.from(glibcVersionStr, 'latin1')
+    nativeSupportMocks.readFileSync.mockImplementation(() => buf)
+
+    // Should find 2.33 as the highest version, which meets the >= 2.33 requirement
+    expect(isPersistentIndexSupported()).toBe(true)
+  })
+
+  it('selects the highest GLIBC version from the libc binary', () => {
+    Object.defineProperty(process, 'report', { value: undefined, configurable: true })
+    nativeSupportMocks.execSync.mockImplementation(() => { throw new Error('no ldd') })
+    // Multiple versions, 2.38 is highest
+    const buf = Buffer.from('GLIBC_2.17\0GLIBC_2.33\0GLIBC_2.38\0', 'latin1')
+    nativeSupportMocks.readFileSync.mockImplementation(() => buf)
+
+    expect(getLinuxGlibcVersion()).toBe('2.38')
+    expect(isPersistentIndexSupported()).toBe(true)
+  })
+
+  it('returns the minor version from libc binary when only major differs', () => {
+    Object.defineProperty(process, 'report', { value: undefined, configurable: true })
+    nativeSupportMocks.execSync.mockImplementation(() => { throw new Error('no ldd') })
+    const buf = Buffer.from('GLIBC_2.35\0GLIBC_2.33\0', 'latin1')
+    nativeSupportMocks.readFileSync.mockImplementation(() => buf)
+
+    expect(getLinuxGlibcVersion()).toBe('2.35')
+  })
+
+  it('falls back to last version-like string when ldd output has no GLIBC prefix', () => {
+    Object.defineProperty(process, 'report', { value: undefined, configurable: true })
+    nativeSupportMocks.execSync.mockImplementation(() => 'ldd (Ubuntu) 2.35')
+    nativeSupportMocks.readFileSync.mockImplementation(() => { throw new Error('no libc') })
+
+    expect(getLinuxGlibcVersion()).toBe('2.35')
+    expect(isPersistentIndexSupported()).toBe(true)
+  })
+
+  it('returns undefined from getLinuxGlibcVersion when nothing is available', () => {
+    const origPlatform = process.platform
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
+    expect(getLinuxGlibcVersion()).toBeUndefined()
+    Object.defineProperty(process, 'platform', { value: origPlatform, configurable: true })
   })
 })
 

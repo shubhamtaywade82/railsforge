@@ -50,6 +50,7 @@ import { firstCandidate, projectVersionManager, setVersionManagerSettingProvider
 import { ShellKind, shellKindFromPath, hasPathSegment } from './util/ShellCommand'
 import { patchFileMatches } from './patch/PatchPaths'
 import { EnvironmentDetector, ProjectEnvironment, isKnownVersion } from './environment/EnvironmentDetector'
+import { reloadWindowForRubyLspRecovery } from './environment/RubyLspExtension'
 import { RailsDeprecationLinter } from './lint/RailsDeprecationLinter'
 import { DesignPrincipleLinter } from './principles/DesignPrincipleLinter'
 import { VersionDocsEngine } from './docs/VersionDocsEngine'
@@ -499,6 +500,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
           testFramework: projectEnv?.testFramework ?? 'unknown',
           versionManager: root ? projectVersionManager(root) : 'none',
           launcher: root ? describeToolchain(root) : 'n/a',
+          rubyLspGemVersion: root ? lockedRubyLspGemVersion(root) : undefined,
         },
         skills: readSkillsInfo(context.extensionPath),
         ai: {
@@ -510,6 +512,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
       const doc = await vscode.workspace.openTextDocument({ content: renderDiagnosticsDoc(info), language: 'markdown' })
       await vscode.window.showTextDocument(doc, { preview: true })
     }),
+    vscode.commands.registerCommand('railsforge.recoverRubyLsp', () => reloadWindowForRubyLspRecovery()),
   )
 
   const rakeTaskIndexer = new RakeTaskIndexer()
@@ -1149,6 +1152,12 @@ function describeToolchain(root: string): string {
   const manager = projectVersionManager(root)
   const launcher = fs.existsSync(path.join(root, 'bin', 'rails')) ? 'bin/ stubs' : fs.existsSync(path.join(root, 'Gemfile')) ? 'bundle exec' : 'bare tools'
   return `${manager === 'none' ? 'no version manager' : manager} · ${launcher}`
+}
+
+function lockedRubyLspGemVersion(root: string): string | undefined {
+  const lockPath = path.join(root, 'Gemfile.lock')
+  if (!fs.existsSync(lockPath)) {return undefined}
+  return parseGemfileLock(fs.readFileSync(lockPath, 'utf8')).get('ruby-lsp')
 }
 
 function describeAstIndex(state: IndexState<PersistentIndexManager>): string {

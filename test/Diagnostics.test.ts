@@ -12,7 +12,7 @@ function healthy(): DiagnosticsInfo {
       { name: 'tree-sitter', platformKey: 'linux-x64', prebuildPresent: true, loaded: true },
     ],
     project: { root: '/p', rubyVersion: '3.3.6', railsVersion: '8.0.1', projectType: 'monolith', testFramework: 'rspec', versionManager: 'mise', launcher: 'bin/ stubs' },
-    tools: { rubyLsp: true, rdbg: true },
+    tools: { rubyLsp: true, rubyLspExtensionVersion: '0.12.0', rdbg: true },
     skills: { sha: 'dd22f25b435c40e38b28bd5226ef810adf1f4edc', skillCount: 87 },
     ai: { provider: 'ollama', model: 'qwen2.5-coder:14b', hasApiKey: false },
   }
@@ -35,6 +35,15 @@ describe('evaluateDiagnostics', () => {
   it('reports a healthy environment with no warnings or errors', () => {
     expect(levels(healthy())).toEqual([])
     expect(renderDiagnosticsDoc(healthy())).toContain('Everything looks healthy')
+  })
+
+  it('warns when Gemfile.lock lists ruby-lsp but the editor extension is missing', () => {
+    const findings = evaluateDiagnostics({
+      ...healthy(),
+      project: { ...healthy().project, rubyLspGemVersion: '0.26.11' },
+      tools: { rubyLsp: false, rdbg: true },
+    })
+    expect(findings.some(f => f.area === 'Tools' && f.level === 'warn' && f.message.includes('0.26.11'))).toBe(true)
   })
 
   it('errors on a VS Code older than the supported minimum', () => {

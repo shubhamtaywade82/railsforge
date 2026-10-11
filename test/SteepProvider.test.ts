@@ -1,5 +1,17 @@
-import { describe, it, expect } from 'vitest'
-import { parseSteepGithubOutput } from '../src/types/SteepProvider'
+import * as fs from 'fs'
+import * as os from 'os'
+import * as path from 'path'
+
+const { mockExecFile } = vi.hoisted(() => {
+  const mockExecFile = vi.fn()
+  return { mockExecFile }
+})
+
+vi.mock('child_process', () => ({ execFile: mockExecFile }))
+vi.mock('util', () => ({ promisify: () => mockExecFile }))
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { parseSteepGithubOutput, SteepProvider } from '../src/types/SteepProvider'
 
 // Real `steep check --format=github` output against a scratch project with a type
 // mismatch — verified before writing the parser, not guessed at.
@@ -50,5 +62,78 @@ describe('parseSteepGithubOutput', () => {
   it('preserves a literal percent sign in a message unrelated to escaping', () => {
     const line = '::error file=a.rb,line=1,endLine=1,col=1,endColumn=2::50%25 chance of failure'
     expect(parseSteepGithubOutput(line)[0].message).toBe('50% chance of failure')
+  })
+})
+
+describe('SteepProvider', () => {
+  let provider: SteepProvider
+  let workspace: string
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'rf-steep-'))
+    fs.writeFileSync(path.join(workspace, 'Gemfile'), 'source "https://rubygems.org"\n')
+    provider = new SteepProvider()
+  })
+
+  afterEach(() => {
+    fs.rmSync(workspace, { recursive: true, force: true })
+  })
+
+  it('returns diagnostics from bundle exec steep check', async () => {
+    mockExecFile.mockResolvedValue({ stdout: REAL_STEEP_OUTPUT })
+    const result = await provider.runCheck(workspace)
+    expect(result).toHaveLength(1)
+    expect(result[0].severity).toBe('error')
+    expect(mockExecFile).toHaveBeenCalledWith('bundle', ['exec', 'steep', 'check', '--format=github'], expect.objectContaining({ cwd: workspace }))
+  })
+
+  it('falls back to bare steep when bundle exec fails with no stdout', async () => {
+    mockExecFile
+      .mockRejectedValueOnce({ stdout: undefined })
+      .mockResolvedValueOnce({ stdout: REAL_STEEP_WARNING_OUTPUT })
+
+    const result = await provider.runCheck(workspace)
+    expect(result).toHaveLength(1)
+    expect(result[0].severity).toBe('warning')
+    expect(mockExecFile).toHaveBeenNthCalledWith(2, 'steep', ['check', '--format=github'], expect.objectContaining({ cwd: workspace }))
+  })
+
+  it('returns empty array when both bundle exec and bare steep fail', async () => {
+    mockExecFile
+      .mockRejectedValueOnce({ stdout: undefined })
+      .mockRejectedValueOnce({ stdout: undefined })
+
+    const result = await provider.runCheck(workspace)
+    expect(result).toEqual([])
+  })
+
+  it('parses diagnostics from stderr exit code (steep exits non-zero on errors)', async () => {
+    mockExecFile.mockRejectedValue({
+      stdout: '::error file=a.rb,line=1,endLine=1,col=1,endColumn=5::type error\n',
+    })
+
+    const result = await provider.runCheck(workspace)
+    expect(result).toHaveLength(1)
+    expect(result[0].message).toBe('type error')
+  })
+
+  it('parses diagnostics from error with empty stdout string as null', async () => {
+    mockExecFile
+      .mockRejectedValueOnce({ stdout: '' })
+      .mockRejectedValueOnce({ stdout: '' })
+
+    const result = await provider.runCheck(workspace)
+    expect(result).toEqual([])
+  })
+
+  it('parses notice-level diagnostics correctly', async () => {
+    const noticeOutput = '::notice file=a.rb,line=1,endLine=1,col=1,endColumn=2::just a notice'
+    mockExecFile.mockResolvedValue({ stdout: noticeOutput })
+
+    const result = await provider.runCheck(workspace)
+    expect(result).toHaveLength(1)
+    expect(result[0].severity).toBe('notice')
+    expect(result[0].message).toBe('just a notice')
   })
 })

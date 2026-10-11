@@ -64,4 +64,22 @@ describe('MinimalDependencyGraph', () => {
 
     expect(callers.map(c => c.from)).toContain('CreateOrderService')
   })
+
+  it('skips patterns whose files throw on read', async () => {
+    const indexer = new ProjectPatternIndexer()
+    indexer.indexFile('/repo/app/services/a_service.rb', files['/repo/app/services/create_order_service.rb'])
+    const readFile = () => { throw new Error('ENOENT') }
+    const graph = new MinimalDependencyGraph(indexer, readFile)
+    await graph.rebuild()
+    expect(graph.getAllEdges()).toHaveLength(0)
+  })
+
+  it('getAllEdges returns all dependency edges', async () => {
+    const graph = await buildGraph()
+    const edges = graph.getAllEdges()
+    expect(edges.length).toBeGreaterThan(0)
+    expect(edges[0]).toHaveProperty('from')
+    expect(edges[0]).toHaveProperty('to')
+    expect(edges[0]).toHaveProperty('hardCoded')
+  })
 })

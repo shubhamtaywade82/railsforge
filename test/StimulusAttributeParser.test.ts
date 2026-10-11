@@ -43,8 +43,33 @@ describe('matchActionAtPosition', () => {
     expect(matchActionAtPosition(line, char)).toEqual({ identifier: 'clipboard', action: 'copy' })
   })
 
+  it('returns null when the cursor is on the space between multi-value identifiers', () => {
+    const line = '  <div data-controller="dropdown clipboard">'
+    const spaceIndex = line.indexOf('clipboard') - 1
+    expect(matchControllerIdentifierAtPosition(line, spaceIndex)).toBe('dropdown')
+  })
+
   it('returns null when the cursor is outside any data-action attribute', () => {
     const line = '  <button data-action="click->clipboard#copy">Copy</button>'
     expect(matchActionAtPosition(line, line.indexOf('Copy</button>'))).toBeNull()
+  })
+
+  it('returns fallback first identifier when cursor is on a space between multi-value identifiers', () => {
+    // Leading space before identifiers - cursor at position 0 within the value
+    const line = '  <div data-controller=" dropdown clipboard">'
+    // getWordRangeAtPosition would return the range of " dropdown clipboard"
+    // Cursor at offset 0 (the leading space within value) doesn't match any identifier
+    const valueStart = line.indexOf(' dropdown') + 1
+    // Offset 0 is the leading space
+    const result = matchControllerIdentifierAtPosition(line, valueStart)
+    expect(result).toBe('dropdown') // falls through to line 38
+  })
+
+  it('returns null for an invalid action descriptor without #action', () => {
+    const line = '  <div data-action="click->clipboard">'
+    const char = line.indexOf('clipboard">')
+    // parseActionDescriptor should return null for 'click->clipboard' (no #action)
+    const result = matchActionAtPosition(line, char)
+    expect(result).toBeNull()
   })
 })

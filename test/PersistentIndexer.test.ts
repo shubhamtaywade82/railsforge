@@ -29,7 +29,17 @@ end
 // better-sqlite3's N-API build requires Node >= 22.14 (N-API version 10) — loading it
 // on an older runtime aborts the process rather than throwing, so this whole suite is
 // skipped there instead of crashing the test run. See src/indexer/database.ts.
-describe.skipIf(!isPersistentIndexSupported())('PersistentIndexer', () => {
+function sqliteBindingsLoadable(): boolean {
+  if (!isPersistentIndexSupported()) {return false}
+  try {
+    openIndexDatabase(':memory:').close()
+    return true
+  } catch {
+    return false
+  }
+}
+
+describe.skipIf(!sqliteBindingsLoadable())('PersistentIndexer', () => {
   it('inserts a symbol row per class with its includes/superclass', () => {
     const db = freshDb()
     indexFileIntoDb(db, '/repo/app/services/create_order_service.rb', createOrderService, parser)
@@ -86,5 +96,25 @@ describe.skipIf(!isPersistentIndexSupported())('PersistentIndexer', () => {
     expect((db.prepare('SELECT COUNT(*) as c FROM symbols').get() as { c: number }).c).toBe(0)
     expect((db.prepare('SELECT COUNT(*) as c FROM methods').get() as { c: number }).c).toBe(0)
     expect((db.prepare('SELECT COUNT(*) as c FROM dependencies').get() as { c: number }).c).toBe(0)
+  })
+
+  it('records include dependencies as non-hard-coded edges', () => {
+    const db = freshDb()
+    indexFileIntoDb(db, '/repo/app/services/order_job.rb', `
+class OrderJob
+  include Sidekiq::Job
+  include Retryable
+
+  def perform
+    nil
+  end
+end
+`, parser)
+
+    const deps = db.prepare('SELECT to_name, kind, hard_coded FROM dependencies WHERE from_name = ?').all('OrderJob') as Array<{ to_name: string; kind: string; hard_coded: number }>
+    const includeDeps = deps.filter(d => d.kind === 'include')
+    expect(includeDeps.map(d => d.to_name)).toContain('Sidekiq::Job')
+    expect(includeDeps.map(d => d.to_name)).toContain('Retryable')
+    expect(includeDeps.every(d => d.hard_coded === 0)).toBe(true)
   })
 })

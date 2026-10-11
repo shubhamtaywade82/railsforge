@@ -48,6 +48,7 @@ never invents one; an undeclared version is reported as `unknown`.
 | Test frameworks | RSpec, Minitest (Test Explorer + CodeLens + debug via `rdbg`) |
 | Linters / analyzers (optional, run when installed) | RuboCop, Brakeman, bundler-audit, Reek, Flog, Flay, Debride, Standard, Steep/RBS |
 | Ruby LSP add-on | tested in CI against the locked and the latest `ruby-lsp` |
+| Shopify Ruby LSP VS Code extension (`Shopify.ruby-lsp`) | Complements the **`ruby-lsp` gem version locked in your Gemfile.lock** (shown in **RailsForge: Diagnose Environment**). If the language client is disposed after a restart storm, use **RailsForge: Recover Ruby LSP (Reload Window)** or **Developer: Reload Window** and keep the editor extension updated. RailsForge avoids rewriting `rubyLsp.*` workspace settings when they are already correct so auto workspace optimization does not spuriously restart Ruby LSP. |
 
 ## AI providers
 
