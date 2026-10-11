@@ -10,7 +10,7 @@ describe('DevDocsHoverProvider', () => {
     vi.clearAllMocks()
     offlineIndex = { lookup: vi.fn().mockReturnValue(null) }
     isEnabled = vi.fn().mockReturnValue(true)
-    provider = new DevDocsHoverProvider({ index: offlineIndex } as any, isEnabled as any)
+    provider = new DevDocsHoverProvider(() => offlineIndex as any, () => isEnabled())
   })
 
   it('should return null when disabled', () => {

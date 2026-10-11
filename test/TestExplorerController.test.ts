@@ -14,6 +14,7 @@ const { mockExecFile } = vi.hoisted(() => {
 vi.mock('child_process', () => ({
   execFile: mockExecFile,
 }))
+vi.mock('util', () => ({ promisify: (fn: unknown) => fn }))
 
 let capturedHandler: ((request: unknown, token: unknown) => Promise<void>) | null = null
 

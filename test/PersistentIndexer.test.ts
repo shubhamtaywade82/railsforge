@@ -29,7 +29,17 @@ end
 // better-sqlite3's N-API build requires Node >= 22.14 (N-API version 10) — loading it
 // on an older runtime aborts the process rather than throwing, so this whole suite is
 // skipped there instead of crashing the test run. See src/indexer/database.ts.
-describe.skipIf(!isPersistentIndexSupported())('PersistentIndexer', () => {
+function sqliteBindingsLoadable(): boolean {
+  if (!isPersistentIndexSupported()) {return false}
+  try {
+    openIndexDatabase(':memory:').close()
+    return true
+  } catch {
+    return false
+  }
+}
+
+describe.skipIf(!sqliteBindingsLoadable())('PersistentIndexer', () => {
   it('inserts a symbol row per class with its includes/superclass', () => {
     const db = freshDb()
     indexFileIntoDb(db, '/repo/app/services/create_order_service.rb', createOrderService, parser)

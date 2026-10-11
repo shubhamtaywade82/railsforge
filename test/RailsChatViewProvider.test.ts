@@ -20,6 +20,7 @@ const mockedCreateFile = vi.mocked(createNewFile)
 
 const mockAgent = {
   healthCheck: vi.fn().mockResolvedValue(true),
+  getProviderStatus: vi.fn().mockResolvedValue({ state: 'authenticated', detail: 'test' }),
   run: vi.fn().mockResolvedValue({ success: true, response: 'AI response here', iterations: 1 }),
 } as any
 

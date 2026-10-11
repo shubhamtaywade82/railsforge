@@ -55,6 +55,10 @@ export class PersistentIndexManager implements vscode.Disposable {
    * (with the reason) or failed, so callers can tell the user instead of going silent.
    */
   static async activate(context: vscode.ExtensionContext, workspaceRoot: string): Promise<PersistentIndexResult> {
+    if (!workspaceRoot.trim()) {
+      return { status: 'failed', reason: 'missing workspace root' }
+    }
+
     // Must run before anything in this call touches better-sqlite3, directly or
     // transitively (see database.ts's doc comment) — on an unsupported runtime,
     // loading that native module aborts the whole process, which no try/catch below

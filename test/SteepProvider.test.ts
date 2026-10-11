@@ -1,3 +1,7 @@
+import * as fs from 'fs'
+import * as os from 'os'
+import * as path from 'path'
+
 const { mockExecFile } = vi.hoisted(() => {
   const mockExecFile = vi.fn()
   return { mockExecFile }
@@ -6,7 +10,7 @@ const { mockExecFile } = vi.hoisted(() => {
 vi.mock('child_process', () => ({ execFile: mockExecFile }))
 vi.mock('util', () => ({ promisify: () => mockExecFile }))
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { parseSteepGithubOutput, SteepProvider } from '../src/types/SteepProvider'
 
 // Real `steep check --format=github` output against a scratch project with a type
@@ -63,18 +67,25 @@ describe('parseSteepGithubOutput', () => {
 
 describe('SteepProvider', () => {
   let provider: SteepProvider
+  let workspace: string
 
   beforeEach(() => {
     vi.clearAllMocks()
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'rf-steep-'))
+    fs.writeFileSync(path.join(workspace, 'Gemfile'), 'source "https://rubygems.org"\n')
     provider = new SteepProvider()
+  })
+
+  afterEach(() => {
+    fs.rmSync(workspace, { recursive: true, force: true })
   })
 
   it('returns diagnostics from bundle exec steep check', async () => {
     mockExecFile.mockResolvedValue({ stdout: REAL_STEEP_OUTPUT })
-    const result = await provider.runCheck('/workspace')
+    const result = await provider.runCheck(workspace)
     expect(result).toHaveLength(1)
     expect(result[0].severity).toBe('error')
-    expect(mockExecFile).toHaveBeenCalledWith('bundle', ['exec', 'steep', 'check', '--format=github'], expect.objectContaining({ cwd: '/workspace' }))
+    expect(mockExecFile).toHaveBeenCalledWith('bundle', ['exec', 'steep', 'check', '--format=github'], expect.objectContaining({ cwd: workspace }))
   })
 
   it('falls back to bare steep when bundle exec fails with no stdout', async () => {
@@ -82,10 +93,10 @@ describe('SteepProvider', () => {
       .mockRejectedValueOnce({ stdout: undefined })
       .mockResolvedValueOnce({ stdout: REAL_STEEP_WARNING_OUTPUT })
 
-    const result = await provider.runCheck('/workspace')
+    const result = await provider.runCheck(workspace)
     expect(result).toHaveLength(1)
     expect(result[0].severity).toBe('warning')
-    expect(mockExecFile).toHaveBeenNthCalledWith(2, 'steep', ['check', '--format=github'], expect.objectContaining({ cwd: '/workspace' }))
+    expect(mockExecFile).toHaveBeenNthCalledWith(2, 'steep', ['check', '--format=github'], expect.objectContaining({ cwd: workspace }))
   })
 
   it('returns empty array when both bundle exec and bare steep fail', async () => {
@@ -93,7 +104,7 @@ describe('SteepProvider', () => {
       .mockRejectedValueOnce({ stdout: undefined })
       .mockRejectedValueOnce({ stdout: undefined })
 
-    const result = await provider.runCheck('/workspace')
+    const result = await provider.runCheck(workspace)
     expect(result).toEqual([])
   })
 
@@ -102,7 +113,7 @@ describe('SteepProvider', () => {
       stdout: '::error file=a.rb,line=1,endLine=1,col=1,endColumn=5::type error\n',
     })
 
-    const result = await provider.runCheck('/workspace')
+    const result = await provider.runCheck(workspace)
     expect(result).toHaveLength(1)
     expect(result[0].message).toBe('type error')
   })
@@ -112,7 +123,7 @@ describe('SteepProvider', () => {
       .mockRejectedValueOnce({ stdout: '' })
       .mockRejectedValueOnce({ stdout: '' })
 
-    const result = await provider.runCheck('/workspace')
+    const result = await provider.runCheck(workspace)
     expect(result).toEqual([])
   })
 
@@ -120,7 +131,7 @@ describe('SteepProvider', () => {
     const noticeOutput = '::notice file=a.rb,line=1,endLine=1,col=1,endColumn=2::just a notice'
     mockExecFile.mockResolvedValue({ stdout: noticeOutput })
 
-    const result = await provider.runCheck('/workspace')
+    const result = await provider.runCheck(workspace)
     expect(result).toHaveLength(1)
     expect(result[0].severity).toBe('notice')
     expect(result[0].message).toBe('just a notice')

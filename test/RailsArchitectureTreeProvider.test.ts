@@ -42,18 +42,19 @@ describe('RailsArchitectureTreeProvider', () => {
 
   it('should return root items with correct labels', async () => {
     const children = await provider.getChildren()
-    expect(children.length).toBe(3)
+    expect(children.length).toBe(4)
     expect(children[0].label).toBe('Runtime Environment')
     expect(children[1].label).toBe('Database & Models')
-    expect(children[2].label).toBe('Routes & Hotwire')
+    expect(children[2].label).toBe('Code Analysis (AST index)')
+    expect(children[3].label).toBe('Routes & Hotwire')
   })
 
   it('should return environment children', async () => {
     const envItem = new ArchitectureItem('Runtime Environment', 2)
     const children = await provider.getChildren(envItem)
-    expect(children.length).toBe(6)
-    expect(children[0].label).toContain('Ruby')
-    expect(children[1].label).toContain('Rails')
+    expect(children.length).toBe(7)
+    expect(children.some(c => c.label.includes('Ruby'))).toBe(true)
+    expect(children.some(c => c.label.includes('Rails'))).toBe(true)
   })
 
   it('should return database children', async () => {

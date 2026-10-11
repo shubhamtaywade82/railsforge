@@ -313,11 +313,33 @@ export class TestMessage {
   constructor(public message: string) {}
 }
 
+function testItemChildren(owner: TestItem) {
+  let items: TestItem[] = []
+  return {
+    add(child: TestItem) {
+      child.parent = owner
+      items.push(child)
+    },
+    replace(children: TestItem[]) {
+      items = children
+      for (const child of children) { child.parent = owner }
+    },
+    forEach(cb: (child: TestItem) => void) {
+      items.forEach(cb)
+    },
+    get size() {
+      return items.length
+    },
+  }
+}
+
 export class TestItem {
   public range?: Range
   public uri?: Uri
   public label: string
-  public children = { add: () => {} }
+  public parent?: TestItem
+  public canResolveChildren = false
+  public children = testItemChildren(this)
   constructor(
     public id: string,
     label: string,
@@ -332,13 +354,17 @@ export class TestRun {
   started(_test: TestItem) {}
   passed(_test: TestItem) {}
   failed(_test: TestItem, _message: TestMessage) {}
+  appendOutput(_value: string) {}
   end() {}
 }
 
 export class TestController {
+  private readonly itemMap = new Map<string, TestItem>()
   public items = {
-    add: () => {},
-    forEach: (cb: (item: TestItem) => void) => {},
+    get: (id: string) => this.itemMap.get(id),
+    add: (item: TestItem) => { this.itemMap.set(item.id, item) },
+    delete: (id: string) => { this.itemMap.delete(id) },
+    forEach: (cb: (item: TestItem) => void) => { this.itemMap.forEach(cb) },
   }
   createTestItem(id: string, label: string, uri?: Uri): TestItem {
     return new TestItem(id, label, uri)
@@ -357,6 +383,13 @@ export class CancellationToken {
 }
 
 export const ConfigurationTarget = { Global: 1, Workspace: 2, WorkspaceFolder: 3 }
+
+export class RelativePattern {
+  constructor(
+    public base: string | { fsPath: string },
+    public pattern: string,
+  ) {}
+}
 
 export class TestRunRequest {
   public include?: TestItem[]
@@ -390,6 +423,27 @@ export const workspace = {
     if (disposables) {disposables.push(d)}
     return d
   },
+  onDidChangeWorkspaceFolders: (
+    _handler: (event: unknown) => void,
+    _thisArgs?: unknown,
+    disposables?: Array<{ dispose(): void }>,
+  ): { dispose(): void } => {
+    const d = { dispose: () => {} }
+    if (disposables) {disposables.push(d)}
+    return d
+  },
+  onDidGrantWorkspaceTrust: (
+    _handler: () => void,
+    _thisArgs?: unknown,
+    disposables?: Array<{ dispose(): void }>,
+  ): { dispose(): void } => {
+    const d = { dispose: () => {} }
+    if (disposables) {disposables.push(d)}
+    return d
+  },
+  isWorkspaceTrusted: true,
+  isTrusted: true,
+  registerTextDocumentContentProvider: () => ({ dispose: () => {} }),
   workspaceFolders: [{ uri: { fsPath: '/test/workspace' } }] as unknown[],
   getWorkspaceFolder: (_uri: unknown) => undefined,
   asRelativePath: (uri: Uri) => uri.fsPath.split('/').pop() ?? uri.fsPath,
@@ -408,11 +462,14 @@ export const workspace = {
   }),
   fs: {
     writeFile: (_uri: Uri, _content: Uint8Array) => Promise.resolve(),
+    readFile: (_uri: Uri) => Promise.resolve(new Uint8Array()),
   },
   applyEdit: (_edit: WorkspaceEdit) => Promise.resolve(true),
 }
 
 export const window = {
+  createTreeView: () => ({ dispose: () => {} }),
+  createTerminal: () => ({ sendText: () => {}, show: () => {}, dispose: () => {} }),
   createStatusBarItem: () => ({
     show: () => {},
   }),
@@ -438,6 +495,10 @@ export const window = {
 export const commands = {
   registerCommand: () => ({ dispose: () => {} }),
   executeCommand: () => Promise.resolve(),
+}
+
+export const extensions = {
+  getExtension: (_id: string) => undefined,
 }
 
 export const tests = {

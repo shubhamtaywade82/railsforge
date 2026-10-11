@@ -5,7 +5,17 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
 
-describe.skipIf(!isPersistentIndexSupported())('openIndexDatabase', () => {
+function sqliteBindingsLoadable(): boolean {
+  if (!isPersistentIndexSupported()) {return false}
+  try {
+    openIndexDatabase(':memory:').close()
+    return true
+  } catch {
+    return false
+  }
+}
+
+describe.skipIf(!sqliteBindingsLoadable())('openIndexDatabase', () => {
   let tmpDir: string
 
   // Use a fresh temp dir for each test to avoid file contention

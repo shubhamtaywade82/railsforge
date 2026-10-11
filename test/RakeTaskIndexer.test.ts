@@ -1,3 +1,7 @@
+import * as fs from 'fs'
+import * as os from 'os'
+import * as path from 'path'
+
 const { mockExecFile } = vi.hoisted(() => ({
   mockExecFile: vi.fn(),
 }))
@@ -5,7 +9,7 @@ const { mockExecFile } = vi.hoisted(() => ({
 vi.mock('child_process', () => ({ execFile: mockExecFile }))
 vi.mock('util', () => ({ promisify: () => mockExecFile }))
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { parseRakeTaskList, RakeTaskIndexer } from '../src/rake/RakeTaskIndexer'
 
 // Real `rake -T` output against a scratch Rakefile with a namespace, a top-level task,
@@ -39,18 +43,25 @@ describe('parseRakeTaskList', () => {
 
 describe('RakeTaskIndexer', () => {
   let indexer: RakeTaskIndexer
+  let workspace: string
 
   beforeEach(() => {
     vi.clearAllMocks()
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'rf-rake-'))
+    fs.writeFileSync(path.join(workspace, 'Gemfile'), 'source "https://rubygems.org"\n')
     indexer = new RakeTaskIndexer()
+  })
+
+  afterEach(() => {
+    fs.rmSync(workspace, { recursive: true, force: true })
   })
 
   it('returns tasks from bundle exec rake -T', async () => {
     mockExecFile.mockResolvedValue({ stdout: REAL_RAKE_T_OUTPUT })
-    const tasks = await indexer.listTasks('/workspace')
+    const tasks = await indexer.listTasks(workspace)
     expect(tasks).toHaveLength(4)
     expect(tasks[0].name).toBe('about')
-    expect(mockExecFile).toHaveBeenCalledWith('bundle', ['exec', 'rake', '-T'], expect.objectContaining({ cwd: '/workspace' }))
+    expect(mockExecFile).toHaveBeenCalledWith('bundle', ['exec', 'rake', '-T'], expect.objectContaining({ cwd: workspace }))
   })
 
   it('falls back to bare rake when bundle exec fails', async () => {
@@ -58,10 +69,10 @@ describe('RakeTaskIndexer', () => {
       .mockRejectedValueOnce(new Error('bundle not found'))
       .mockResolvedValueOnce({ stdout: 'rake custom  # Custom task\n' })
 
-    const tasks = await indexer.listTasks('/workspace')
+    const tasks = await indexer.listTasks(workspace)
     expect(tasks).toHaveLength(1)
     expect(tasks[0].name).toBe('custom')
-    expect(mockExecFile).toHaveBeenNthCalledWith(2, 'rake', ['-T'], expect.objectContaining({ cwd: '/workspace' }))
+    expect(mockExecFile).toHaveBeenNthCalledWith(2, 'rake', ['-T'], expect.objectContaining({ cwd: workspace }))
   })
 
   it('returns empty array when both bundle exec and bare rake fail', async () => {
@@ -69,13 +80,13 @@ describe('RakeTaskIndexer', () => {
       .mockRejectedValueOnce(new Error('bundle not found'))
       .mockRejectedValueOnce(new Error('rake not found'))
 
-    const tasks = await indexer.listTasks('/workspace')
+    const tasks = await indexer.listTasks(workspace)
     expect(tasks).toEqual([])
   })
 
   it('returns empty array from empty stdout via bundle', async () => {
     mockExecFile.mockResolvedValue({ stdout: '' })
-    const tasks = await indexer.listTasks('/workspace')
+    const tasks = await indexer.listTasks(workspace)
     expect(tasks).toEqual([])
     // Empty array is truthy, so no fallback to bare rake
     expect(mockExecFile).toHaveBeenCalledTimes(1)
@@ -86,7 +97,7 @@ describe('RakeTaskIndexer', () => {
       .mockRejectedValueOnce({})
       .mockResolvedValueOnce({ stdout: 'rake db:migrate  # Migrate\n' })
 
-    const tasks = await indexer.listTasks('/workspace')
+    const tasks = await indexer.listTasks(workspace)
     expect(tasks).toHaveLength(1)
     expect(tasks[0].name).toBe('db:migrate')
     expect(mockExecFile).toHaveBeenCalledTimes(2)

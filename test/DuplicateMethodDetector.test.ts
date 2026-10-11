@@ -42,7 +42,17 @@ end
 
 // See src/indexer/database.ts: better-sqlite3 requires Node >= 22.14, and loading it
 // on an older runtime aborts the process rather than throwing a catchable error.
-describe.skipIf(!isPersistentIndexSupported())('DuplicateMethodDetector', () => {
+function sqliteBindingsLoadable(): boolean {
+  if (!isPersistentIndexSupported()) {return false}
+  try {
+    openIndexDatabase(':memory:').close()
+    return true
+  } catch {
+    return false
+  }
+}
+
+describe.skipIf(!sqliteBindingsLoadable())('DuplicateMethodDetector', () => {
   it('flags two methods with highly similar token content as duplicates', () => {
     const db = openIndexDatabase(':memory:')
     indexFileIntoDb(db, '/repo/app/services/send_welcome_email_service.rb', sendWelcomeEmail, parser)

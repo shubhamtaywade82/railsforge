@@ -30,7 +30,10 @@ describe('docs/compatibility.md', () => {
     }
   })
 
-  const nm = path.join(repo, 'node_modules')
+  const distNm = path.join(repo, 'dist', 'node_modules')
+  const nm = fs.existsSync(path.join(distNm, 'better-sqlite3', 'prebuilds'))
+    ? distNm
+    : path.join(repo, 'node_modules')
   it.skipIf(!AST_INDEX_NATIVE_MODULES.every(m => fs.existsSync(path.join(nm, m, 'prebuilds'))))(
     'AST-index column matches the prebuilt binaries actually shipped',
     () => {

@@ -12,6 +12,7 @@ const { mockContext, vscodeMocks, mockDisposable, mockStatusBar, mockDiagnosticC
     subscriptions: { push: vi.fn((...items: unknown[]) => subs.push(...items)) },
     extensionUri: { fsPath: '/tmp/ext', toString: () => '/tmp/ext' } as unknown,
     extensionPath: '/tmp/ext',
+    extensionMode: 3,
     globalState: { get: vi.fn(() => false), update: vi.fn(() => Promise.resolve()) },
     secrets: { get: vi.fn(() => Promise.resolve('k')), store: vi.fn(() => Promise.resolve()), delete: vi.fn(() => Promise.resolve()) },
     globalStorageUri: { fsPath: '/tmp/sto', toString: () => '/tmp/sto' } as unknown,
@@ -55,6 +56,7 @@ const { mockContext, vscodeMocks, mockDisposable, mockStatusBar, mockDiagnosticC
     window: {
       registerWebviewViewProvider: vi.fn(() => d),
       registerTreeDataProvider: vi.fn(() => d),
+      createTreeView: vi.fn(() => d),
       createStatusBarItem: vi.fn(() => sb),
       createOutputChannel: vi.fn(() => ({ name: 'RF', appendLine: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(), show: vi.fn(), dispose: vi.fn() })),
       showInformationMessage: vi.fn(() => Promise.resolve()),
@@ -74,12 +76,16 @@ const { mockContext, vscodeMocks, mockDisposable, mockStatusBar, mockDiagnosticC
       tabGroups: { activeTabGroup: { activeTab: { input: { uri: { toString: () => 'file:///t.rb' } } } } },
     },
     workspace: {
+      isTrusted: true,
       workspaceFolders: [{ uri: { fsPath: '/tmp/app', toString: () => 'file:///tmp/app' }, name: 'a', index: 0 }],
       getConfiguration: vi.fn(() => ({ get: vi.fn(() => undefined), update: vi.fn(() => Promise.resolve()) })),
+      registerTextDocumentContentProvider: vi.fn(() => d),
       onDidOpenTextDocument: vi.fn((_cb: Function, _?, subs?: unknown[]) => { const dd = { dispose: vi.fn() }; if (subs) subs.push(dd); return dd }),
       onDidChangeTextDocument: vi.fn((_cb: Function, _?, subs?: unknown[]) => { const dd = { dispose: vi.fn() }; if (subs) subs.push(dd); return dd }),
       onDidSaveTextDocument: vi.fn((_cb: Function, _?, subs?: unknown[]) => { const dd = { dispose: vi.fn() }; if (subs) subs.push(dd); return dd }),
       onDidChangeConfiguration: vi.fn(() => d),
+      onDidChangeWorkspaceFolders: vi.fn(() => d),
+      onDidGrantWorkspaceTrust: vi.fn(() => d),
       createFileSystemWatcher: vi.fn(() => w),
       findFiles: vi.fn(() => Promise.resolve([])),
       openTextDocument: vi.fn(() => Promise.resolve({ uri: { toString: () => 'file:///t.md' } })),
@@ -88,12 +94,17 @@ const { mockContext, vscodeMocks, mockDisposable, mockStatusBar, mockDiagnosticC
     },
     commands: { registerCommand: vi.fn(() => d), executeCommand: vi.fn(() => Promise.resolve()) },
     extensions: { getExtension: vi.fn(() => undefined) },
+    lm: undefined,
+    McpStdioServerDefinition: undefined,
+    LanguageModelToolResult: class { constructor(_parts: unknown[]) {} },
+    LanguageModelTextPart: class { constructor(_text: string) {} },
     chat: undefined,
     EventEmitter: class EventEmitter { event() { return this } fire() {} dispose() {} },
     tests: { createTestController: vi.fn(() => ({ createRunProfile: vi.fn(), createTestRun: vi.fn(), dispose: vi.fn() })) },
     TestRunProfileKind: { Run: 1, Debug: 2, Coverage: 3 },
     WorkspaceEdit: vi.fn(),
     env: { language: 'en', appName: 'Visual Studio Code' },
+    ExtensionMode: { Production: 1, Development: 2, Test: 3 },
     TextDocumentSaveReason: { Manual: 1 },
   }
 
@@ -172,9 +183,9 @@ describe('extension activate', () => {
     expect(vscodeMocks.languages.registerDefinitionProvider.mock.calls.length).toBeGreaterThanOrEqual(5)
   })
 
-  it('registers tree data providers for all 3 views', () => {
+  it('registers tree views for architecture, patterns, and rake tasks', () => {
     activate(mockContext as any)
-    const ids = vscodeMocks.window.registerTreeDataProvider.mock.calls.map((c: any[]) => c[0])
+    const ids = vscodeMocks.window.createTreeView.mock.calls.map((c: any[]) => c[0])
     expect(ids).toContain('railsforge.architectureView')
     expect(ids).toContain('railsforge.patternCatalogView')
     expect(ids).toContain('railsforge.rakeTasksView')
@@ -300,16 +311,16 @@ describe('extension command handler execution', () => {
     expect(vscodeMocks.window.showInformationMessage).toHaveBeenCalled()
   })
 
-  it('showDependencyCycles shows warning when no persistent index', async () => {
+  it('showDependencyCycles prompts when AST index is not ready yet', async () => {
     const handler = getHandler('railsforge.showDependencyCycles')
     await handler()
-    expect(vscodeMocks.window.showWarningMessage).toHaveBeenCalled()
+    expect(vscodeMocks.window.showInformationMessage).toHaveBeenCalled()
   })
 
-  it('findDuplicateMethods shows warning when no persistent index', async () => {
+  it('findDuplicateMethods prompts when AST index is not ready yet', async () => {
     const handler = getHandler('railsforge.findDuplicateMethods')
     await handler()
-    expect(vscodeMocks.window.showWarningMessage).toHaveBeenCalled()
+    expect(vscodeMocks.window.showInformationMessage).toHaveBeenCalled()
   })
 
   it('setAiApiKey stores key when input provided', async () => {

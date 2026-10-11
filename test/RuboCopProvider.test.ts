@@ -1,4 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import * as fs from 'fs'
+import * as os from 'os'
+import * as path from 'path'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import * as vscode from '../test/__mocks__/vscode'
 import { RuboCopProvider } from '../src/lint/RuboCopProvider'
 
@@ -13,10 +16,21 @@ vi.mock('child_process', () => ({
 
 describe('RuboCopProvider', () => {
   let provider: RuboCopProvider
+  let workspace: string
 
   beforeEach(() => {
     vi.clearAllMocks()
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'rf-rubocop-'))
+    fs.writeFileSync(path.join(workspace, 'Gemfile'), 'source "https://rubygems.org"\n')
+    Object.defineProperty(vscode.workspace, 'workspaceFolders', {
+      value: [{ uri: { fsPath: workspace } }],
+      configurable: true,
+    })
     provider = new RuboCopProvider()
+  })
+
+  afterEach(() => {
+    fs.rmSync(workspace, { recursive: true, force: true })
   })
 
   function createMockChild(output: string, hasError = false) {
@@ -246,7 +260,8 @@ describe('RuboCopProvider', () => {
       })
       return createMockChild(offenseData)
     })
-    const doc = new vscode.TextDocument('test.rb', 'ruby', 'x = 1')
+    const rubyFile = path.join(workspace, 'test.rb')
+    const doc = new vscode.TextDocument(rubyFile, 'ruby', 'x = 1')
     await provider.lintDocument(doc as unknown as vscode.TextDocument)
     // Should have called spawn twice (bundle then direct)
     expect(spawnMock).toHaveBeenCalledTimes(2)

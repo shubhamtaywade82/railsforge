@@ -1,6 +1,6 @@
 const mocks = vi.hoisted(() => {
-  const mockIsSupported = vi.fn()
-  const mockGetLinuxGlibcVersion = vi.fn()
+  const mockGetSupport = vi.fn(() => ({ supported: true }))
+  const mockMissingPrebuilds = vi.fn(() => [] as string[])
   const mockClientCreate = vi.fn()
   const mockIndexFile = vi.fn()
   const mockRemoveFile = vi.fn()
@@ -11,8 +11,8 @@ const mocks = vi.hoisted(() => {
   const mockDepGraph = {}
   const mockDupDetector = {}
   return {
-    mockIsSupported,
-    mockGetLinuxGlibcVersion,
+    mockGetSupport,
+    mockMissingPrebuilds,
     mockClientCreate,
     mockIndexFile,
     mockRemoveFile,
@@ -26,8 +26,8 @@ const mocks = vi.hoisted(() => {
 })
 
 vi.mock('../src/indexer/nativeSupport', () => ({
-  isPersistentIndexSupported: mocks.mockIsSupported,
-  getLinuxGlibcVersion: mocks.mockGetLinuxGlibcVersion,
+  getPersistentIndexSupport: mocks.mockGetSupport,
+  missingPrebuilds: mocks.mockMissingPrebuilds,
 }))
 
 vi.mock('../src/indexer/PersistentIndexClient', () => ({
@@ -79,6 +79,8 @@ describe('PersistentIndexManager', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.mockGetSupport.mockReturnValue({ supported: true })
+    mocks.mockMissingPrebuilds.mockReturnValue([])
     vscode.workspace.createFileSystemWatcher = vi.fn(() => mockWatcher) as unknown as typeof vscode.workspace.createFileSystemWatcher
     mocks.mockClientCreate.mockResolvedValue(mockClient)
     mocks.mockGetDb.mockReturnValue({})
@@ -91,34 +93,30 @@ describe('PersistentIndexManager', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  it('returns null when workspaceRoot is empty', async () => {
+  it('returns failed when workspaceRoot is empty', async () => {
     const result = await PersistentIndexManager.activate({
       extensionPath: '/ext',
       subscriptions: [] as unknown[],
     } as unknown as vscode.ExtensionContext, '')
-    expect(result).toBeNull()
+    expect(result.status).toBe('failed')
   })
 
-  it('returns null when persistent index is not supported (non-linux)', async () => {
-    mocks.mockIsSupported.mockReturnValue(false)
-    mocks.mockGetLinuxGlibcVersion.mockReturnValue(undefined)
+  it('returns unsupported when persistent index is not supported', async () => {
+    mocks.mockGetSupport.mockReturnValue({ supported: false, reason: 'N-API too old' })
 
     const result = await PersistentIndexManager.activate({
       extensionPath: '/ext',
       subscriptions: [] as unknown[],
     } as unknown as vscode.ExtensionContext, '/workspace')
 
-    expect(result).toBeNull()
+    expect(result).toEqual({ status: 'unsupported', reason: 'N-API too old' })
     expect(mocks.mockLoggerWarn).toHaveBeenCalledWith(
-      expect.stringContaining('persistent AST SQLite index requires'),
+      expect.stringContaining('persistent AST index unavailable'),
     )
   })
 
-  it('includes GLIBC version in warning when on linux', async () => {
-    mocks.mockIsSupported.mockReturnValue(false)
-    const origPlatform = process.platform
-    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
-    mocks.mockGetLinuxGlibcVersion.mockReturnValue('2.31')
+  it('includes support reason in warning when unsupported', async () => {
+    mocks.mockGetSupport.mockReturnValue({ supported: false, reason: 'system GLIBC 2.31 is older than the required 2.33.' })
 
     await PersistentIndexManager.activate({
       extensionPath: '/ext',
@@ -126,13 +124,11 @@ describe('PersistentIndexManager', () => {
     } as unknown as vscode.ExtensionContext, '/workspace')
 
     expect(mocks.mockLoggerWarn).toHaveBeenCalledWith(
-      expect.stringContaining('GLIBC: 2.31'),
+      expect.stringContaining('GLIBC 2.31'),
     )
-    Object.defineProperty(process, 'platform', { value: origPlatform, configurable: true })
   })
 
-  it('returns null when client creation fails', async () => {
-    mocks.mockIsSupported.mockReturnValue(true)
+  it('returns failed when client creation fails', async () => {
     mocks.mockClientCreate.mockRejectedValue(new Error('worker failed'))
 
     const result = await PersistentIndexManager.activate({
@@ -140,15 +136,14 @@ describe('PersistentIndexManager', () => {
       subscriptions: [] as unknown[],
     } as unknown as vscode.ExtensionContext, tmpDir)
 
-    expect(result).toBeNull()
+    expect(result.status).toBe('failed')
     expect(mocks.mockLoggerError).toHaveBeenCalledWith(
-      expect.stringContaining('persistent AST index unavailable'),
+      expect.stringContaining('persistent AST index failed to start'),
       expect.any(Error),
     )
   })
 
   it('scans workspace files and sets up watcher on successful activation', async () => {
-    mocks.mockIsSupported.mockReturnValue(true)
     const origFindFiles = vscode.workspace.findFiles
     vscode.workspace.findFiles = vi.fn().mockResolvedValue([
       { fsPath: path.join(tmpDir, 'app/models/user.rb') } as unknown as vscode.Uri,
@@ -157,13 +152,13 @@ describe('PersistentIndexManager', () => {
     fs.mkdirSync(path.join(tmpDir, 'app/models'), { recursive: true })
     fs.writeFileSync(path.join(tmpDir, 'app/models/user.rb'), 'class User; end')
 
-    const subs: unknown[] = []
     const result = await PersistentIndexManager.activate({
       extensionPath: '/ext',
-      subscriptions: subs,
+      subscriptions: [] as unknown[],
     } as unknown as vscode.ExtensionContext, tmpDir)
 
-    expect(result).not.toBeNull()
+    expect(result.status).toBe('ready')
+    if (result.status !== 'ready') {return}
     expect(fs.existsSync(path.join(tmpDir, '.railsforge'))).toBe(true)
     expect(mocks.mockClientCreate).toHaveBeenCalledWith(
       '/ext/dist/indexer/indexer.worker.js',
@@ -173,14 +168,12 @@ describe('PersistentIndexManager', () => {
       path.join(tmpDir, 'app/models/user.rb'),
       'class User; end',
     )
-    expect(subs).toContain(result)
     expect(vscode.workspace.createFileSystemWatcher).toHaveBeenCalled()
 
     vscode.workspace.findFiles = origFindFiles
   })
 
   it('skips unreadable files during scan', async () => {
-    mocks.mockIsSupported.mockReturnValue(true)
     const origFindFiles = vscode.workspace.findFiles
     const goodFile = path.join(tmpDir, 'app/models/good.rb')
     const badFile = path.join(tmpDir, 'app/models/bad.rb')
@@ -197,7 +190,7 @@ describe('PersistentIndexManager', () => {
       subscriptions: [] as unknown[],
     } as unknown as vscode.ExtensionContext, tmpDir)
 
-    expect(result).not.toBeNull()
+    expect(result.status).toBe('ready')
     expect(mocks.mockIndexFile).toHaveBeenCalledTimes(1)
     expect(mocks.mockIndexFile).toHaveBeenCalledWith(goodFile, 'class Good; end')
 
@@ -205,17 +198,17 @@ describe('PersistentIndexManager', () => {
   })
 
   it('disposes the client when dispose is called', async () => {
-    mocks.mockIsSupported.mockReturnValue(true)
     const origFindFiles = vscode.workspace.findFiles
     vscode.workspace.findFiles = vi.fn().mockResolvedValue([])
 
-    const manager = await PersistentIndexManager.activate({
+    const result = await PersistentIndexManager.activate({
       extensionPath: '/ext',
       subscriptions: [] as unknown[],
     } as unknown as vscode.ExtensionContext, tmpDir)
 
-    expect(manager).not.toBeNull()
-    manager!.dispose()
+    expect(result.status).toBe('ready')
+    if (result.status !== 'ready') {return}
+    result.manager.dispose()
     expect(mocks.mockClientDispose).toHaveBeenCalled()
 
     vscode.workspace.findFiles = origFindFiles
@@ -235,12 +228,13 @@ describe('PersistentIndexManager', () => {
 
       const origFindFiles = vscode.workspace.findFiles
       vscode.workspace.findFiles = vi.fn().mockResolvedValue([])
-      const manager = await PersistentIndexManager.activate({
+      const result = await PersistentIndexManager.activate({
         extensionPath: '/ext',
         subscriptions: [] as unknown[],
       } as unknown as vscode.ExtensionContext, tmpDir)
       vscode.workspace.findFiles = origFindFiles
-      return manager!
+      expect(result.status).toBe('ready')
+      return (result as { status: 'ready'; manager: PersistentIndexManager }).manager
     }
 
     it('reindexes an existing file when onDidChange fires', async () => {
@@ -257,7 +251,7 @@ describe('PersistentIndexManager', () => {
 
     it('removes a file when reindex finds the file no longer exists', async () => {
       const manager = await activateWithCapturedWatcher()
-      const filePath = path.join(tmpDir, 'app/models/deleted.rb')
+      const filePath = path.join(tmpDir, 'app/models/gone.rb')
 
       await capturedCallbacks.onDidChange!(new vscode.Uri(filePath))
       expect(mocks.mockRemoveFile).toHaveBeenCalledWith(filePath)
@@ -267,7 +261,7 @@ describe('PersistentIndexManager', () => {
 
     it('removes a file when onDidDelete fires', async () => {
       const manager = await activateWithCapturedWatcher()
-      const filePath = path.join(tmpDir, 'app/models/gone.rb')
+      const filePath = path.join(tmpDir, 'app/models/deleted.rb')
 
       await capturedCallbacks.onDidDelete!(new vscode.Uri(filePath))
       expect(mocks.mockRemoveFile).toHaveBeenCalledWith(filePath)
@@ -277,15 +271,16 @@ describe('PersistentIndexManager', () => {
 
     it('skips files that throw on read during reindex', async () => {
       const manager = await activateWithCapturedWatcher()
-      const filePath = path.join(tmpDir, 'app/models/perm_denied.rb')
+      const filePath = path.join(tmpDir, 'app/models/bad.rb')
       fs.mkdirSync(path.join(tmpDir, 'app/models'), { recursive: true })
-      fs.writeFileSync(filePath, 'class Foo; end')
-      fs.chmodSync(filePath, 0o000)
+      fs.writeFileSync(filePath, 'class Bad; end')
+      const origRead = fs.promises.readFile
+      fs.promises.readFile = vi.fn().mockRejectedValue(new Error('EACCES')) as typeof fs.promises.readFile
 
-      // Should not throw even though file is unreadable
       await capturedCallbacks.onDidChange!(new vscode.Uri(filePath))
+      expect(mocks.mockIndexFile).not.toHaveBeenCalled()
 
-      fs.chmodSync(filePath, 0o644)
+      fs.promises.readFile = origRead
       manager.dispose()
     })
 
