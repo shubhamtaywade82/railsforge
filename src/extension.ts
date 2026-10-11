@@ -50,6 +50,7 @@ import { firstCandidate, projectVersionManager, setVersionManagerSettingProvider
 import { ShellKind, shellKindFromPath, hasPathSegment } from './util/ShellCommand'
 import { patchFileMatches } from './patch/PatchPaths'
 import { EnvironmentDetector, ProjectEnvironment, isKnownVersion } from './environment/EnvironmentDetector'
+import { reloadWindowForRubyLspRecovery } from './environment/RubyLspExtension'
 import { RailsDeprecationLinter } from './lint/RailsDeprecationLinter'
 import { DesignPrincipleLinter } from './principles/DesignPrincipleLinter'
 import { VersionDocsEngine } from './docs/VersionDocsEngine'
@@ -510,6 +511,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
       const doc = await vscode.workspace.openTextDocument({ content: renderDiagnosticsDoc(info), language: 'markdown' })
       await vscode.window.showTextDocument(doc, { preview: true })
     }),
+    vscode.commands.registerCommand('railsforge.recoverRubyLsp', () => reloadWindowForRubyLspRecovery()),
   )
 
   const rakeTaskIndexer = new RakeTaskIndexer()

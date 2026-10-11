@@ -812,6 +812,11 @@
         "category": "RailsForge"
       },
       {
+        "command": "railsforge.recoverRubyLsp",
+        "title": "RailsForge: Recover Ruby LSP (Reload Window)",
+        "category": "RailsForge"
+      },
+      {
         "command": "railsforge.openPattern",
         "title": "RailsForge: Open Design Pattern Explanation",
         "category": "RailsForge"

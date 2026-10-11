@@ -72,6 +72,24 @@ export function mergeArrayConfig(
   return Array.from(set)
 }
 
+/** True when every merged key already matches the workspace value (extra user keys are ignored). */
+export function mergedObjectConfigUnchanged(
+  current: Record<string, boolean> | undefined,
+  merged: Record<string, boolean>,
+): boolean {
+  const base = current ?? {}
+  for (const [key, value] of Object.entries(merged)) {
+    if (base[key] !== value) {return false}
+  }
+  return true
+}
+
+export function stringSetsEqual(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) {return false}
+  const sb = new Set(b)
+  return a.every(item => sb.has(item))
+}
+
 export async function optimizeRailsWorkspace(
   target: vscode.ConfigurationTarget = vscode.ConfigurationTarget.Workspace,
 ): Promise<void> {
@@ -82,15 +100,26 @@ export async function optimizeRailsWorkspace(
   const currentWatchers = filesConfig.get<Record<string, boolean>>('watcherExclude', {})
   const currentSearch = searchConfig.get<Record<string, boolean>>('exclude', {})
   const currentLspExcludes = rubyLspConfig.get<string[]>('indexing.excludedPatterns', [])
+  const currentRubocopServerMode = rubyLspConfig.get<boolean>('rubocop.serverMode')
 
   const updatedWatchers = mergeObjectConfig(currentWatchers, RECOMMENDED_WATCHER_EXCLUDES)
   const updatedSearch = mergeObjectConfig(currentSearch, RECOMMENDED_SEARCH_EXCLUDES)
   const updatedLspExcludes = mergeArrayConfig(currentLspExcludes, RECOMMENDED_RUBY_LSP_EXCLUDES)
 
-  await filesConfig.update('watcherExclude', updatedWatchers, target)
-  await searchConfig.update('exclude', updatedSearch, target)
-  await rubyLspConfig.update('indexing.excludedPatterns', updatedLspExcludes, target)
-  await rubyLspConfig.update('rubocop.serverMode', true, target)
+  // Only write settings that actually change — redundant rubyLsp.* updates restart the
+  // Ruby LSP / RuboCop add-on and can contribute to Gemfile.lock restart storms.
+  if (!mergedObjectConfigUnchanged(currentWatchers, updatedWatchers)) {
+    await filesConfig.update('watcherExclude', updatedWatchers, target)
+  }
+  if (!mergedObjectConfigUnchanged(currentSearch, updatedSearch)) {
+    await searchConfig.update('exclude', updatedSearch, target)
+  }
+  if (!stringSetsEqual(currentLspExcludes, updatedLspExcludes)) {
+    await rubyLspConfig.update('indexing.excludedPatterns', updatedLspExcludes, target)
+  }
+  if (currentRubocopServerMode !== true) {
+    await rubyLspConfig.update('rubocop.serverMode', true, target)
+  }
 }
 
 export async function handleWorkspaceAutoOptimization(

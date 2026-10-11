@@ -9,7 +9,7 @@ function healthy(): DiagnosticsInfo {
     astIndex: { supported: true, roots: { '/p': 'ready' } },
     nativeModules: [{ name: 'better-sqlite3', platformKey: 'linux-x64', prebuildPresent: true, loaded: true }],
     project: { root: '/p', rubyVersion: '3.3.6', railsVersion: '8.0.1', projectType: 'monolith', testFramework: 'rspec', versionManager: 'mise', launcher: 'bin/ stubs' },
-    tools: { rubyLsp: true, rdbg: true },
+    tools: { rubyLsp: true, rubyLspVersion: '0.12.0', rdbg: true },
     skills: { sha: 'dd22f25b435c40e38b28bd5226ef810adf1f4edc', skillCount: 87 },
     ai: { provider: 'ollama', model: 'qwen2.5-coder:14b', hasApiKey: false },
   }

@@ -6,6 +6,7 @@
 
 import * as vscode from 'vscode'
 import * as path from 'path'
+import { getRubyLspExtensionVersion } from '../environment/RubyLspExtension'
 import { getPersistentIndexSupport, hasPrebuild } from '../indexer/nativeSupport'
 import { DiagnosticsInfo, NativeModuleReport } from './Diagnostics'
 
@@ -62,6 +63,7 @@ export function collectDiagnostics(inputs: DiagnosticsInputs): DiagnosticsInfo {
     project: inputs.project,
     tools: {
       rubyLsp: Boolean(vscode.extensions.getExtension('Shopify.ruby-lsp')),
+      rubyLspVersion: getRubyLspExtensionVersion(),
       rdbg: Boolean(vscode.extensions.getExtension('KoichiSasada.vscode-rdbg')),
     },
     skills: inputs.skills,

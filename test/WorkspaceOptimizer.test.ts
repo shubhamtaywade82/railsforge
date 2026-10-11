@@ -12,6 +12,8 @@ import {
   isOptimizationNeeded,
   mergeObjectConfig,
   mergeArrayConfig,
+  mergedObjectConfigUnchanged,
+  stringSetsEqual,
   optimizeRailsWorkspace,
   handleWorkspaceAutoOptimization,
   RECOMMENDED_WATCHER_EXCLUDES,
@@ -149,6 +151,40 @@ describe('WorkspaceOptimizer', () => {
       expect(watcherUpdate?.value).toHaveProperty('**/log/**', true)
 
       vscode.workspace.getConfiguration = origGetConfig
+    })
+
+    it('skips configuration updates when workspace settings already match', async () => {
+      const origGetConfig = vscode.workspace.getConfiguration
+      const fullWatchers = mergeObjectConfig({}, RECOMMENDED_WATCHER_EXCLUDES)
+      const fullSearch = mergeObjectConfig({}, RECOMMENDED_SEARCH_EXCLUDES)
+      const fullLspExcludes = mergeArrayConfig([], RECOMMENDED_RUBY_LSP_EXCLUDES)
+      vscode.workspace.getConfiguration = setupMockConfig({
+        'files.watcherExclude': fullWatchers,
+        'search.exclude': fullSearch,
+        'rubyLsp.indexing.excludedPatterns': fullLspExcludes,
+        'rubyLsp.rubocop.serverMode': true,
+      })
+
+      await optimizeRailsWorkspace()
+
+      expect(configUpdates).toHaveLength(0)
+
+      vscode.workspace.getConfiguration = origGetConfig
+    })
+  })
+
+  describe('mergedObjectConfigUnchanged', () => {
+    it('returns true when merged keys already match', () => {
+      const current = { '**/tmp/**': true, '**/custom/**': false }
+      const merged = mergeObjectConfig(current, RECOMMENDED_WATCHER_EXCLUDES)
+      expect(mergedObjectConfigUnchanged(current, merged)).toBe(true)
+    })
+  })
+
+  describe('stringSetsEqual', () => {
+    it('compares arrays as sets', () => {
+      expect(stringSetsEqual(['a', 'b'], ['b', 'a'])).toBe(true)
+      expect(stringSetsEqual(['a'], ['a', 'b'])).toBe(false)
     })
   })
 
