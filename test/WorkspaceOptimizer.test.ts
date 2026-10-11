@@ -175,7 +175,7 @@ describe('WorkspaceOptimizer', () => {
 
   describe('mergedObjectConfigUnchanged', () => {
     it('returns true when merged keys already match', () => {
-      const current = { '**/tmp/**': true, '**/custom/**': false }
+      const current = mergeObjectConfig({ '**/custom/**': false }, RECOMMENDED_WATCHER_EXCLUDES)
       const merged = mergeObjectConfig(current, RECOMMENDED_WATCHER_EXCLUDES)
       expect(mergedObjectConfigUnchanged(current, merged)).toBe(true)
     })

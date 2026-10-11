@@ -31,13 +31,14 @@ describe('compareVersions edge cases', () => {
 describe('evaluateDiagnostics: every branch emits exactly its finding', () => {
   it('healthy host yields precise ok findings in order', () => {
     const fs = evaluateDiagnostics(healthy())
-    expect(fs.map(f => `${f.level}:${f.area}`)).toEqual(['ok:Host', 'ok:Native', 'ok:AST index', 'ok:Project', 'ok:Skills', 'ok:AI'])
+    expect(fs.map(f => `${f.level}:${f.area}`)).toEqual(['ok:Host', 'ok:Native', 'ok:AST index', 'ok:Project', 'ok:Tools', 'ok:Skills', 'ok:AI'])
     expect(fs[0].message).toBe(`VS Code 1.140.0 (minimum ${MIN_VSCODE_VERSION}).`)
     expect(fs[1].message).toBe('better-sqlite3 loads (linux-x64).')
     expect(fs[2].message).toBe('Ready/starting for 1 root(s).')
     expect(fs[3].message).toBe('Ruby 3.3.6.')
-    expect(fs[4].message).toBe('87 skills (pack dd22f25b).')
-    expect(fs[5].message).toBe('Provider "ollama", model "qwen2.5-coder:14b".')
+    expect(fs[4].message).toBe('Shopify Ruby LSP extension 0.12.0.')
+    expect(fs[5].message).toBe('87 skills (pack dd22f25b).')
+    expect(fs[6].message).toBe('Provider "ollama", model "qwen2.5-coder:14b".')
   })
 
   it('old VS Code is an error, not an ok', () => {
@@ -82,7 +83,8 @@ describe('evaluateDiagnostics: every branch emits exactly its finding', () => {
     expect(find(evaluateDiagnostics({ ...healthy(), tools: { rubyLsp: false, rdbg: true } }), 'Tools')).toHaveLength(1)
     expect(find(evaluateDiagnostics({ ...healthy(), tools: { rubyLsp: true, rdbg: false } }), 'Tools')).toHaveLength(1)
     expect(find(evaluateDiagnostics({ ...healthy(), tools: { rubyLsp: false, rdbg: false } }), 'Tools')).toHaveLength(2)
-    expect(find(evaluateDiagnostics(healthy()), 'Tools')).toHaveLength(0)
+    expect(find(evaluateDiagnostics(healthy()), 'Tools', 'warn')).toHaveLength(0)
+    expect(find(evaluateDiagnostics(healthy()), 'Tools', 'ok')).toHaveLength(1)
     expect(find(evaluateDiagnostics({ ...healthy(), skills: undefined }), 'Skills')).toEqual([expect.objectContaining({ level: 'warn' })])
     for (const provider of ['openai', 'anthropic']) {
       expect(find(evaluateDiagnostics({ ...healthy(), ai: { provider, model: 'm', hasApiKey: false } }), 'AI', 'warn')).toHaveLength(1)
