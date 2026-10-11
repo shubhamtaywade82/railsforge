@@ -21,7 +21,14 @@ const { mockContext, vscodeMocks, mockDisposable, mockStatusBar, mockDiagnosticC
     StatusBarAlignment: { Left: 1, Right: 2 },
     ViewColumn: { One: 1, Two: 2, Beside: 3 },
     TextEditorRevealType: { InCenter: 3, Default: 0 },
-    CodeActionKind: { QuickFix: 'quickfix', RefactorExtract: 'refactor.extract', Refactor: 'refactor' },
+    CodeActionKind: class CodeActionKind {
+      constructor(public readonly value: string) {}
+      append(parts: string) { return new CodeActionKind(`${this.value}.${parts}`) }
+      static readonly QuickFix = new CodeActionKind('QuickFix')
+      static readonly Refactor = new CodeActionKind('Refactor')
+      static readonly RefactorExtract = new CodeActionKind('RefactorExtract')
+      static readonly RefactorRewrite = new CodeActionKind('RefactorRewrite')
+    },
     DiagnosticSeverity: { Error: 0, Warning: 1, Information: 2, Hint: 3 },
     CompletionItemKind: { Text: 0, Method: 1, Function: 2, Class: 6, Snippet: 14, File: 16 },
     Uri: { file: vi.fn((p: string) => ({ fsPath: p, scheme: 'file', toString: () => `file://${p}` })), parse: vi.fn((p: string) => ({ fsPath: p, scheme: 'file', toString: () => p })) },

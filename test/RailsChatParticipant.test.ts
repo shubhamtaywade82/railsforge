@@ -37,7 +37,7 @@ describe('RailsChatParticipant', () => {
     const participant = RailsChatParticipant.getInstance()
     const origChat = vscode.chat
     delete (vscode as any).chat
-    expect(() => participant.register({ subscriptions: [] } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer)).not.toThrow()
+    expect(() => participant.register({ subscriptions: [] } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer, () => 'rspec', () => [])).not.toThrow()
     vscode.chat = origChat
   })
 
@@ -49,7 +49,7 @@ describe('RailsChatParticipant', () => {
     })
     const subs: any[] = []
     const participant = RailsChatParticipant.getInstance()
-    participant.register({ subscriptions: subs } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer)
+    participant.register({ subscriptions: subs } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer, () => 'rspec', () => [])
     expect(vscode.chat.createChatParticipant).toHaveBeenCalledWith('railsforge.agent', expect.any(Function))
     expect(subs.length).toBe(1)
   })
@@ -61,7 +61,7 @@ describe('RailsChatParticipant', () => {
       return { dispose: vi.fn() }
     })
     const participant = RailsChatParticipant.getInstance()
-    participant.register({ subscriptions: [] } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer)
+    participant.register({ subscriptions: [] } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer, () => 'rspec', () => [])
 
     const progressCalls: string[] = []
     const markdownCalls: string[] = []
@@ -105,7 +105,7 @@ describe('RailsChatParticipant', () => {
       return { dispose: vi.fn() }
     })
     const participant = RailsChatParticipant.getInstance()
-    participant.register({ subscriptions: [] } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer)
+    participant.register({ subscriptions: [] } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer, () => 'rspec', () => [])
 
     const buttonCalls: any[] = []
     const stream = {
@@ -142,7 +142,7 @@ describe('RailsChatParticipant', () => {
       return { dispose: vi.fn() }
     })
     const participant = RailsChatParticipant.getInstance()
-    participant.register({ subscriptions: [] } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer)
+    participant.register({ subscriptions: [] } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer, () => 'rspec', () => [])
 
     const buttonCalls: any[] = []
     const stream = {
@@ -178,7 +178,7 @@ describe('RailsChatParticipant', () => {
       return { dispose: vi.fn() }
     })
     const participant = RailsChatParticipant.getInstance()
-    participant.register({ subscriptions: [] } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer)
+    participant.register({ subscriptions: [] } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer, () => 'rspec', () => [])
 
     const buttonCalls: any[] = []
     const stream = {
@@ -211,7 +211,7 @@ describe('RailsChatParticipant', () => {
       return { dispose: vi.fn() }
     })
     const participant = RailsChatParticipant.getInstance()
-    participant.register({ subscriptions: [] } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer)
+    participant.register({ subscriptions: [] } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer, () => 'rspec', () => [])
 
     const buttonCalls: any[] = []
     const stream = {
@@ -251,7 +251,7 @@ describe('RailsChatParticipant', () => {
     ] as any)
 
     const participant = RailsChatParticipant.getInstance()
-    participant.register({ subscriptions: [] } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer)
+    participant.register({ subscriptions: [] } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer, () => 'rspec', () => [])
 
     const markdownCalls: string[] = []
     const stream = {
@@ -283,7 +283,7 @@ describe('RailsChatParticipant', () => {
     })
 
     const participant = RailsChatParticipant.getInstance()
-    participant.register({ subscriptions: [] } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer)
+    participant.register({ subscriptions: [] } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer, () => 'rspec', () => [])
 
     const markdownCalls: string[] = []
     const stream = {
@@ -314,7 +314,7 @@ describe('RailsChatParticipant', () => {
       return { dispose: vi.fn() }
     })
     const participant = RailsChatParticipant.getInstance()
-    participant.register({ subscriptions: [] } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer)
+    participant.register({ subscriptions: [] } as any, mockAgent, mockSchemaIndexer, mockRoutesIndexer, () => 'rspec', () => [])
 
     const buttonCalls: any[] = []
     const stream = {

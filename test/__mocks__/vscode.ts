@@ -183,15 +183,28 @@ export class CodeActionContext {
 }
 
 export class WorkspaceEdit {
+  readonly operations: Array<{ kind: string; uri?: unknown; range?: unknown; position?: unknown; newText?: string; options?: unknown; oldUri?: unknown; newUri?: unknown }> = []
   public _edits: Array<{ uri: unknown; range?: Range; text: string; position?: Position }> = []
-  replace(_uri: unknown, _range: Range, _newText: string) {
-    this._edits.push({ uri: _uri, range: _range, text: _newText })
+  replace(uri: unknown, range: unknown, newText: string): void {
+    this.operations.push({ kind: 'replace', uri, range, newText })
+    this._edits.push({ uri, range: range as Range, text: newText })
   }
-  insert(_uri: unknown, _position: Position, _newText: string) {
-    this._edits.push({ uri: _uri, position: _position, text: _newText })
+  insert(uri: unknown, position: unknown, newText: string): void {
+    this.operations.push({ kind: 'insert', uri, position, newText })
+    this._edits.push({ uri, position: position as Position, text: newText })
   }
-  delete(_uri: unknown, _range: Range) {
-    this._edits.push({ uri: _uri, range: _range, text: '' })
+  delete(uri: unknown, range: unknown): void {
+    this.operations.push({ kind: 'delete', uri, range })
+    this._edits.push({ uri, range: range as Range, text: '' })
+  }
+  createFile(uri: unknown, options?: unknown): void {
+    this.operations.push({ kind: 'createFile', uri, options })
+  }
+  renameFile(oldUri: unknown, newUri: unknown, options?: unknown): void {
+    this.operations.push({ kind: 'renameFile', oldUri, newUri, options })
+  }
+  deleteFile(uri: unknown, options?: unknown): void {
+    this.operations.push({ kind: 'deleteFile', uri, options })
   }
 }
 
@@ -199,6 +212,9 @@ export class Uri {
   public fsPath: string
   constructor(fsPath: string) {
     this.fsPath = fsPath
+  }
+  get path(): string {
+    return this.fsPath.replace(/\\/g, '/')
   }
   static file(path: string): Uri {
     return new Uri(path)
@@ -434,6 +450,7 @@ export const languages = {
     delete: () => {},
     dispose: () => {},
   }),
+  getDiagnostics: () => [] as Diagnostic[],
 }
 
 export type ProviderResult<T> = T | Promise<T> | undefined

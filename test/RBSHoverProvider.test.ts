@@ -14,13 +14,13 @@ describe('RBSHoverProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    provider = new RBSHoverProvider(index)
+    provider = new RBSHoverProvider(() => index)
   })
 
   it('should return null when index is empty', () => {
     const doc = new vscode.TextDocument('test.rb', 'ruby', 'def save; end')
     const emptyIndex = { isEmpty: true, lookup: vi.fn() } as any
-    const emptyProvider = new RBSHoverProvider(emptyIndex)
+    const emptyProvider = new RBSHoverProvider(() => emptyIndex)
     const result = emptyProvider.provideHover(doc as unknown as vscode.TextDocument, new vscode.Position(0, 4))
     expect(result).toBeNull()
   })

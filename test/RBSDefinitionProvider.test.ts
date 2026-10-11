@@ -61,7 +61,7 @@ describe('RBSDefinitionProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    provider = new RBSDefinitionProvider(index)
+    provider = new RBSDefinitionProvider(() => index)
   })
 
   it('should return null when index is empty', () => {
@@ -69,7 +69,7 @@ describe('RBSDefinitionProvider', () => {
       isEmpty: true,
       lookupExact: vi.fn(),
     } as unknown as import('../src/types/RBSIndex').RBSIndex
-    const emptyProvider = new RBSDefinitionProvider(emptyIndex)
+    const emptyProvider = new RBSDefinitionProvider(() => emptyIndex)
     const doc = new vscode.TextDocument('test.rb', 'ruby', '  def save; end')
     const result = emptyProvider.provideDefinition(doc as unknown as vscode.TextDocument, new vscode.Position(1, 6))
     expect(result).toBeNull()
