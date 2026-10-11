@@ -63,7 +63,7 @@ export function collectDiagnostics(inputs: DiagnosticsInputs): DiagnosticsInfo {
     project: inputs.project,
     tools: {
       rubyLsp: Boolean(vscode.extensions.getExtension('Shopify.ruby-lsp')),
-      rubyLspVersion: getRubyLspExtensionVersion(),
+      rubyLspExtensionVersion: getRubyLspExtensionVersion(),
       rdbg: Boolean(vscode.extensions.getExtension('KoichiSasada.vscode-rdbg')),
     },
     skills: inputs.skills,

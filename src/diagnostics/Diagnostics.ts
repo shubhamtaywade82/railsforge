@@ -5,8 +5,6 @@
  * Never includes secrets: AI settings are reduced to provider, model and whether a key exists.
  */
 
-import { MIN_RUBY_LSP_EXTENSION_VERSION } from '../environment/RubyLspExtension'
-
 export const MIN_VSCODE_VERSION = '1.96.0'
 
 export type FindingLevel = 'ok' | 'info' | 'warn' | 'error'
@@ -43,8 +41,10 @@ export interface DiagnosticsInfo {
     testFramework: string
     versionManager: string
     launcher: string
+    /** Locked `ruby-lsp` gem version from this project's Gemfile.lock, when present. */
+    rubyLspGemVersion?: string
   }
-  tools: { rubyLsp: boolean; rubyLspVersion?: string; rdbg: boolean }
+  tools: { rubyLsp: boolean; rubyLspExtensionVersion?: string; rdbg: boolean }
   skills?: { sha: string; skillCount: number }
   ai: { provider: string; model: string; hasApiKey: boolean }
 }
@@ -115,21 +115,27 @@ export function evaluateDiagnostics(info: DiagnosticsInfo): Finding[] {
     if (isRails && info.project.railsVersion === UNKNOWN) {
       add('warn', 'Project', 'This looks like a Rails app but the Rails version could not be determined from Gemfile.lock.', 'Run `bundle install` so Gemfile.lock lists rails.')
     }
+    if (info.project.rubyLspGemVersion) {
+      add('ok', 'Project', `ruby-lsp gem ${info.project.rubyLspGemVersion} (Gemfile.lock).`)
+    }
   }
 
-  if (!info.tools.rubyLsp) {
+  const lockedRubyLsp = info.project.rubyLspGemVersion
+  if (lockedRubyLsp && !info.tools.rubyLsp) {
+    add(
+      'warn',
+      'Tools',
+      `This project locks ruby-lsp ${lockedRubyLsp} but the Shopify Ruby LSP editor extension is not installed.`,
+      'Install shopify.ruby-lsp so the editor uses the locked gem via Bundler.',
+    )
+  } else if (!info.tools.rubyLsp) {
     add('info', 'Tools', 'Shopify Ruby LSP is not installed; RailsForge complements it (Ruby facts) but works without it.', 'Install shopify.ruby-lsp for completion/definition/diagnostics.')
-  } else if (info.tools.rubyLspVersion) {
-    if (compareVersions(info.tools.rubyLspVersion, MIN_RUBY_LSP_EXTENSION_VERSION) < 0) {
-      add(
-        'warn',
-        'Tools',
-        `Shopify Ruby LSP extension ${info.tools.rubyLspVersion} is older than ${MIN_RUBY_LSP_EXTENSION_VERSION}; restart loops and "Client got disposed" failures were fixed in newer releases.`,
-        'Update the Ruby LSP extension. If Ruby features are already dead, run "RailsForge: Recover Ruby LSP (Reload Window)".',
-      )
-    } else {
-      add('ok', 'Tools', `Shopify Ruby LSP extension ${info.tools.rubyLspVersion}.`)
-    }
+  } else {
+    const extVer = info.tools.rubyLspExtensionVersion
+    const detail = lockedRubyLsp
+      ? `Shopify Ruby LSP extension${extVer ? ` ${extVer}` : ''}; project locks ruby-lsp ${lockedRubyLsp}.`
+      : `Shopify Ruby LSP extension${extVer ? ` ${extVer}` : ''} (no ruby-lsp entry in this project's Gemfile.lock).`
+    add('ok', 'Tools', detail)
   }
   if (!info.tools.rdbg) {
     add('info', 'Tools', 'The Ruby debugger extension (KoichiSasada.vscode-rdbg) is not installed; "Debug" test profiles fall back to a terminal.')
@@ -181,6 +187,7 @@ export function renderDiagnosticsDoc(info: DiagnosticsInfo, findings: readonly F
     `| Tests | ${info.project.testFramework} |`,
     `| Version manager | ${info.project.versionManager} |`,
     `| Tool launcher | ${info.project.launcher} |`,
+    `| ruby-lsp (lock) | ${info.project.rubyLspGemVersion ?? '—'} |`,
     '', '## AI', '',
     `Provider \`${info.ai.provider}\`, model \`${info.ai.model}\`, API key ${info.ai.hasApiKey ? 'stored' : 'not stored'} (the key itself is never shown).`,
     '',
