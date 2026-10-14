@@ -1991,9 +1991,9 @@
     "@eslint/js": "^10.0.1",
     "@stryker-mutator/core": "^10.0.0",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.5",
     "@types/vscode": "~1.96.0",
-    "@typescript-eslint/eslint-plugin": "^8.71.0",
+    "@typescript-eslint/eslint-plugin": "^8.71.1",
     "@typescript-eslint/parser": "^8.67.0",
     "@vitest/coverage-v8": "5.0.3",
     "@vscode/test-cli": "^0.0.15",
@@ -2009,10 +2009,10 @@
     "webpack-cli": "^7.2.3"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.32.0",
-    "@nemesis-oss/ollama-sdk": "^1.8.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@nemesis-oss/ollama-sdk": "^1.13.0",
     "better-sqlite3": "^13.0.3",
-    "js-yaml": "^5.4.2",
+    "js-yaml": "^5.4.3",
     "tree-sitter": "^0.21.1",
     "tree-sitter-ruby": "^0.23.1",
     "zod": "^4.6.5"
