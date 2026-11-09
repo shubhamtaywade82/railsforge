@@ -82,12 +82,21 @@ export function buildDeterministicRecommendations(
       alternatives,
       benefit: best.benefit,
       risk: best.risk,
-      affectedFiles: [candidate.path],
+      affectedFiles: affectedFilesOf(candidate),
       steps: best.steps(candidate),
       verification: best.verification(candidate),
     })
   }
   return rank(built).slice(0, limit)
+}
+
+/**
+ * Files a recommendation may change: the candidate's own file, then the partner files of a cross-file
+ * duplicate. Capped at the advisor's file limit so a plan can never span more files than it can validate.
+ */
+export function affectedFilesOf(candidate: Candidate): string[] {
+  const files = [candidate.path, ...(candidate.metrics.partnerPaths ?? [])]
+  return [...new Set(files)].slice(0, ADVISOR_LIMITS.maxFilesPerRecommendation)
 }
 
 /** Sorts by priority, then confidence, then position; removes duplicates on (technique, path, start line). */

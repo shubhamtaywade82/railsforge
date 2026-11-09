@@ -1,9 +1,8 @@
 /**
  * DuplicationAnalyzer - methods in the same file whose normalised bodies are identical.
  *
- * Cross-file duplication needs the semantic index's duplicate groups, which are not populated yet
- * (see EngineAdapters.duplicateMethods). That is Batch 2 work; this analyzer is deliberately limited
- * to what it can prove from one file.
+ * This analyzer is deliberately limited to what it can prove from one file. Copies in other files come
+ * from the index and are handled by CrossFileDuplicationAnalyzer.
  */
 
 import { AnalysisInput, CandidateDraft, draft, evidenceAt, methodSites, sliceLines } from './AnalysisContext'

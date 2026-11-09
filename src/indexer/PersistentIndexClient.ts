@@ -17,6 +17,7 @@ export class PersistentIndexClient {
   private readonly db: SqliteDatabase
   private pending: Map<number, { resolve: () => void; reject: (err: Error) => void }> = new Map()
   private nextRequestId = 1
+  private completedWrites = 0
 
   private constructor(worker: Worker, db: SqliteDatabase) {
     this.worker = worker
@@ -61,12 +62,25 @@ export class PersistentIndexClient {
     return this.db
   }
 
+  /**
+   * Counts writes the worker has completed. The worker posts `done` only after its database write,
+   * so a value read after a write resolves always covers that write. Anything derived from the index
+   * (for example the duplicate groups) is valid for exactly one value of this counter.
+   */
+  get indexGeneration(): number {
+    return this.completedWrites
+  }
+
   indexFile(filePath: string, content: string): Promise<void> {
-    return this.send({ type: 'index_file', filePath, content })
+    return this.send({ type: 'index_file', filePath, content }).then(() => {
+      this.completedWrites++
+    })
   }
 
   removeFile(filePath: string): Promise<void> {
-    return this.send({ type: 'remove_file', filePath })
+    return this.send({ type: 'remove_file', filePath }).then(() => {
+      this.completedWrites++
+    })
   }
 
   private send(message: { type: string; filePath: string; content?: string }): Promise<void> {

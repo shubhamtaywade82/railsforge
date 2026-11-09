@@ -21,7 +21,7 @@
  *   - "Fix Demeter Violation" (inserts a `delegate` call on the receiver class).
  *   - "Inject Dependency" (replaces a hardcoded `MyClass.new` with a constructor param).
  *   - "Delete dead method" (YAGNI).
- *   - "Extract shared method" (DRY - duplicate method groups).
+ *   - Duplicate methods are offered by the refactoring advisor, not here (see RefactoringEngine).
  *   - "Clone existing <pattern>" (when similar pattern instances exist in the project).
  */
 
@@ -41,7 +41,6 @@ export const PRINCIPLE_ACTION_KINDS = {
   fixDemeter: vscode.CodeActionKind.QuickFix.append('railsforge.demeter'),
   injectDependency: vscode.CodeActionKind.RefactorRewrite.append('railsforge.inject-dependency'),
   deleteDeadMethod: vscode.CodeActionKind.QuickFix.append('railsforge.yagni'),
-  extractDuplicate: vscode.CodeActionKind.RefactorExtract.append('railsforge.duplicate'),
   clonePattern: vscode.CodeActionKind.RefactorExtract.append('railsforge.clone-pattern'),
 } as const
 
@@ -93,19 +92,8 @@ export class PrincipleCodeActionProvider implements vscode.CodeActionProvider {
       }
     }
 
-    // 2. Duplicate-method suggestions - the engine surfaces groups of near-duplicate
-    //    methods; we offer "Extract shared method" for each group whose first
-    //    occurrence is in the current document.
-    for (const group of this.index.duplicateMethods()) {
-      const localOccurrence = group.occurrences.find(o => o.relativePath === relativePath)
-      if (!localOccurrence) {
-        continue
-      }
-      if (!this.lineIntersects(localOccurrence.lineStart, localOccurrence.lineEnd, range)) {
-        continue
-      }
-      actions.push(this.buildExtractDuplicateAction(document, group, localOccurrence))
-    }
+    // Duplicate methods are no longer offered here. The refactoring advisor owns them: it proposes a
+    // validated plan across the affected files, and nothing is written without approval.
 
     // 3. "Clone existing pattern" suggestion - if the current file looks like a
     //    Service / Query / Form (by directory), and the project already has similar
@@ -205,29 +193,6 @@ export class PrincipleCodeActionProvider implements vscode.CodeActionProvider {
       },
     ]
     return this.editProvider.buildWorkspaceEdit(operations)
-  }
-
-  private buildExtractDuplicateAction(
-    document: vscode.TextDocument,
-    group: { fingerprint: string; occurrences: ReadonlyArray<{ relativePath: string; lineStart: number; lineEnd: number; methodName: string }> },
-    localOccurrence: { relativePath: string; lineStart: number; lineEnd: number; methodName: string },
-  ): vscode.CodeAction {
-    const action = new vscode.CodeAction(
-      `Extract shared method (${group.occurrences.length} duplicates)`,
-      PRINCIPLE_ACTION_KINDS.extractDuplicate,
-    )
-    const startLine = Math.max(0, localOccurrence.lineStart - 1)
-    const endLine = Math.max(startLine, localOccurrence.lineEnd - 1)
-    const operations: EditOperation[] = [
-      {
-        kind: 'replace',
-        uri: document.uri,
-        range: new vscode.Range(startLine, 0, endLine, 0),
-        newText: `  # RailsForge: ${group.occurrences.length} near-duplicate occurrences of "${localOccurrence.methodName}" - extract to a shared module.\n`,
-      },
-    ]
-    action.edit = this.editProvider.buildWorkspaceEdit(operations)
-    return action
   }
 
   private findSimilarPatterns(relativePath: string): readonly ProjectPatternInstance[] {

@@ -49,6 +49,11 @@ export class PersistentIndexManager implements vscode.Disposable {
     this.duplicateDetector = new DuplicateMethodDetector(client.getDb())
   }
 
+  /** Completed index writes for this root. Derived results are valid for one value of this. */
+  get indexGeneration(): number {
+    return this.client.indexGeneration
+  }
+
   /**
    * Starts the index for ONE workspace root (its own SQLite file, worker and watchers).
    * Never throws: the outcome says whether it is ready, unsupported on this runtime

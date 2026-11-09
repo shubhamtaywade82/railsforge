@@ -88,6 +88,7 @@ Thresholds are conservative. Each is a measurement a reviewer would call a smell
 | `method.feature-envy` | 4 or more calls on one foreign receiver, at most one call to the class's own methods | weak | 2 |
 | `method.complex-query` | 4 or more chained relation calls | moderate | 2 |
 | `method.duplicate` | identical body (3 or more lines) in two methods of the same file | strong | 2 |
+| `duplicate.cross-file` | a method whose body has token overlap of at least 0.75 (Jaccard) with a method in another file, as indexed at the last save. Strong at 0.90 or more, otherwise moderate. The method must still be at the same lines with the same name in the current file. | strong or moderate | 2 |
 | `class.large` | 250 or more lines (500 or more = 3) | strong | 2 |
 | `class.many-methods` | 15 or more methods (25 or more = 3) | strong | 2 |
 | `class.hard-wired-collaborators` | 2 or more project classes created with `.new`; not a controller | moderate | 2 |
@@ -119,6 +120,7 @@ A technique is offered for a candidate only when its validator passes on the mea
 | Eager Loading | the N+1 finding is present | a bounded collection; the association is not read on each iteration |
 | Query Object | four or more chained relation calls | one scope already expresses it; the chain is used once |
 | Extract Shared Method | an identical duplicate in the same file | coincidental duplicates that will diverge |
+| Extract Shared Collaborator | a cross-file duplicate with at least one partner file | copies in unrelated domains that will diverge; copies in specs or generated code |
 | Move Method | one foreign receiver, few own-class calls | an adapter; a move that creates a cycle |
 | Delegate | the linter's demeter finding | a deliberate fluent interface |
 | Remove Unused Code | the linter's YAGNI finding | `send`/`public_send` or a framework hook calls it |
@@ -151,9 +153,11 @@ Safety boundaries for the diff: every path must be a workspace-relative `.rb` fi
 
 **Batch 1 (this release).** Symbol-level analysis: scope resolution; method, class, Rails and principle-linter candidates; the technique catalog with validators; the recommendation contract; AI refinement and planning; CodeLens and lightbulb; the command. Covered by unit tests for each analyzer threshold, each validator, the contract, the parsers, the change planner's safety rules, the advisor's refusals, and the editor providers.
 
+**Batch 2, first slice (this release).** Cross-file duplicate methods. `SemanticIndexAdapter.duplicateMethods()` now returns the groups from the persistent index's `DuplicateMethodDetector`, cached per completed index write. The engine turns each group into `duplicate.cross-file` candidates, and the advisor can propose a shared collaborator across the affected files, validated like every other plan. The lightbulb's "Extract shared method" quick fix is removed: it was never reachable, and its edit would have replaced the method, from its `def` line to just before the closing `end`, with one comment line.
+
 **Not yet built.**
 
-- *Batch 2, cross-file analysis.* Duplicated business workflows across files (the semantic index's duplicate groups are not populated yet, see `providers/EngineAdapters.ts`); cross-file collaborator graphs and cycle detection beyond the callers list in the prompt; authorization and query duplication across controllers.
+- *Batch 2, remainder.* Authorization and query duplication across controllers and files (`duplicate.authorization`, `duplicate.query`); collaborator evidence for cross-file candidates; cycle and coupling evidence beyond the callers list in the prompt.
 - *Batch 3, execution.* A dedicated multi-file applier with checks for symlink targets and stale proposals; RuboCop and targeted test runs after applying; bounded repair from test failures; rollback reporting.
 - *Batch 4, workspace view.* An architecture panel grouping recommendations across the project; background incremental analysis; health trends.
 - *Catalog gaps.* Form Object, Value Object, Factory, Adapter, Composition, Template Method, Specification.
@@ -165,6 +169,8 @@ Safety boundaries for the diff: every path must be a workspace-relative `.rb` fi
 - The N+1 rule depends on the schema tables and on association names inferred from column names. It reports nothing when the schema is unknown.
 - Project-collaborator checks depend on the semantic index. Until it is ready, collaborator-based rules report nothing rather than guessing.
 - The design-principle findings exist only after the linter has analysed the file.
+- **Cross-file copies come from the last save.** The index is written when a file is saved, so a copy in another file can be stale. A finding is raised only when this file's current parse still shows the method at the same lines under the same name. Every partner file is read from the editor buffers again before a plan is written, so a stale partner fails validation rather than producing an edit.
+- **The duplicate scan is synchronous.** It runs once per completed index write, not per request. It compares every eligible pair of methods, skipping pairs whose token-set sizes are too far apart to reach the threshold (an exact prefilter, so no pair is lost). The cost is not measured on a large project yet.
 - **One project root.** The analysis and the editor integration are bound to the project root that is active when the extension activates. Files in other workspace folders get no hints. Observations are stored per root, so the same relative path in two roots never shares one. Analysis of every folder is not built yet.
 - The context fingerprint covers what the advice was built from. It does not detect a change in an unrelated file that would change the advice in some other way, for example a new caller in a file that is not yet indexed.
 - The model's answers were exercised with scripted replies in the tests. Output quality against a live local or cloud model has not been measured.

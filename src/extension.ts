@@ -75,6 +75,7 @@ import { ValueObjectExtractor } from './refactor/ValueObjectExtractor'
 import { RefactoringMenuProvider } from './refactor/RefactoringMenuProvider'
 import { RubyAstParser } from './indexer/RubyAstParser'
 import { RefactoringEngine } from './refactoring-intelligence/core/RefactoringEngine'
+import { crossFileDuplicatesFor } from './refactoring-intelligence/core/CrossFileDuplicates'
 import { RefactoringAdvisor } from './refactoring-intelligence/core/RefactoringAdvisor'
 import { TargetResolver } from './refactoring-intelligence/core/ScopeResolver'
 import { RefactoringCommand, REVIEW_AI_HINTS_COMMAND, SUGGEST_REFACTORINGS_COMMAND } from './refactoring-intelligence/vscode/RefactoringCommand'
@@ -935,6 +936,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
         severity: v.severity,
       })),
       isProjectType: name => semanticIndexAdapter.findDefiningFiles(name).length > 0,
+      crossFileDuplicates: rel => crossFileDuplicatesFor(semanticIndexAdapter.duplicateMethods(), rel),
     })
     const refactorTargets = new TargetResolver()
     const refactorAdvisor = new RefactoringAdvisor({
