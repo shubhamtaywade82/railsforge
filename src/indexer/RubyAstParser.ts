@@ -24,6 +24,7 @@ export interface ParsedCall {
 export interface ParsedMethod {
   name: string
   isPublic: boolean
+  visibility: 'public' | 'private' | 'protected'
   startLine: number
   endLine: number
   bodyText: string
@@ -118,7 +119,7 @@ export class RubyAstParser {
     const includes: string[] = []
     const methods: ParsedMethod[] = []
     const calls: ParsedCall[] = []
-    let inPrivateSection = false
+    let visibility: ParsedMethod['visibility'] = 'public'
 
     if (bodyNode) {
       for (const child of bodyNode.namedChildren) {
@@ -133,16 +134,16 @@ export class RubyAstParser {
             continue
           }
 
-          if (callInfo.receiver === null && callInfo.method === 'private' && child.namedChildren.every(c => c.type !== 'argument_list')) {
-            inPrivateSection = true
+          if (callInfo.receiver === null && ['private', 'protected'].includes(callInfo.method) && child.namedChildren.every(c => c.type !== 'argument_list')) {
+            visibility = callInfo.method
             continue
           }
 
           calls.push(callInfo)
         } else if (child.type === 'identifier' && (child.text === 'private' || child.text === 'protected')) {
-          inPrivateSection = true
+          visibility = child.text
         } else if (child.type === 'method') {
-          const method = this.extractMethod(child, !inPrivateSection)
+          const method = this.extractMethod(child, visibility)
           if (method) {methods.push(method)}
         }
 
@@ -184,7 +185,7 @@ export class RubyAstParser {
     }
   }
 
-  private extractMethod(methodNode: SyntaxNode, isPublic: boolean): ParsedMethod | null {
+  private extractMethod(methodNode: SyntaxNode, visibility: ParsedMethod['visibility']): ParsedMethod | null {
     const nameNode = methodNode.childForFieldName('name')
     if (!nameNode) {return null}
 
@@ -193,7 +194,8 @@ export class RubyAstParser {
 
     return {
       name: nameNode.text,
-      isPublic,
+      isPublic: visibility === 'public',
+      visibility,
       startLine: methodNode.startPosition.row + 1,
       endLine: methodNode.endPosition.row + 1,
       bodyText: methodNode.text,
