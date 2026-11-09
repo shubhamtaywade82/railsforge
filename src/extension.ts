@@ -77,7 +77,9 @@ import { RubyAstParser } from './indexer/RubyAstParser'
 import { RefactoringEngine } from './refactoring-intelligence/core/RefactoringEngine'
 import { RefactoringAdvisor } from './refactoring-intelligence/core/RefactoringAdvisor'
 import { TargetResolver } from './refactoring-intelligence/core/ScopeResolver'
-import { RefactoringCommand, SUGGEST_REFACTORINGS_COMMAND } from './refactoring-intelligence/vscode/RefactoringCommand'
+import { RefactoringCommand, REVIEW_AI_HINTS_COMMAND, SUGGEST_REFACTORINGS_COMMAND } from './refactoring-intelligence/vscode/RefactoringCommand'
+import { BackgroundHints } from './refactoring-intelligence/vscode/BackgroundHints'
+import { ObservationSnapshot, ObservationStore } from './refactoring-intelligence/core/ObservationStore'
 import { relativeTo, vsCodeSourceReader } from './refactoring-intelligence/vscode/workspacePaths'
 import { RefactoringCodeActionProvider } from './providers/RefactoringCodeActionProvider'
 import { RefactoringCodeLensProvider } from './providers/RefactoringCodeLensProvider'
@@ -942,31 +944,48 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
       checkSyntax: code => checkRubySyntax(code),
       log: message => Logger.debug(message),
     })
+    // AI hints survive a window reload: the observations are kept in the workspace state, per scope.
+    const observationsKey = 'railsforge.refactoring.observations.v1'
+    const observations = new ObservationStore(context.workspaceState.get<ObservationSnapshot>(observationsKey))
+    const persistObservations = observations.onDidChange(() => {
+      void context.workspaceState.update(observationsKey, observations.snapshot())
+    })
     const refactorCommand = new RefactoringCommand({
       engine: refactorEngine,
       advisor: refactorAdvisor,
       resolver: refactorTargets,
       editProvider: sharedEditProvider,
+      observations,
       projectRoot: () => root,
     })
+    const aiHintsOnSave = () => vscode.workspace.getConfiguration('railsForge').get<string>('refactoring.aiHints', 'off') === 'on-save'
+    const refactorBackground = new BackgroundHints({ engine: refactorEngine, advisor: refactorAdvisor, observations, pathOf, enabled: aiHintsOnSave })
+    const lensProvider = new RefactoringCodeLensProvider({
+      engine: refactorEngine,
+      observations,
+      pathOf,
+      enabled: () => vscode.workspace.getConfiguration('railsForge').get<boolean>('refactoring.codeLens', true),
+    })
+    const refreshLenses = observations.onDidChange(() => lensProvider.refresh())
     const selector = { language: 'ruby', scheme: 'file' }
     context.subscriptions.push(
+      { dispose: persistObservations },
+      { dispose: refreshLenses },
+      refactorBackground,
       vscode.languages.registerCodeActionsProvider(
         selector,
-        new RefactoringCodeActionProvider({ engine: refactorEngine, resolver: refactorTargets, pathOf }),
+        new RefactoringCodeActionProvider({ engine: refactorEngine, resolver: refactorTargets, observations, pathOf }),
         { providedCodeActionKinds: RefactoringCodeActionProvider.providedCodeActionKinds },
       ),
-      vscode.languages.registerCodeLensProvider(
-        selector,
-        new RefactoringCodeLensProvider({
-          engine: refactorEngine,
-          pathOf,
-          enabled: () => vscode.workspace.getConfiguration('railsForge').get<boolean>('refactoring.codeLens', true),
-        }),
-      ),
+      vscode.languages.registerCodeLensProvider(selector, lensProvider),
+      vscode.workspace.onDidSaveTextDocument(doc => refactorBackground.onDidSave(doc)),
       vscode.commands.registerCommand(
         SUGGEST_REFACTORINGS_COMMAND,
         (uri?: vscode.Uri, range?: vscode.Range | vscode.Selection) => refactorCommand.run(uri, range),
+      ),
+      vscode.commands.registerCommand(
+        REVIEW_AI_HINTS_COMMAND,
+        (uri?: vscode.Uri, range?: vscode.Range | vscode.Selection) => refactorCommand.reviewObserved(uri, range),
       ),
     )
   }

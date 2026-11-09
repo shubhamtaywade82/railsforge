@@ -14,6 +14,7 @@ const { mockContext, vscodeMocks, mockDisposable, mockStatusBar, mockDiagnosticC
     extensionPath: '/tmp/ext',
     extensionMode: 3,
     globalState: { get: vi.fn(() => false), update: vi.fn(() => Promise.resolve()) },
+    workspaceState: { get: vi.fn(() => undefined), update: vi.fn(() => Promise.resolve()) },
     secrets: { get: vi.fn(() => Promise.resolve('k')), store: vi.fn(() => Promise.resolve()), delete: vi.fn(() => Promise.resolve()) },
     globalStorageUri: { fsPath: '/tmp/sto', toString: () => '/tmp/sto' } as unknown,
   }

@@ -20,6 +20,25 @@ Source: [`src/refactoring-intelligence/`](../src/refactoring-intelligence/). Edi
 
 CodeLens and the lightbulb run the first four stages only. Choosing a suggestion runs refinement; previewing a change runs plan.
 
+## Where AI hints come from, and how long they last
+
+The AI produces hints in two ways. Both store the result per scope (class, method or block), so it can be shown again without another model call.
+
+| Source | When it runs | What is stored |
+| --- | --- | --- |
+| **Suggest Refactorings** (on request) | when you run it from the lightbulb, CodeLens or palette | the AI's recommendations for the scope; an empty result when it found nothing |
+| **Background review** (opt-in, `railsForge.refactoring.aiHints: "on-save"`) | after you save a Ruby file | one scope per save: the highest-ranked scope whose current text has no observation |
+
+An observation is kept in the workspace state, so it survives a reload. It is shown only while the scope's text is unchanged: an edit inside the method or class hides its hints, and an edit elsewhere in the file does not. Moving a method does not invalidate its hints, because scopes are keyed by name.
+
+Where observed hints appear:
+
+- **CodeLens:** `✦ AI: 2 hints observed · high` (click to review them, no model call), or `✦ AI reviewed: nothing to change at this level` when the AI looked and found nothing. Without an observation, the rule-based lens (`✦ RailsForge: 1 refactoring opportunity`) is shown, and clicking it asks the AI.
+- **Lightbulb:** `RailsForge: 2 AI hints observed for method X` opens the review without a model call. It takes precedence over the rule-based suggestion.
+- **Command:** `RailsForge: Review AI Hints (observed)` lists the observed hints for the cursor's scope.
+
+Choosing a hint opens its document. The AI writes a diff only when you then choose **Preview change**, and the diff is applied only after approval.
+
 ## The recommendation contract
 
 Each recommendation has these fields, in this order in the document view:
@@ -107,6 +126,7 @@ Safety boundaries for the diff: every path must be a workspace-relative `.rb` fi
 ## Settings
 
 - `railsForge.refactoring.codeLens` (default `true`): show the CodeLens. Turning it off does not affect the lightbulb or the command.
+- `railsForge.refactoring.aiHints` (default `"off"`): `"on-save"` enables the background review. It sends the scope and related files to your AI provider after a save, without a request from you. It is restricted in untrusted workspaces, so a workspace settings file cannot turn it on. The review is debounced (2 seconds), runs one at a time, and asks about one scope per save.
 - The AI provider is configured by `railsForge.ai.provider`, as for the chat agent. Code is sent to that provider when you request analysis or a preview.
 - Apply limits: a recommendation's files must total 16,000 characters or fewer for an in-editor apply. For a local Ollama model, raise `railsForge.ollama.numCtx` for larger files.
 

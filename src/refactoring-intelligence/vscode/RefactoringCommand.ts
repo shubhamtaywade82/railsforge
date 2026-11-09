@@ -1,17 +1,20 @@
 /**
- * RefactoringCommand - the explicit analysis flow behind `railsforge.suggestRefactorings`.
+ * RefactoringCommand - the two entry points behind the refactoring hints.
  *
- *   1. Resolve the scope (method, class or selection) and collect deterministic candidates.
- *      No candidates -> say so. No model call is made.
- *   2. Ask the AI to decide on those candidates (one call, on this explicit request).
- *      If the AI is unavailable, show the rule-based recommendations and say so.
- *   3. Pick a recommendation: it opens as a reviewable document (problem, evidence, design,
- *      alternatives, benefit, risk, files, verification).
- *   4. Only after an explicit "Preview change", the AI writes the diff. The diff is shown as native
- *      diffs and applied after a modal confirmation, as one undoable WorkspaceEdit.
+ *   reviewObserved (railsForge.reviewAiHints)
+ *     Shows AI hints already observed for the scope. No model call. Hints are kept per scope and
+ *     are only shown while the scope's code is unchanged.
  *
- * Nothing is written before the final confirmation. The change is re-checked against the open
- * buffers at apply time: if a file changed while the preview was open, the apply is refused.
+ *   run (railsForge.suggestRefactorings)
+ *     1. Collects deterministic candidates for the scope. No candidates: say so, no model call.
+ *     2. Asks the AI to decide on those candidates (one call, on this explicit request), and keeps
+ *        the answer as an observation. If the AI is unavailable, shows the rule-based recommendations.
+ *     3. Opens the picked recommendation as a reviewable document.
+ *     4. Only after an explicit "Preview change", the AI writes the diff. The diff is shown as native
+ *        diffs and applied after a modal confirmation, as one undoable WorkspaceEdit.
+ *
+ * Nothing is written before the final confirmation. The change is re-checked against the open buffers
+ * at apply time: if a file changed while the preview was open, the apply is refused.
  */
 
 import * as fs from 'fs'
@@ -21,18 +24,21 @@ import { Logger } from '../../util/Logger'
 import { EditOperation, RefactoringEditProvider } from '../../providers/RefactoringEditProvider'
 import { RefactoringAdvisor } from '../core/RefactoringAdvisor'
 import { RefactoringEngine } from '../core/RefactoringEngine'
+import { observedWithin, ObservationStore, recordRefinement } from '../core/ObservationStore'
 import { describeTarget, TargetResolver } from '../core/ScopeResolver'
-import { AdvisorFailure, AdvisorResult, describeScope, ProposedChange, Recommendation } from '../core/types'
+import { AdvisorFailure, AdvisorResult, describeScope, ProposedChange, Recommendation, RefactorTarget } from '../core/types'
 import { renderRecommendation } from '../recommendations/RecommendationRenderer'
 import { relativeTo, toSelectionLines, withProgress } from './workspacePaths'
 
-export const SUGGEST_REFACTORINGS_COMMAND = 'railsforge.suggestRefactorings'
+export const SUGGEST_REFACTORINGS_COMMAND = 'railsForge.suggestRefactorings'
+export const REVIEW_AI_HINTS_COMMAND = 'railsForge.reviewAiHints'
 
 export interface RefactoringCommandDeps {
   engine: RefactoringEngine
   advisor: RefactoringAdvisor
   resolver: TargetResolver
   editProvider: RefactoringEditProvider
+  observations: ObservationStore
   /** Absolute path of the project the analysis and file reader are bound to. */
   projectRoot: () => string | undefined
 }
@@ -41,39 +47,45 @@ interface RecommendationItem extends vscode.QuickPickItem {
   recommendation: Recommendation
 }
 
+/** Everything a request needs, resolved from the editor (or from the arguments a code action passed). */
+interface Request {
+  root: string
+  relativePath: string
+  content: string
+  target: RefactorTarget
+  label: string
+}
+
 export class RefactoringCommand {
   constructor(private readonly deps: RefactoringCommandDeps) {}
 
-  /** Entry point. Invoked from a code action or CodeLens (uri + range) or from the palette (active editor). */
+  /** Shows AI hints already observed for the scope. Never calls a model. */
+  async reviewObserved(uriArg?: vscode.Uri, rangeArg?: vscode.Range | vscode.Selection): Promise<void> {
+    const request = await this.resolveRequest(uriArg, rangeArg)
+    if (!request) {return}
+
+    const observed = observedWithin(
+      this.deps.observations,
+      request.relativePath,
+      request.content,
+      this.deps.engine.scopes(request.content),
+      request.target,
+    ).filter(r => r.confidence !== 'low')
+
+    if (observed.length === 0) {
+      void vscode.window.showInformationMessage(
+        `RailsForge: no AI hints observed for ${request.label} yet. Run Suggest Refactorings to ask the AI, or set railsForge.refactoring.aiHints to on-save.`,
+      )
+      return
+    }
+    await this.pick(observed, request, 'AI hints observed for')
+  }
+
+  /** Asks the AI about the scope's measured findings, keeps the answer, and offers a review. */
   async run(uriArg?: vscode.Uri, rangeArg?: vscode.Range | vscode.Selection): Promise<void> {
-    const editor = vscode.window.activeTextEditor
-    const uri = uriArg ?? editor?.document.uri
-    const range = rangeArg ?? (uriArg ? undefined : editor?.selection)
-    if (!uri || !range) {
-      void vscode.window.showInformationMessage('RailsForge: open a Ruby file and put the cursor in a class, module or method first.')
-      return
-    }
-
-    const root = this.deps.projectRoot()
-    if (!root) {
-      void vscode.window.showWarningMessage('RailsForge: open a Rails project folder first.')
-      return
-    }
-    const document = await vscode.workspace.openTextDocument(uri)
-    const relativePath = relativeTo(root, document.uri.fsPath)
-    if (!relativePath) {
-      void vscode.window.showWarningMessage('RailsForge: this file is outside the project the advisor is bound to.')
-      return
-    }
-
-    const content = document.getText()
-    const resolution = this.deps.resolver.resolve(content, toSelectionLines(range))
-    if (!resolution.ok) {
-      void vscode.window.showInformationMessage(`RailsForge: ${resolution.message}`)
-      return
-    }
-    const target = resolution.target
-    const label = describeTarget(target)
+    const request = await this.resolveRequest(uriArg, rangeArg)
+    if (!request) {return}
+    const { relativePath, content, target, label } = request
 
     const candidates = this.deps.engine.candidatesIn(relativePath, content, target)
     const rules = this.deps.engine.recommendations(relativePath, content, target)
@@ -88,6 +100,7 @@ export class RefactoringCommand {
 
       let recommendations: Recommendation[]
       if (refined.ok) {
+        recordRefinement(this.deps.observations, relativePath, content, target, refined.value.recommendations)
         if (refined.value.recommendations.length === 0) {
           const reasons = refined.value.skipped.slice(0, 2).map(s => s.reason).join(' ')
           void vscode.window.showInformationMessage(`RailsForge: the AI found nothing worth changing in ${label}. ${reasons}`.trim())
@@ -99,23 +112,54 @@ export class RefactoringCommand {
         recommendations = rules
       }
 
-      const items: RecommendationItem[] = recommendations.map(recommendation => ({
-        label: `$(lightbulb) ${recommendation.title}`,
-        description: `${recommendation.priority} · ${recommendation.confidence} confidence · ${recommendation.source === 'ai' ? 'AI' : 'rule-based'}`,
-        detail: recommendation.problem,
-        recommendation,
-      }))
-      const picked = await vscode.window.showQuickPick(items, {
-        placeHolder: `Recommendations for ${describeScope(target)}`,
-        matchOnDetail: true,
-      })
-      if (!picked) {return}
-
-      await this.review(picked.recommendation, root)
+      await this.pick(recommendations, request, `Recommendations for ${describeScope(target)}`)
     } catch (err) {
       Logger.error(`[Refactoring] ${String(err)}`)
       void vscode.window.showErrorMessage(`RailsForge: the refactoring analysis failed: ${errorText(err)}`)
     }
+  }
+
+  /** Resolves the request from a code action's arguments, or from the active editor. */
+  private async resolveRequest(uriArg?: vscode.Uri, rangeArg?: vscode.Range | vscode.Selection): Promise<Request | undefined> {
+    const editor = vscode.window.activeTextEditor
+    const uri = uriArg ?? editor?.document.uri
+    const range = rangeArg ?? (uriArg ? undefined : editor?.selection)
+    if (!uri || !range) {
+      void vscode.window.showInformationMessage('RailsForge: open a Ruby file and put the cursor in a class, module or method first.')
+      return undefined
+    }
+
+    const root = this.deps.projectRoot()
+    if (!root) {
+      void vscode.window.showWarningMessage('RailsForge: open a Rails project folder first.')
+      return undefined
+    }
+    const document = await vscode.workspace.openTextDocument(uri)
+    const relativePath = relativeTo(root, document.uri.fsPath)
+    if (!relativePath) {
+      void vscode.window.showWarningMessage('RailsForge: this file is outside the project the advisor is bound to.')
+      return undefined
+    }
+
+    const content = document.getText()
+    const resolution = this.deps.resolver.resolve(content, toSelectionLines(range))
+    if (!resolution.ok) {
+      void vscode.window.showInformationMessage(`RailsForge: ${resolution.message}`)
+      return undefined
+    }
+    return { root, relativePath, content, target: resolution.target, label: describeTarget(resolution.target) }
+  }
+
+  private async pick(recommendations: readonly Recommendation[], request: Request, placeHolder: string): Promise<void> {
+    const items: RecommendationItem[] = recommendations.map(recommendation => ({
+      label: `$(lightbulb) ${recommendation.title}`,
+      description: `${recommendation.priority} · ${recommendation.confidence} confidence · ${recommendation.source === 'ai' ? 'AI' : 'rule-based'}`,
+      detail: recommendation.problem,
+      recommendation,
+    }))
+    const picked = await vscode.window.showQuickPick(items, { placeHolder: `${placeHolder} ${request.label}`, matchOnDetail: true })
+    if (!picked) {return}
+    await this.review(picked.recommendation, request.root)
   }
 
   /** Shows the recommendation as a document, then asks before any AI-written change is requested. */
