@@ -107,7 +107,7 @@ function projectCapabilities(root: string): unknown {
     if (specsStart >= 0) {
       for (const line of lines.slice(specsStart + 1)) {
         if (/^[A-Z][A-Z ]*$/.test(line)) { break }
-        const match = /^    ([a-zA-Z0-9_.-]+) \(/.exec(line)
+        const match = /^ {4}([a-zA-Z0-9_.-]+) \(/.exec(line)
         if (match) { gemNames.add(match[1]) }
       }
     }
