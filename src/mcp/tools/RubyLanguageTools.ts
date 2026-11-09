@@ -6,7 +6,8 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { z } from 'zod'
-import { RubyAstParser, ParsedTypeDefinition } from '../../indexer/RubyAstParser'
+import { RubyAstParser } from '../../indexer/RubyAstParser'
+import type { ParsedTypeDefinition } from '../../indexer/RubyAstParser'
 import { checkRubySyntax } from '../../util/RubySyntax'
 import { resolveWithinRoot } from '../../util/WorkspacePath'
 import type { ToolContext } from './ToolContext'
@@ -54,7 +55,7 @@ function symbolPayload(file: string, content: string): unknown {
       includes: type.includes,
       methods: type.methods.map(method => ({
         name: method.name,
-        visibility: method.isPublic ? 'public' : 'private',
+        visibility: method.visibility,
         params: method.params,
         signature: method.bodyText.split(/\r?\n/, 1)[0].trim(),
         startLine: method.startLine,
@@ -73,7 +74,7 @@ function methodPayload(file: string, content: string, className: string, methodN
       file,
       className: qualified,
       methodName: method.name,
-      visibility: method.isPublic ? 'public' : 'private',
+      visibility: method.visibility,
       signature: method.bodyText.split(/\r?\n/, 1)[0].trim(),
       params: method.params,
       startLine: method.startLine,
@@ -85,9 +86,11 @@ function methodPayload(file: string, content: string, className: string, methodN
 }
 
 function readOptional(root: string, relative: string): string | null {
+  const resolved = resolveWithinRoot(root, relative)
+  if (!resolved.ok) { return null }
   try {
-    const full = path.join(root, relative)
-    return fs.statSync(full).isFile() ? fs.readFileSync(full, 'utf8') : null
+    const stat = fs.lstatSync(resolved.fullPath)
+    return stat.isFile() && !stat.isSymbolicLink() ? fs.readFileSync(resolved.fullPath, 'utf8') : null
   } catch {
     return null
   }
@@ -99,13 +102,16 @@ function projectCapabilities(root: string): unknown {
   const lockRuby = lockfile?.match(/^RUBY VERSION\s*\n\s*ruby\s+([^\s]+)$/m)?.[1] ?? null
   const gemNames = new Set<string>()
   if (lockfile) {
-    const specs = lockfile.match(/^  specs:\s*\n([\s\S]*?)(?=^[A-Z][A-Z ]*$|\s*\z)/m)?.[1] ?? ''
+    const specs = lockfile.match(/^  specs:\s*\n([\s\S]*?)(?=^[A-Z][A-Z ]*$|$)/m)?.[1] ?? ''
     for (const match of specs.matchAll(/^    ([a-zA-Z0-9_.-]+) \(/gm)) { gemNames.add(match[1]) }
   }
   const frameworks = ['rails', 'rspec-rails', 'minitest', 'sidekiq', 'devise', 'pundit', 'factory_bot_rails']
     .filter(name => gemNames.has(name))
   const testDirectories = ['spec', 'test'].filter(name => {
-    try { return fs.statSync(path.join(root, name)).isDirectory() } catch { return false }
+    try {
+      const stat = fs.lstatSync(path.join(root, name))
+      return stat.isDirectory() && !stat.isSymbolicLink()
+    } catch { return false }
   })
   return {
     declaredRubyVersion: rubyVersionFile || lockRuby,
