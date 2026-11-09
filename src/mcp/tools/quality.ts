@@ -1,5 +1,5 @@
 /**
- * Quality & Testing MCP Tools - test runner, affected test discovery, and linter.
+ * Quality & Testing MCP Tools - test runner, affected test discovery, failure analysis, and linter.
  * Pure Node / toolchain backed (vscode-free).
  */
 
@@ -68,6 +68,76 @@ function findCandidatesForSource(root: string, filePath: string): string[] {
     if (fs.existsSync(path.join(root, reqTest))) {found.add(reqTest)}
   }
   return [...found]
+}
+
+export interface AnalyzedFailure {
+  testName: string
+  errorClass?: string
+  message: string
+  expected?: string
+  actual?: string
+  file?: string
+  line?: number
+  backtrace: string[]
+}
+
+function findWorkspaceLocation(backtrace: string[]): { file: string; line: number } | undefined {
+  for (const entry of backtrace) {
+    const m = /(?:^|\s|\/)([a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_.-]+)*\.rb):(\d+)/.exec(entry)
+    if (m && /^(app|lib|spec|test)\//.test(m[1].replace(/^\.\//, ''))) {
+      return { file: m[1].replace(/^\.\//, ''), line: Number(m[2]) }
+    }
+  }
+  return undefined
+}
+
+function parseSingleFailure(block: string): AnalyzedFailure | null {
+  const lines = block.split(/\r?\n/).map(l => l.trimEnd())
+  const header = /^\s*\d+\)\s+(?:Failure:\s*)?([^\n]+)/.exec(lines[0])
+  if (!header) {return null}
+  const testName = header[1].replace(/\s*\[.+?:\d+\]$/, '').trim()
+
+  const backtrace: string[] = []
+  const msgLines: string[] = []
+  let errorClass: string | undefined
+
+  for (let i = 1; i < lines.length; i++) {
+    const l = lines[i].trim()
+    const btMatch = /^(?:#\s*)?([./\w-]+\.rb):(\d+)(?::in\s+(.+))?/.exec(l)
+    if (btMatch) {
+      backtrace.push(l.replace(/^#\s*/, ''))
+      continue
+    }
+    const errMatch = /^([A-Z]\w*(?:::[A-Z]\w*)*(?:Error|Exception|Failure))(?::\s*(.*))?$/.exec(l)
+    if (errMatch && !errorClass) {
+      errorClass = errMatch[1]
+      if (errMatch[2]) {msgLines.push(errMatch[2])}
+      continue
+    }
+    if (l && !l.startsWith('Failure/Error:')) {
+      msgLines.push(l)
+    }
+  }
+
+  const message = msgLines.join('\n').trim()
+  const expMatch = /(?:expected|Expected):?\s*([^\n]+)[\s\S]*?(?:got|Actual):?\s*([^\n]+)/i.exec(message)
+  const loc = findWorkspaceLocation(backtrace)
+
+  return {
+    testName,
+    errorClass,
+    message,
+    expected: expMatch?.[1]?.trim(),
+    actual: expMatch?.[2]?.trim(),
+    file: loc?.file,
+    line: loc?.line,
+    backtrace: backtrace.slice(0, 10),
+  }
+}
+
+export function parseTestFailures(raw: string): AnalyzedFailure[] {
+  const blocks = raw.split(/\n(?=\s*\d+\)\s+)/).filter(b => /^\s*\d+\)\s+/.test(b))
+  return blocks.map(parseSingleFailure).filter((f): f is AnalyzedFailure => f !== null)
 }
 
 export const QUALITY_TOOLS: readonly ToolDefinition[] = [
@@ -171,6 +241,24 @@ export const QUALITY_TOOLS: readonly ToolDefinition[] = [
       } catch {
         return json({ filePath, tool, status: result.exitCode === 0 ? 'clean' : 'offenses_found', rawOutput: (result.stdout + '\n' + result.stderr).trim().slice(0, 5_000) })
       }
+    },
+  }),
+
+  defineTool({
+    name: 'ruby_analyze_test_failure',
+    risk: 'R0',
+    title: 'Analyze Ruby test failure',
+    description: 'Parses raw RSpec/Minitest failure outputs or stack traces into structured error classes, expected/actual values, and workspace lines.',
+    inputSchema: {
+      output: z.string().describe('Raw test output or stack trace containing failures'),
+    },
+    invocationMessage: 'Analyzing test failure',
+    async handler(_ctx: ToolContext, { output }) {
+      const failures = parseTestFailures(output)
+      return json({
+        failureCount: failures.length,
+        failures,
+      })
     },
   }),
 ]

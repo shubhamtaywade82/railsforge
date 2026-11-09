@@ -2073,6 +2073,67 @@
           ],
           "additionalProperties": false
         }
+      },
+      {
+        "name": "railsforge_ruby_analyze_test_failure",
+        "displayName": "Analyze Ruby test failure",
+        "toolReferenceName": "ruby_analyze_test_failure",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Parses raw RSpec/Minitest failure outputs or stack traces into structured error classes, expected/actual values, and workspace lines.",
+        "userDescription": "Analyze Ruby test failure",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "output": {
+              "type": "string",
+              "description": "Raw test output or stack trace containing failures"
+            }
+          },
+          "required": [
+            "output"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_ruby_read_log",
+        "displayName": "Read Rails log file",
+        "toolReferenceName": "ruby_read_log",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Reads recent lines from development or test logs with automatic secret redaction and request/SQL metrics.",
+        "userDescription": "Read Rails log file",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "environment": {
+              "description": "Log environment to read (default: \"development\")",
+              "type": "string",
+              "enum": [
+                "development",
+                "test"
+              ]
+            },
+            "lines": {
+              "description": "Number of lines to read from end of file (1-200, default 50)",
+              "type": "number"
+            },
+            "filter": {
+              "description": "Optional substring filter (e.g. \"error\", \"ActiveRecord\", \"OrdersController\")",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
       }
     ],
     "mcpServerDefinitionProviders": [

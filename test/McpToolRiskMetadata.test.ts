@@ -16,6 +16,7 @@ describe('MCP tool risk metadata', () => {
   it('classifies the cached-snapshot read as R1 and process-running tools as R2', () => {
     const risk = Object.fromEntries(RAILSFORGE_TOOLS.map(tool => [tool.name, tool.risk]))
     expect(risk.get_runtime_introspection).toBe('R1')
+    expect(risk.ruby_read_log).toBe('R1')
     expect(risk.list_rake_tasks).toBe('R2')
     expect(risk.ruby_check_syntax).toBe('R2')
     expect(risk.ruby_run_tests).toBe('R2')
@@ -37,6 +38,6 @@ describe('MCP tool risk metadata', () => {
   })
 
   it('keeps the existing tool set, so no client loses a tool name', () => {
-    expect(RAILSFORGE_TOOLS.map(tool => tool.name)).toHaveLength(26)
+    expect(RAILSFORGE_TOOLS.map(tool => tool.name)).toHaveLength(28)
   })
 })

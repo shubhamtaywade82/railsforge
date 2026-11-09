@@ -135,4 +135,45 @@ describe('Quality MCP tools', () => {
       expect(res.error).toContain('File not found')
     })
   })
+
+  describe('ruby_analyze_test_failure', () => {
+    it('parses RSpec failure with error class, expected/actual, and workspace lines', async () => {
+      const output = `
+Failures:
+
+  1) Order#process when card declined raises PaymentError
+     Failure/Error: order.process
+     PaymentGateway::DeclinedError:
+       Card was declined: expected PaymentError, got PaymentGateway::DeclinedError
+     # ./app/models/order.rb:14:in \`process'
+     # ./spec/models/order_spec.rb:25:in \`block (3 levels)'
+`
+      const raw = await run('ruby_analyze_test_failure', { output })
+      const res = JSON.parse(raw) as {
+        failureCount: number
+        failures: Array<{
+          testName: string
+          errorClass?: string
+          file?: string
+          line?: number
+          backtrace: string[]
+        }>
+      }
+
+      expect(res.failureCount).toBe(1)
+      expect(res.failures[0].testName).toBe('Order#process when card declined raises PaymentError')
+      expect(res.failures[0].errorClass).toBe('PaymentGateway::DeclinedError')
+      expect(res.failures[0].file).toBe('app/models/order.rb')
+      expect(res.failures[0].line).toBe(14)
+      expect(res.failures[0].backtrace.length).toBeGreaterThanOrEqual(2)
+    })
+
+    it('returns empty failures when test output has no failures', async () => {
+      const output = 'Finished in 0.05 seconds\n5 examples, 0 failures\n'
+      const raw = await run('ruby_analyze_test_failure', { output })
+      const res = JSON.parse(raw) as { failureCount: number; failures: unknown[] }
+      expect(res.failureCount).toBe(0)
+      expect(res.failures).toEqual([])
+    })
+  })
 })

@@ -24,6 +24,7 @@ import { buildSkillContext } from '../../skills/SkillContextBuilder'
 import type { RiskLevel } from '../policy/McpCapabilityPolicy'
 import { RUBY_TOOLS } from './ruby'
 import { QUALITY_TOOLS } from './quality'
+import { OBSERVABILITY_TOOLS } from './observability'
 
 export interface ToolDefinition {
   /** MCP tool name (snake_case); the VS Code tool name is `railsforge_<name>`. */
@@ -400,4 +401,5 @@ References (read with the \`reference\` argument): ${entry.references.map(r => r
   }),
   ...RUBY_TOOLS,
   ...QUALITY_TOOLS,
+  ...OBSERVABILITY_TOOLS,
 ]
