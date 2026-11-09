@@ -1,17 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { UntrustedWorkspaceError, assertTrusted, isWorkspaceTrusted, setBlockedListener, setTrustProvider } from '../src/workspace/Trust'
 
-const restore = setTrustProvider(() => true)
+setTrustProvider(() => true)
 afterEach(() => {
   setTrustProvider(() => true)
   setBlockedListener(undefined)
 })
 
 describe('workspace trust gate', () => {
-  it('defaults to trusted (standalone MCP server / tests never launch project processes)', () => {
-    expect(restore()).toBeTypeOf('boolean') // the initial provider
-    expect(isWorkspaceTrusted()).toBe(true)
-    expect(() => assertTrusted('anything')).not.toThrow()
+  it('fails closed until a provider is installed, so nothing runs by default', async () => {
+    // A fresh module instance has never had a provider installed.
+    vi.resetModules()
+    const fresh = await import('../src/workspace/Trust')
+    expect(fresh.isWorkspaceTrusted()).toBe(false)
+    expect(() => fresh.assertTrusted('anything')).toThrow(fresh.UntrustedWorkspaceError)
   })
 
   it('refuses with a typed, explanatory error and reports the blocked action', () => {

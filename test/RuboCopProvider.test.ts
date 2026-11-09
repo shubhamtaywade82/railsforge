@@ -2,6 +2,10 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { setTrustProvider } from '../src/workspace/Trust'
+
+// These tests drive the launch path through a mocked child_process. They describe a trusted workspace.
+beforeEach(() => setTrustProvider(() => true))
 import * as vscode from '../test/__mocks__/vscode'
 import { RuboCopProvider } from '../src/lint/RuboCopProvider'
 

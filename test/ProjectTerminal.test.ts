@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
   createTerminal: vi.fn((options: unknown) => ({ options, sendText: vi.fn() })),
@@ -12,6 +12,10 @@ vi.mock('vscode', () => ({
 
 import { createProjectTerminal, sendToTerminal, startProjectDebugging } from '../src/workspace/ProjectTerminal'
 import { UntrustedWorkspaceError, setTrustProvider } from '../src/workspace/Trust'
+
+beforeEach(() => {
+  setTrustProvider(() => true)
+})
 
 afterEach(() => {
   setTrustProvider(() => true)

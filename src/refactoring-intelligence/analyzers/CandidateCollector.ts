@@ -9,12 +9,14 @@ import type { RubyAstParser } from '../../indexer/RubyAstParser'
 import type { Candidate } from '../core/types'
 import { AnalysisInput, buildInput, CandidateDraft } from './AnalysisContext'
 import { analyzeClasses } from './ClassAnalyzer'
+import { analyzeCrossFileDuplicates } from './CrossFileDuplicationAnalyzer'
 import { analyzeDuplicates } from './DuplicationAnalyzer'
 import { analyzeMethods } from './MethodAnalyzer'
 import { analyzePrinciples } from './PrincipleFindingsAdapter'
 import { analyzeRails } from './RailsAntiPatternAnalyzer'
 import type { SchemaLike } from '../../rails/NPlusOneAnalyzer'
 import type { PrincipleFinding } from './AnalysisContext'
+import type { CrossFileDuplicate } from '../core/CrossFileDuplicates'
 
 export interface CollectInput {
   path: string
@@ -22,6 +24,8 @@ export interface CollectInput {
   schemaTables?: readonly SchemaLike[]
   principleFindings?: readonly PrincipleFinding[]
   isProjectType?: (name: string) => boolean
+  /** Copies of this file's methods found in other files at the last save. */
+  crossFileDuplicates?: readonly CrossFileDuplicate[]
 }
 
 export function collectCandidates(parser: RubyAstParser, input: CollectInput): Candidate[] {
@@ -34,6 +38,7 @@ export function collectCandidates(parser: RubyAstParser, input: CollectInput): C
     ...analyzeClasses(analysis),
     ...analyzeRails(analysis),
     ...analyzeDuplicates(analysis),
+    ...analyzeCrossFileDuplicates(analysis, input.crossFileDuplicates ?? []),
     ...analyzePrinciples(analysis),
   ]
 

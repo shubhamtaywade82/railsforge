@@ -52,11 +52,13 @@ export interface DependencyEdge {
 }
 
 /**
- * A near-duplicate method block detected across the codebase. Surfaced by the
- * `PrincipleCodeActionProvider` as a "Extract shared method" quick fix.
+ * A near-duplicate method block detected across the codebase, with its Jaccard similarity over
+ * body tokens. Consumed by the refactoring engine's cross-file duplicate analyzer.
  */
 export interface DuplicateMethodGroup {
   fingerprint: string
+  /** Jaccard similarity of the token sets, 0 to 1. Absent for groups built without a detector. */
+  similarity?: number
   /** 1-based line ranges. */
   occurrences: ReadonlyArray<{ relativePath: string; lineStart: number; lineEnd: number; methodName: string }>
 }

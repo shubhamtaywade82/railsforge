@@ -7,6 +7,8 @@
 import { RAILSFORGE_TOOLS, ToolDefinition } from '../mcp/tools/definitions'
 import { ToolContext } from '../mcp/tools/ToolContext'
 import { truncateForModel } from '../ai/RailsLanguageModelTools'
+import { invokeTool } from '../mcp/policy/ToolInvocation'
+import { isWorkspaceTrusted } from '../workspace/Trust'
 import { LoopTool } from './AgentLoop'
 
 export const READ_ONLY_LOOP_TOOLS: readonly string[] = [
@@ -22,6 +24,12 @@ export function createLoopTools(ctx: ToolContext, definitions: readonly ToolDefi
       name: def.name,
       description: def.description,
       inputSchema: def.inputSchema,
-      run: async args => truncateForModel(await def.handler(ctx, args)),
+      run: async args => {
+        const result = await invokeTool(def, ctx, args, { source: 'host', isTrusted: isWorkspaceTrusted, warn: message => console.warn(message) })
+        if (result.ok) {return truncateForModel(result.text)}
+        // A failure keeps the historical behaviour of a thrown error. A refusal is text the loop can adapt to.
+        if (result.code === 'TOOL_FAILED') {throw new Error(result.message)}
+        return truncateForModel(result.message)
+      },
     }))
 }

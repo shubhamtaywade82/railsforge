@@ -8,6 +8,8 @@ import { RAILSFORGE_TOOLS, ToolDefinition } from '../mcp/tools/definitions'
 import { ToolContext } from '../mcp/tools/ToolContext'
 import { lmToolName } from '../mcp/tools/lmManifest'
 import { PerRootRegistry } from '../workspace/PerRootRegistry'
+import { invokeTool } from '../mcp/policy/ToolInvocation'
+import { isWorkspaceTrusted } from '../workspace/Trust'
 
 const MAX_OUTPUT_CHARS = 60_000
 
@@ -35,12 +37,10 @@ export function truncateForModel(text: string): string {
 }
 
 export async function runTool(tool: ToolDefinition, ctx: ToolContext, input: Record<string, unknown>): Promise<string> {
-  try {
-    return truncateForModel(await tool.handler(ctx, input))
-  } catch (err) {
-    // Tool failures are reported to the model as text so it can adapt, never thrown into the chat.
-    return `Error running ${tool.name}: ${err instanceof Error ? err.message : String(err)}`
-  }
+  const result = await invokeTool(tool, ctx, input, { source: 'host', isTrusted: isWorkspaceTrusted, warn: message => console.warn(message) })
+  if (result.ok) {return truncateForModel(result.text)}
+  // Refusals and failures are reported to the model as text so it can adapt, never thrown into the chat.
+  return result.code === 'TOOL_FAILED' ? `Error running ${tool.name}: ${result.message}` : result.message
 }
 
 export function registerRailsLanguageModelTools(runtime: LmToolRuntime, tools: readonly ToolDefinition[] = RAILSFORGE_TOOLS): Array<{ dispose(): void }> {

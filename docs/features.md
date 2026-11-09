@@ -590,6 +590,10 @@ Standalone Node process (separate webpack entry, not loaded by the extension hos
 | `get_dependencies` | Returns the collaborator graph for a given class |
 | `find_duplicate_methods` | Returns near-duplicate method pairs across the codebase |
 
+The server exposes every tool in `src/mcp/tools/definitions.ts`, not only the six above.
+
+**Execution policy.** Each tool declares a risk level, and the server checks it before the handler runs. R0 (static reads) and R1 (cached reads) run unconditionally. R2 tools run project code: `list_rake_tasks` runs `rake -T`, for example. The standalone server runs R2 tools only when the MCP client launches it with `RAILSFORGE_MCP_EXECUTION=project-code`. Without that variable an R2 call is refused, and the refusal names the variable. Every call appends a record to `.railsforge/mcp/audit.jsonl`. The record names the input fields and never their values. The file is git-ignored and rotates at 1 MiB. Inside the editor, R2 tools follow VS Code's workspace trust instead.
+
 #### Cursor Rules Export
 
 **Command:** `RailsForge: Export Cursor Rules & Register MCP Server` (`railsforge.exportCursorRules`)
@@ -1102,6 +1106,8 @@ All keybindings require `editorTextFocus` (except Route Search, DevDocs, and REP
 | Copy System Prompt for Cline / Continue / Claude Dev | `railsforge.copySystemPrompt` |
 | Apply Chat Response (diff/create/replace) | `railsforge.applyChatResponse` |
 | Set AI Provider API Key | `railsforge.setAiApiKey` |
+| Optional Tools Status | `railsforge.adapters.status` |
+| Install Optional Tool… | `railsforge.adapters.install` |
 
 ### Environment & Diagnostics
 
@@ -1225,6 +1231,13 @@ Settings marked **"requires reload"** are read once at activation (or when a pro
 | :--- | :--- | :--- | :--- | :--- |
 | `railsForge.mcp.enabled` | `boolean` | `true` | Live | Whether "Export Cursor Rules" also registers the MCP server in `.cursor/mcp.json` |
 | `railsForge.apiDocs.enabled` | `boolean` | `true` | Live (Command Palette visibility needs reload) | Whether "Generate OpenAPI Skeleton" is available |
+
+### Optional Tools
+
+| Setting | Type | Default | Reload? | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `railsForge.adapters.enabled` | `string[]` | `[]` | **Requires reload** | Optional MCP tools to offer for installation when missing. See [`optional-tools.md`](optional-tools.md) |
+| `railsForge.adapters.promptWhenMissing` | `boolean` | `true` | **Requires reload** | Ask to install an enabled tool when it is missing |
 
 ### Documentation Hovers (APIDock, DevDocs, RubyDoc)
 

@@ -36,6 +36,7 @@ export type CandidateKind =
   | 'method.mixed-collaborators'
   | 'method.conditional-chain'
   | 'method.duplicate'
+  | 'duplicate.cross-file'
   | 'method.feature-envy'
   | 'method.complex-query'
   | 'class.large'
@@ -81,6 +82,8 @@ export interface CandidateMetrics {
   callbacks?: number
   sideEffectCallbacks?: number
   duplicateOf?: string[]
+  /** Workspace-relative files that hold the other copies of a cross-file duplicate. */
+  partnerPaths?: string[]
   nPlusOne?: { collection: string; variable: string; association: string; accessLine: number }
   principleId?: string
   demeterReceiver?: string

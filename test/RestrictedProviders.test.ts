@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('vscode', () => ({
   Range: class { constructor(public a: number, public b: number, public c: number, public d: number) {} },
@@ -15,6 +15,8 @@ vi.mock('vscode', () => ({
 import { TestCodeLensProvider } from '../src/testing/TestCodeLensProvider'
 import { RailsTaskProvider } from '../src/tasks/RailsTaskProvider'
 import { setTrustProvider } from '../src/workspace/Trust'
+
+beforeEach(() => setTrustProvider(() => true))
 
 afterEach(() => setTrustProvider(() => true))
 

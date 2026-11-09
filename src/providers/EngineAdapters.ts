@@ -28,6 +28,7 @@ import { ProjectPatternIndexer, IndexedPattern, PatternType as EnginePatternType
 import { PATTERN_CATALOG, getCatalogPattern } from '../patterns/PatternCatalog'
 import { DesignPrincipleLinter, PrincipleDiagnostic } from '../principles/DesignPrincipleLinter'
 import type { PersistentIndexManager } from '../indexer/PersistentIndexManager'
+import { toDuplicateGroups } from './duplicateGroups'
 
 /**
  * Adapter that exposes a `PersistentIndexManager` (when available) plus a
@@ -36,6 +37,9 @@ import type { PersistentIndexManager } from '../indexer/PersistentIndexManager'
  * so the PrincipleCodeActionProvider keeps working in degraded environments.
  */
 export class SemanticIndexAdapter implements SemanticIndex {
+  /** Duplicate groups for one index generation. The detector is a full scan, so it runs once per write. */
+  private duplicateCache: { generation: number; groups: readonly DuplicateMethodGroup[] } | undefined
+
   constructor(
     private readonly workspaceRoot: string | undefined,
     private readonly persistentManager: PersistentIndexManager | undefined,
@@ -84,13 +88,16 @@ export class SemanticIndexAdapter implements SemanticIndex {
   }
 
   duplicateMethods(): readonly DuplicateMethodGroup[] {
-    if (!this.persistentManager) {
+    if (!this.persistentManager || !this.workspaceRoot) {
       return []
     }
-    // The DuplicateMethodDetector returns its own shape; we'd translate here. Until
-    // the PrincipleCodeActionProvider's duplicate-method Quick Fix is wired to the
-    // real detector, return an empty array.
-    return []
+    const generation = this.persistentManager.indexGeneration
+    if (this.duplicateCache?.generation === generation) {
+      return this.duplicateCache.groups
+    }
+    const groups = toDuplicateGroups(this.persistentManager.duplicateDetector.findDuplicates(), this.workspaceRoot)
+    this.duplicateCache = { generation, groups }
+    return groups
   }
 
   violationsFor(relativePath: string): readonly PrincipleViolation[] {

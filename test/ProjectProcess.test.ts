@@ -1,12 +1,13 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import { afterAll, afterEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { execFileAsync, spawnProject } from '../src/util/ProjectProcess'
 import { UntrustedWorkspaceError, setTrustProvider } from '../src/workspace/Trust'
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'railsforge-trust-'))
 afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }))
+beforeEach(() => setTrustProvider(() => true)) // a trusted workspace unless a test says otherwise
 afterEach(() => setTrustProvider(() => true))
 
 /** A command that proves it ran by creating a file. */

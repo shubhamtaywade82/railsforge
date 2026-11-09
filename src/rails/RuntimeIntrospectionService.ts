@@ -12,6 +12,7 @@ import { rubyCandidates } from '../util/RubyCommand'
 import { readConfig } from '../config/RailsForgeConfig'
 import { Logger } from '../util/Logger'
 import { INTROSPECTION_SCRIPT, RuntimeSnapshot, formatSnapshotMarkdown, parseIntrospectionOutput } from './RuntimeIntrospector'
+import { railsChildEnvironment, snapshotMatchesEnvironment, validateRuntimeEnvironment } from './RuntimeEnvironment'
 
 
 export function runtimeCachePath(root: string): string {
@@ -40,9 +41,15 @@ async function confirmExecution(): Promise<boolean> {
   return choice === 'Run once' || choice === 'Always allow'
 }
 
-export async function refreshRuntimeSnapshot(root: string): Promise<RuntimeSnapshot | undefined> {
+export async function refreshRuntimeSnapshot(root: string, requestedEnvironment?: string): Promise<RuntimeSnapshot | undefined> {
   if (!vscode.workspace.isTrusted) {
     vscode.window.showWarningMessage('RailsForge: Runtime introspection runs application code and is disabled in untrusted workspaces.')
+    return undefined
+  }
+  // The environment is validated before anything boots, and it is set explicitly on the child process below.
+  const environment = validateRuntimeEnvironment(requestedEnvironment)
+  if (!environment.ok) {
+    vscode.window.showWarningMessage(`RailsForge: ${environment.message}`)
     return undefined
   }
   if (!fs.existsSync(path.join(root, 'config', 'application.rb'))) {
@@ -62,10 +69,21 @@ export async function refreshRuntimeSnapshot(root: string): Promise<RuntimeSnaps
       let lastOutput = ''
       for (const c of rubyCandidates(root, 'rails', ['runner', script])) {
         try {
-          const { stdout, stderr } = await execFileAsync(c.command, c.args, { cwd: root, maxBuffer: 50 * 1024 * 1024, timeout: 120_000 })
+          const { stdout, stderr } = await execFileAsync(c.command, c.args, {
+            cwd: root,
+            env: railsChildEnvironment(process.env, environment.environment),
+            maxBuffer: 50 * 1024 * 1024,
+            timeout: 120_000,
+          })
           lastOutput = `${stdout}${stderr}`
           const snapshot = parseIntrospectionOutput(stdout)
           if (snapshot) {
+            // The app reports the environment it actually booted. A snapshot from any other environment is not cached.
+            if (!snapshotMatchesEnvironment(snapshot.environment, environment.environment)) {
+              Logger.warn(`[runtime] the app booted as "${snapshot.environment}", not "${environment.environment}"; nothing was cached`)
+              void vscode.window.showErrorMessage(`RailsForge: the Rails app booted as "${snapshot.environment}", not "${environment.environment}", so the snapshot was not cached.`)
+              return undefined
+            }
             snapshot.capturedAt = new Date().toISOString()
             fs.writeFileSync(runtimeCachePath(root), JSON.stringify(snapshot, null, 2))
             return snapshot

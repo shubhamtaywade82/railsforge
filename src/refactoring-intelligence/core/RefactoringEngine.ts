@@ -11,6 +11,7 @@ import type { SchemaLike } from '../../rails/NPlusOneAnalyzer'
 import type { PrincipleFinding } from '../analyzers/AnalysisContext'
 import { collectCandidates } from '../analyzers/CandidateCollector'
 import { buildDeterministicRecommendations, candidatesInScope } from '../recommendations/RecommendationBuilder'
+import type { CrossFileDuplicate } from './CrossFileDuplicates'
 import type { Candidate, Recommendation, ScopeRef } from './types'
 
 /** Engine facts supplied by the host. Each is optional; a missing fact disables the rules that need it. */
@@ -18,6 +19,8 @@ export interface EngineFacts {
   schemaTables?: () => readonly SchemaLike[]
   principleFindings?: (path: string) => readonly PrincipleFinding[]
   isProjectType?: (name: string) => boolean
+  /** Copies of this file's methods in other files, as indexed at the last save. */
+  crossFileDuplicates?: (path: string) => readonly CrossFileDuplicate[]
 }
 
 const MAX_CACHED_FILES = 32
@@ -33,7 +36,10 @@ export class RefactoringEngine {
   /** All deterministic candidates for one file, in severity order. */
   candidates(path: string, content: string): Candidate[] {
     const findings = this.facts.principleFindings?.(path) ?? []
-    const key = `${findings.length}:${findings.map(f => `${f.id}@${f.line}`).join(',')}\u0000${content}`
+    const duplicates = this.facts.crossFileDuplicates?.(path) ?? []
+    // The key covers every input to the analysis: the text, the principle findings and the cross-file
+    // copies. A change in another file's duplicates therefore reaches this file's cache.
+    const key = `${findings.length}:${findings.map(f => `${f.id}@${f.line}`).join(',')}\u0000${JSON.stringify(duplicates)}\u0000${content}`
     const hit = this.cache.get(path)
     if (hit && hit.key === key) {return hit.candidates}
 
@@ -43,6 +49,7 @@ export class RefactoringEngine {
       schemaTables: this.facts.schemaTables?.(),
       principleFindings: findings,
       isProjectType: this.facts.isProjectType,
+      crossFileDuplicates: duplicates,
     })
     this.cache.delete(path)
     this.cache.set(path, { key, candidates })

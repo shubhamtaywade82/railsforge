@@ -8,9 +8,16 @@
 
 import { SqliteDatabase } from './database'
 
+export interface DuplicateMethodSite {
+  name: string
+  filePath: string
+  startLine: number
+  endLine: number
+}
+
 export interface DuplicateMethodPair {
-  a: { name: string; filePath: string; startLine: number }
-  b: { name: string; filePath: string; startLine: number }
+  a: DuplicateMethodSite
+  b: DuplicateMethodSite
   similarity: number
 }
 
@@ -18,6 +25,7 @@ interface MethodRow {
   name: string
   file_path: string
   start_line: number
+  end_line: number
   normalized_body: string
   body_tokens: string
 }
@@ -32,7 +40,7 @@ export class DuplicateMethodDetector {
    */
   findDuplicates(minLines = 4, threshold = 0.75): DuplicateMethodPair[] {
     const rows = this.db
-      .prepare('SELECT name, file_path, start_line, normalized_body, body_tokens FROM methods')
+      .prepare('SELECT name, file_path, start_line, end_line, normalized_body, body_tokens FROM methods')
       .all() as MethodRow[]
 
     const candidates = rows
@@ -46,11 +54,18 @@ export class DuplicateMethodDetector {
         const b = candidates[j]
         if (a.file_path === b.file_path && a.start_line === b.start_line) {continue}
 
+        // Jaccard(a, b) <= min(|a|, |b|) / max(|a|, |b|). A pair whose sizes are too far apart cannot
+        // reach the threshold, so skip it before building the intersection. This never drops a pair
+        // that would have passed.
+        const lo = Math.min(a.tokens.size, b.tokens.size)
+        const hi = Math.max(a.tokens.size, b.tokens.size)
+        if (lo < threshold * hi) {continue}
+
         const similarity = jaccard(a.tokens, b.tokens)
         if (similarity >= threshold) {
           pairs.push({
-            a: { name: a.name, filePath: a.file_path, startLine: a.start_line },
-            b: { name: b.name, filePath: b.file_path, startLine: b.start_line },
+            a: { name: a.name, filePath: a.file_path, startLine: a.start_line, endLine: a.end_line },
+            b: { name: b.name, filePath: b.file_path, startLine: b.start_line, endLine: b.end_line },
             similarity,
           })
         }
