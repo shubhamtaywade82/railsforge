@@ -13,3 +13,4 @@ package-lock.json
 coverage/
 reports/
 .stryker-tmp/
+.omc
