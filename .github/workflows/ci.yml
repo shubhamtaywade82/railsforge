@@ -1,8 +1,9 @@
 name: CI
 
 on:
+  # The default branch is `main`; `master` is kept so a legacy branch still gets push validation.
   push:
-    branches: [master]
+    branches: [main, master]
   # No `branches:` filter — every PR gets validated regardless of its base branch.
   # (A `pull_request: branches: [master]` filter here would silently skip CI for any
   # PR targeting a feature/integration branch, which is exactly the kind of PR this

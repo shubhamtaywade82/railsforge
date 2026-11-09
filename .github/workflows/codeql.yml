@@ -2,7 +2,7 @@ name: CodeQL
 
 on:
   push:
-    branches: [master]
+    branches: [main, master]
   pull_request:
   schedule:
     # Catches newly-disclosed vulnerability patterns in code that hasn't changed —
