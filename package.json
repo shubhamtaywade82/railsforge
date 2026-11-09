@@ -1987,6 +1987,92 @@
           "properties": {},
           "additionalProperties": false
         }
+      },
+      {
+        "name": "railsforge_ruby_find_affected_tests",
+        "displayName": "Find affected tests for file",
+        "toolReferenceName": "ruby_find_affected_tests",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Finds candidate spec/test files corresponding to a Ruby source file using project conventions and graph relationships.",
+        "userDescription": "Find affected tests for file",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Workspace-relative path to Ruby source file, e.g. \"app/models/user.rb\""
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_ruby_run_tests",
+        "displayName": "Run Ruby tests",
+        "toolReferenceName": "ruby_run_tests",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Executes targeted spec or test file (optionally with line number) using project binstub (rspec or rails test).",
+        "userDescription": "Run Ruby tests",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Workspace-relative path to test file, e.g. \"spec/models/user_spec.rb\""
+            },
+            "line": {
+              "description": "Optional 1-based line number of specific example/test",
+              "type": "number"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "railsforge_ruby_run_linter",
+        "displayName": "Run Ruby linter",
+        "toolReferenceName": "ruby_run_linter",
+        "canBeReferencedInPrompt": true,
+        "modelDescription": "Runs project linter (RuboCop or Standard) on a target file with JSON formatting, returning structured offenses.",
+        "userDescription": "Run Ruby linter",
+        "tags": [
+          "rails",
+          "ruby",
+          "railsforge"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Workspace-relative path to file to lint, e.g. \"app/models/user.rb\""
+            },
+            "autocorrect": {
+              "description": "Whether to apply safe autocorrect (-a)",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false
+        }
       }
     ],
     "mcpServerDefinitionProviders": [
