@@ -75,7 +75,7 @@ function methodPayload(file: string, content: string, className: string, methodN
       className: qualified,
       methodName: method.name,
       visibility: method.visibility,
-      signature: method.bodyText.split(/\r?\n/, 1)[0].trim(),
+      signature: method.signature,
       params: method.params,
       startLine: method.startLine,
       endLine: method.endLine,
