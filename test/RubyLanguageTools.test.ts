@@ -113,4 +113,18 @@ BUNDLED WITH
       executionPerformed: false,
     })
   })
+  it('preserves protected visibility instead of reporting it as private', async () => {
+    fs.mkdirSync(path.join(root, 'app', 'models'), { recursive: true })
+    fs.writeFileSync(path.join(root, 'app', 'models', 'record.rb'), `class Record
+  protected
+
+  def guarded
+    true
+  end
+end
+`)
+    const result = JSON.parse(await tool('ruby_get_symbols').handler(context, { file: 'app/models/record.rb' }))
+    expect(result.types[0].methods.find((item: { name: string }) => item.name === 'guarded').visibility).toBe('protected')
+  })
+
 })
