@@ -1915,7 +1915,7 @@
         "displayName": "Get Ruby method details",
         "toolReferenceName": "ruby_get_method_details",
         "canBeReferencedInPrompt": true,
-        "modelDescription": "Returns one method declaration line, parameter names, visibility and exact source line range from a Ruby class/module. Requires file, class_name and method_name. Reads source only.",
+        "modelDescription": "Returns a method's full declaration/signature, parameter names, visibility and exact source line range from a Ruby class/module. Requires file, class_name and method_name. Reads source only.",
         "userDescription": "Get Ruby method details",
         "tags": [
           "rails",
