@@ -135,14 +135,28 @@ export class RubyAstParser {
             continue
           }
 
-          if (callInfo.receiver === null && ['private', 'protected'].includes(callInfo.method) && child.namedChildren.every(c => c.type !== 'argument_list')) {
-            visibility = callInfo.method === 'protected' ? 'protected' : 'private'
+          if (callInfo.receiver === null && ['private', 'protected', 'public'].includes(callInfo.method)) {
+            const nextVisibility: ParsedMethod['visibility'] = callInfo.method === 'public'
+              ? 'public'
+              : callInfo.method === 'protected' ? 'protected' : 'private'
+            const targets = (child.childForFieldName('arguments')?.namedChildren ?? [])
+              .map(argument => argument.text.replace(/^:/, ''))
+            if (targets.length === 0) {
+              visibility = nextVisibility
+            } else {
+              for (const method of methods) {
+                if (targets.includes(method.name)) {
+                  method.visibility = nextVisibility
+                  method.isPublic = nextVisibility === 'public'
+                }
+              }
+            }
             continue
           }
 
           calls.push(callInfo)
-        } else if (child.type === 'identifier' && (child.text === 'private' || child.text === 'protected')) {
-          visibility = child.text === 'protected' ? 'protected' : 'private'
+        } else if (child.type === 'identifier' && (child.text === 'private' || child.text === 'protected' || child.text === 'public')) {
+          visibility = child.text === 'public' ? 'public' : child.text === 'protected' ? 'protected' : 'private'
         } else if (child.type === 'method') {
           const method = this.extractMethod(child, visibility)
           if (method) {methods.push(method)}
