@@ -1,10 +1,10 @@
 /**
  * RailsForgeConfig - Single read point for every `railsForge.*` setting.
  *
- * All settings are declared with the default "window" scope in package.json,
- * which VS Code resolves from both the user's global settings.json and the
- * current workspace's `.vscode/settings.json` (workspace wins) — so every
- * setting here is configurable at either level without any extra code.
+ * All settings are declared with "machine-overridable" scope in package.json,
+ * which VS Code resolves from user global settings.json, remote machine
+ * settings.json (WSL/SSH), and workspace `.vscode/settings.json` — so every
+ * setting here is configurable at any level without extra code.
  *
  * Nothing here is cached: call `readConfig()` fresh at the point of use so a
  * settings change takes effect on the next action without requiring a reload.

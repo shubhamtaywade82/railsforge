@@ -43,7 +43,11 @@
         "railsForge.runtime.introspection.enabled",
         "railsForge.skills.extraPaths",
         "railsForge.types.rbsSigDir",
-        "railsForge.mcp.enabled"
+        "railsForge.mcp.enabled",
+        "railsForge.ollama.apiKey",
+        "railsForge.ollama.credentials",
+        "railsForge.ollama.modelBindings",
+        "railsForge.ollama.defaultCredential"
       ]
     }
   },
@@ -135,12 +139,14 @@
           },
           "uniqueItems": true,
           "default": [],
-          "description": "Optional developer tools to offer for installation, and to offer to the agent once installed and listed in railsForge.adapters.agentExecution. A listed tool that is missing gets one prompt per session. Nothing is installed without your confirmation, and RailsForge never runs an install command itself."
+          "description": "Optional developer tools to offer for installation, and to offer to the agent once installed and listed in railsForge.adapters.agentExecution. A listed tool that is missing gets one prompt per session. Nothing is installed without your confirmation, and RailsForge never runs an install command itself.",
+          "scope": "machine-overridable"
         },
         "railsForge.adapters.promptWhenMissing": {
           "type": "boolean",
           "default": true,
-          "description": "Ask to install an enabled optional tool when it is missing."
+          "description": "Ask to install an enabled optional tool when it is missing.",
+          "scope": "machine-overridable"
         },
         "railsForge.adapters.agentExecution": {
           "type": "array",
@@ -158,7 +164,8 @@
           },
           "uniqueItems": true,
           "default": [],
-          "description": "Optional tools the agent may run as MCP servers, once each is enabled in railsForge.adapters.enabled and installed globally. Each can run code the agent supplies, so this list is a separate consent. Only debug-mcp is supported so far."
+          "description": "Optional tools the agent may run as MCP servers, once each is enabled in railsForge.adapters.enabled and installed globally. Each can run code the agent supplies, so this list is a separate consent. Only debug-mcp is supported so far.",
+          "scope": "machine-overridable"
         },
         "railsForge.excludePatterns": {
           "type": "array",
@@ -175,7 +182,8 @@
             "**/public/assets/**",
             "**/public/packs/**"
           ],
-          "description": "Glob patterns excluded from every RailsForge workspace scan (schema/route/pattern indexing, AST index, live re-indexing on save). Set at the workspace level (.vscode/settings.json) to exclude project-specific directories (e.g. a vendored engine's dummy app, a generated docs folder) on top of, or instead of, the defaults. The RailsForge MCP server (run outside VS Code) also reads this from the workspace's .vscode/settings.json."
+          "description": "Glob patterns excluded from every RailsForge workspace scan (schema/route/pattern indexing, AST index, live re-indexing on save). Set at the workspace level (.vscode/settings.json) to exclude project-specific directories (e.g. a vendored engine's dummy app, a generated docs folder) on top of, or instead of, the defaults. The RailsForge MCP server (run outside VS Code) also reads this from the workspace's .vscode/settings.json.",
+          "scope": "machine-overridable"
         },
         "railsForge.log.level": {
           "type": "string",
@@ -194,12 +202,14 @@
             "Adds raw HTTP request/response payloads sent to the AI provider — these contain your code/prompts, so be careful before sharing logs"
           ],
           "default": "info",
-          "description": "Verbosity of the RailsForge output channel (View → Output → RailsForge) and the railsForge.log.file mirror. Applies immediately on change — no window reload needed."
+          "description": "Verbosity of the RailsForge output channel (View → Output → RailsForge) and the railsForge.log.file mirror. Applies immediately on change — no window reload needed.",
+          "scope": "machine-overridable"
         },
         "railsForge.log.file": {
           "type": "boolean",
           "default": false,
-          "description": "Mirror every log line to <workspace>/.railsforge/railsforge.log (the .railsforge/ directory is already gitignored). Intended for capturing issues to attach to a bug report; the file grows unbounded, so delete it when you're done."
+          "description": "Mirror every log line to <workspace>/.railsforge/railsforge.log (the .railsforge/ directory is already gitignored). Intended for capturing issues to attach to a bug report; the file grows unbounded, so delete it when you're done.",
+          "scope": "machine-overridable"
         },
         "railsForge.projectType.override": {
           "type": "string",
@@ -218,12 +228,14 @@
             "Force plain Ruby script treatment (same as gem, minus gem-publishing commands)"
           ],
           "default": "auto",
-          "description": "Override RailsForge's auto-detected project type. Controls which commands/keybindings appear (see the Architecture sidebar for what was detected) — set this when auto-detection gets it wrong, e.g. an API-only app without `config.api_only = true` set yet. Requires a window reload to take effect."
+          "description": "Override RailsForge's auto-detected project type. Controls which commands/keybindings appear (see the Architecture sidebar for what was detected) — set this when auto-detection gets it wrong, e.g. an API-only app without `config.api_only = true` set yet. Requires a window reload to take effect.",
+          "scope": "machine-overridable"
         },
         "railsForge.rubocop.autocorrectOnSave": {
           "type": "boolean",
           "default": false,
-          "description": "Automatically run RuboCop autocorrect (mode per railsForge.rubocop.mode) on every Ruby file save"
+          "description": "Automatically run RuboCop autocorrect (mode per railsForge.rubocop.mode) on every Ruby file save",
+          "scope": "machine-overridable"
         },
         "railsForge.rubocop.mode": {
           "type": "string",
@@ -232,12 +244,14 @@
             "unsafe"
           ],
           "default": "safe",
-          "description": "RuboCop autocorrect mode used by both the 'RuboCop Autocorrect File' command and rubocop.autocorrectOnSave: safe (-a) or unsafe (-A)"
+          "description": "RuboCop autocorrect mode used by both the 'RuboCop Autocorrect File' command and rubocop.autocorrectOnSave: safe (-a) or unsafe (-A)",
+          "scope": "machine-overridable"
         },
         "railsForge.brakeman.scanOnSave": {
           "type": "boolean",
           "default": false,
-          "description": "Run a Brakeman security scan in the background on Ruby file save (Rails projects only). Debounced to at most once every 30s since Brakeman scans the whole project, not just the saved file; silent when clean, shows a notification with a 'Show Report' action when it finds warnings."
+          "description": "Run a Brakeman security scan in the background on Ruby file save (Rails projects only). Debounced to at most once every 30s since Brakeman scans the whole project, not just the saved file; silent when clean, shows a notification with a 'Show Report' action when it finds warnings.",
+          "scope": "machine-overridable"
         },
         "railsForge.testing.framework": {
           "type": "string",
@@ -246,76 +260,118 @@
             "minitest"
           ],
           "default": "rspec",
-          "description": "Fallback framework for 'Run Test'/'Debug Test' when a test file's path doesn't unambiguously indicate spec/ (RSpec) or test/ (Minitest)"
+          "description": "Fallback framework for 'Run Test'/'Debug Test' when a test file's path doesn't unambiguously indicate spec/ (RSpec) or test/ (Minitest)",
+          "scope": "machine-overridable"
         },
         "railsForge.schema.autoIndex": {
           "type": "boolean",
           "default": true,
-          "description": "Auto-index db/schema.rb on file changes. Requires a window reload to take effect."
+          "description": "Auto-index db/schema.rb on file changes. Requires a window reload to take effect.",
+          "scope": "machine-overridable"
         },
         "railsForge.routes.autoIndex": {
           "type": "boolean",
           "default": true,
-          "description": "Auto-index config/routes.rb on file changes. Requires a window reload to take effect."
+          "description": "Auto-index config/routes.rb on file changes. Requires a window reload to take effect.",
+          "scope": "machine-overridable"
         },
         "railsForge.ollama.host": {
           "type": "string",
           "default": "http://localhost:11434",
-          "description": "URL of the local Ollama instance"
+          "description": "URL of the local Ollama instance",
+          "scope": "machine-overridable"
         },
         "railsForge.ollama.model": {
           "type": "string",
           "default": "qwen2.5-coder:14b",
-          "description": "Default Ollama model to use for @rails AI Agent"
+          "description": "Default Ollama model to use for @rails AI Agent",
+          "scope": "machine-overridable"
         },
         "railsForge.ollama.apiKey": {
           "type": "string",
           "default": "",
-          "description": "API key for Ollama Cloud (https://ollama.com). Optional fallback; prefer storing securely via 'RailsForge: Set AI Provider API Key' (railsforge.setAiApiKey) or setting OLLAMA_API_KEY in your environment."
+          "description": "API key for Ollama Cloud (https://ollama.com). Optional fallback; prefer storing securely via 'RailsForge: Set AI Provider API Key' (railsforge.setAiApiKey) or setting OLLAMA_API_KEY in your environment.",
+          "scope": "machine-overridable"
         },
         "railsForge.ollama.credentials": {
           "type": "object",
+          "scope": "machine-overridable",
           "default": {},
-          "description": "Named Ollama credentials/endpoints for multi-key routing, e.g. {\"free1\": {\"apiKey\": \"...\"}, \"pro\": {\"apiKey\": \"...\"}}. Combine with railsForge.ollama.modelBindings to scope models to specific credentials."
+          "description": "Named Ollama credentials/endpoints for multi-key routing, e.g. {\"free1\": {\"apiKey\": \"...\"}, \"pro\": {\"apiKey\": \"...\"}}. Combine with railsForge.ollama.modelBindings to scope models to specific credentials.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "apiKey": {
+                "type": "string",
+                "description": "Ollama Cloud API key for this credential account"
+              },
+              "baseUrl": {
+                "type": "string",
+                "default": "https://ollama.com",
+                "description": "Base URL for this Ollama endpoint"
+              },
+              "headers": {
+                "type": "object",
+                "description": "Custom HTTP headers sent with requests using this credential",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "apiKey"
+            ]
+          }
         },
         "railsForge.ollama.modelBindings": {
           "type": "object",
+          "scope": "machine-overridable",
           "default": {},
-          "description": "Maps model names to credential IDs, e.g. {\"gemma4:31b\": \"free1\", \"gpt-oss:120b\": \"free2\", \"nemotron-3-super\": \"pro\"}."
+          "description": "Maps model names to credential IDs, e.g. {\"gemma4:31b\": \"free1\", \"gpt-oss:120b\": \"free2\", \"nemotron-3-super\": \"pro\"}.",
+          "additionalProperties": {
+            "type": "string",
+            "description": "Credential ID defined in railsForge.ollama.credentials"
+          }
         },
         "railsForge.ollama.defaultCredential": {
           "type": "string",
+          "scope": "machine-overridable",
           "default": "",
           "description": "Default credential ID from railsForge.ollama.credentials to use for any model not explicitly in modelBindings."
         },
         "railsForge.ollama.embeddingModel": {
           "type": "string",
           "default": "nomic-embed-text",
-          "description": "Ollama model used for RailsForge: Semantic Search (must be pulled separately, e.g. `ollama pull nomic-embed-text`). Search falls back to keyword matching if this model or Ollama itself is unavailable."
+          "description": "Ollama model used for RailsForge: Semantic Search (must be pulled separately, e.g. `ollama pull nomic-embed-text`). Search falls back to keyword matching if this model or Ollama itself is unavailable.",
+          "scope": "machine-overridable"
         },
         "railsForge.ollama.numCtx": {
           "type": "number",
           "default": 8192,
           "minimum": 2048,
-          "description": "Ollama context window (num_ctx) for the @rails agent. Small local models default to ~2048-4096, which truncates RailsForge's system prompt + file content and causes malformed AI fixes; 8192 fits the prompt and diff-format instructions. Raise to 16384 for files over ~200 lines. Only sent to Ollama; ignored for cloud providers."
+          "description": "Ollama context window (num_ctx) for the @rails agent. Small local models default to ~2048-4096, which truncates RailsForge's system prompt + file content and causes malformed AI fixes; 8192 fits the prompt and diff-format instructions. Raise to 16384 for files over ~200 lines. Only sent to Ollama; ignored for cloud providers.",
+          "scope": "machine-overridable"
         },
         "railsForge.ollama.keepAlive": {
           "type": "string",
           "default": "30m",
-          "description": "How long the Ollama model stays loaded in memory after a request (keep_alive). Keeps the model resident so AI-fix and chat calls skip the cold-start load. Only sent to Ollama; ignored for cloud providers."
+          "description": "How long the Ollama model stays loaded in memory after a request (keep_alive). Keeps the model resident so AI-fix and chat calls skip the cold-start load. Only sent to Ollama; ignored for cloud providers.",
+          "scope": "machine-overridable"
         },
         "railsForge.ollama.repeatPenalty": {
           "type": "number",
           "default": 1.15,
           "minimum": 1,
-          "description": "Ollama repeat penalty for the @rails agent. Suppresses the repetition loops small local models fall into; 1.0 disables it. Only sent to Ollama; ignored for cloud providers."
+          "description": "Ollama repeat penalty for the @rails agent. Suppresses the repetition loops small local models fall into; 1.0 disables it. Only sent to Ollama; ignored for cloud providers.",
+          "scope": "machine-overridable"
         },
         "railsForge.ollama.minP": {
           "type": "number",
           "default": 0.05,
           "minimum": 0,
           "maximum": 1,
-          "description": "Ollama min_p filter for the @rails agent. Keeps high-probability tokens and drops low-probability noise, improving output quality on small models. Only sent to Ollama; ignored for cloud providers."
+          "description": "Ollama min_p filter for the @rails agent. Keeps high-probability tokens and drops low-probability noise, improving output quality on small models. Only sent to Ollama; ignored for cloud providers.",
+          "scope": "machine-overridable"
         },
         "railsForge.ai.provider": {
           "type": "string",
@@ -332,67 +388,79 @@
             "VS Code's own model picker (Copilot or any installed Language Model provider, e.g. an Ollama provider) — no API key stored by RailsForge; VS Code asks for consent"
           ],
           "default": "ollama",
-          "description": "Backend for the @rails AI agent and chat participant. Cloud providers send your code/prompts to that provider's API — only switch away from 'ollama' if you're fine with that. Requires a window reload to take effect."
+          "description": "Backend for the @rails AI agent and chat participant. Cloud providers send your code/prompts to that provider's API — only switch away from 'ollama' if you're fine with that. Requires a window reload to take effect.",
+          "scope": "machine-overridable"
         },
         "railsForge.ai.vscodeLm.family": {
           "type": "string",
           "default": "",
-          "description": "Preferred model family (e.g. 'gpt-4o', 'claude-sonnet') when railsForge.ai.provider is 'vscode-lm'. Empty uses the first available model."
+          "description": "Preferred model family (e.g. 'gpt-4o', 'claude-sonnet') when railsForge.ai.provider is 'vscode-lm'. Empty uses the first available model.",
+          "scope": "machine-overridable"
         },
         "railsForge.ai.openai.model": {
           "type": "string",
           "default": "gpt-4o-mini",
-          "description": "OpenAI model used when railsForge.ai.provider is 'openai'"
+          "description": "OpenAI model used when railsForge.ai.provider is 'openai'",
+          "scope": "machine-overridable"
         },
         "railsForge.ai.openai.baseUrl": {
           "type": "string",
           "default": "https://api.openai.com",
-          "description": "Base URL for OpenAI-compatible endpoints. Point this at OpenRouter, a self-hosted vLLM, or any OSS model gateway (e.g. oss-gpt 120b) that speaks the /v1/chat/completions protocol. The agent appends /v1/chat/completions automatically."
+          "description": "Base URL for OpenAI-compatible endpoints. Point this at OpenRouter, a self-hosted vLLM, or any OSS model gateway (e.g. oss-gpt 120b) that speaks the /v1/chat/completions protocol. The agent appends /v1/chat/completions automatically.",
+          "scope": "machine-overridable"
         },
         "railsForge.ai.anthropic.model": {
           "type": "string",
           "default": "claude-sonnet-4-5",
-          "description": "Anthropic model used when railsForge.ai.provider is 'anthropic'"
+          "description": "Anthropic model used when railsForge.ai.provider is 'anthropic'",
+          "scope": "machine-overridable"
         },
         "railsForge.ai.temperature": {
           "type": "number",
           "default": 0.2,
           "minimum": 0,
           "maximum": 2,
-          "description": "Sampling temperature for the @rails agent, applied to every provider. 0.2 keeps AI fixes deterministic (good for diff generation); raise toward 1.0 for more creative chat answers."
+          "description": "Sampling temperature for the @rails agent, applied to every provider. 0.2 keeps AI fixes deterministic (good for diff generation); raise toward 1.0 for more creative chat answers.",
+          "scope": "machine-overridable"
         },
         "railsForge.ai.maxTokens": {
           "type": "number",
           "default": 2048,
           "minimum": 64,
-          "description": "Maximum generated tokens per response. Sent as num_predict to Ollama and max_tokens to cloud providers. For a 4B local model this caps rambling and cuts round time; cloud models can handle a larger cap (e.g. 4096)."
+          "description": "Maximum generated tokens per response. Sent as num_predict to Ollama and max_tokens to cloud providers. For a 4B local model this caps rambling and cuts round time; cloud models can handle a larger cap (e.g. 4096).",
+          "scope": "machine-overridable"
         },
         "railsForge.ai.timeoutMs": {
           "type": "number",
           "default": 120000,
           "minimum": 5000,
-          "description": "Per-request timeout for @rails agent calls. Prevents a hung or overloaded Ollama/cloud endpoint from blocking a fix or chat turn indefinitely."
+          "description": "Per-request timeout for @rails agent calls. Prevents a hung or overloaded Ollama/cloud endpoint from blocking a fix or chat turn indefinitely.",
+          "scope": "machine-overridable"
         },
         "railsForge.legal.skills.enabled": {
           "type": "boolean",
           "default": false,
-          "description": "Enable legal-domain AI guardrails inspired by the lawve-ai/awesome-legal-skills vscode-extension-builder-lawvable skill pack. Adds jurisdiction, confidentiality, citation, uncertainty, and attorney-review guidance to @rails prompts for legal-tech workspaces."
+          "description": "Enable legal-domain AI guardrails inspired by the lawve-ai/awesome-legal-skills vscode-extension-builder-lawvable skill pack. Adds jurisdiction, confidentiality, citation, uncertainty, and attorney-review guidance to @rails prompts for legal-tech workspaces.",
+          "scope": "machine-overridable"
         },
         "railsForge.mcp.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Whether 'RailsForge: Export Cursor Rules & Register MCP Server' also registers the RailsForge MCP server (in .cursor/mcp.json). When false, that command still writes .cursor/rules/railsforge.mdc but skips MCP server registration. The MCP server itself always runs over stdio, started on demand by the MCP client (Cursor/Claude Code) — there is no in-editor 'server process' to start/stop or a port to configure."
+          "description": "Whether 'RailsForge: Export Cursor Rules & Register MCP Server' also registers the RailsForge MCP server (in .cursor/mcp.json). When false, that command still writes .cursor/rules/railsforge.mdc but skips MCP server registration. The MCP server itself always runs over stdio, started on demand by the MCP client (Cursor/Claude Code) — there is no in-editor 'server process' to start/stop or a port to configure.",
+          "scope": "machine-overridable"
         },
         "railsForge.apiDocs.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Whether 'RailsForge: Generate OpenAPI Skeleton' is available. Most useful for API-only projects."
+          "description": "Whether 'RailsForge: Generate OpenAPI Skeleton' is available. Most useful for API-only projects.",
+          "scope": "machine-overridable"
         },
         "railsForge.performance.cacheSize": {
           "type": "number",
           "default": 200,
           "minimum": 10,
-          "description": "Maximum entries kept in RailsForge's bounded in-memory caches (Gem Lens gem-info lookups, semantic-search embeddings, APIDock notes) before evicting the least-recently-used entry."
+          "description": "Maximum entries kept in RailsForge's bounded in-memory caches (Gem Lens gem-info lookups, semantic-search embeddings, APIDock notes) before evicting the least-recently-used entry.",
+          "scope": "machine-overridable"
         },
         "railsForge.performance.autoOptimizeWorkspace": {
           "type": "string",
@@ -407,29 +475,34 @@
             "Show a prompt asking before configuring workspace performance optimizations.",
             "Do not automatically optimize workspace settings on startup."
           ],
-          "description": "How RailsForge optimizes VS Code performance (file watcher and search exclusions) for large Rails repositories."
+          "description": "How RailsForge optimizes VS Code performance (file watcher and search exclusions) for large Rails repositories.",
+          "scope": "machine-overridable"
         },
         "railsForge.apidock.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Append apidock.com's top-rated community note (real-world gotchas/edge cases) to the hover tooltip for known Rails/Ruby/RSpec methods."
+          "description": "Append apidock.com's top-rated community note (real-world gotchas/edge cases) to the hover tooltip for known Rails/Ruby/RSpec methods.",
+          "scope": "machine-overridable"
         },
         "railsForge.apidock.baseUrl": {
           "type": "string",
           "default": "https://apidock.com",
-          "description": "Base URL used for apidock.com lookups. Override to point at a mirror/internal proxy."
+          "description": "Base URL used for apidock.com lookups. Override to point at a mirror/internal proxy.",
+          "scope": "machine-overridable"
         },
         "railsForge.apidock.requestTimeoutMs": {
           "type": "number",
           "default": 5000,
           "minimum": 500,
-          "description": "Timeout for an apidock.com hover lookup, in milliseconds. A timed-out or failed request degrades to no APIDock note rather than blocking the hover."
+          "description": "Timeout for an apidock.com hover lookup, in milliseconds. A timed-out or failed request degrades to no APIDock note rather than blocking the hover.",
+          "scope": "machine-overridable"
         },
         "railsForge.apidock.cacheTtlHours": {
           "type": "number",
           "default": 24,
           "minimum": 0,
-          "description": "How long a fetched APIDock note is cached before being re-fetched, in hours."
+          "description": "How long a fetched APIDock note is cached before being re-fetched, in hours.",
+          "scope": "machine-overridable"
         },
         "railsForge.apidock.customMappings": {
           "type": "array",
@@ -466,65 +539,77 @@
                 "description": "Method name as it appears in the apidock.com URL"
               }
             }
-          }
+          },
+          "scope": "machine-overridable"
         },
         "railsForge.devdocs.baseUrl": {
           "type": "string",
           "default": "https://devdocs.io",
-          "description": "Base URL loaded by 'RailsForge: Open DevDocs'. Override to point at a self-hosted DevDocs instance."
+          "description": "Base URL loaded by 'RailsForge: Open DevDocs'. Override to point at a self-hosted DevDocs instance.",
+          "scope": "machine-overridable"
         },
         "railsForge.devdocs.openBesideActiveEditor": {
           "type": "boolean",
           "default": true,
-          "description": "Open the DevDocs panel in a column beside the active editor. When false, it opens in the active editor's own column."
+          "description": "Open the DevDocs panel in a column beside the active editor. When false, it opens in the active editor's own column.",
+          "scope": "machine-overridable"
         },
         "railsForge.rubydoc.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Whether 'RailsForge: Open Gem Documentation' and the get_gem_documentation MCP tool are available."
+          "description": "Whether 'RailsForge: Open Gem Documentation' and the get_gem_documentation MCP tool are available.",
+          "scope": "machine-overridable"
         },
         "railsForge.rubydoc.baseUrl": {
           "type": "string",
           "default": "https://www.rubydoc.info",
-          "description": "Base URL used for rubydoc.info gem documentation lookups. Override to point at a mirror/internal proxy."
+          "description": "Base URL used for rubydoc.info gem documentation lookups. Override to point at a mirror/internal proxy.",
+          "scope": "machine-overridable"
         },
         "railsForge.rubydoc.requestTimeoutMs": {
           "type": "number",
           "default": 6000,
           "minimum": 500,
-          "description": "Timeout for a rubydoc.info lookup, in milliseconds."
+          "description": "Timeout for a rubydoc.info lookup, in milliseconds.",
+          "scope": "machine-overridable"
         },
         "railsForge.rubydoc.cacheTtlDays": {
           "type": "number",
           "default": 7,
           "minimum": 0,
-          "description": "How long a fetched gem doc entry is cached before being re-fetched, in days. Gem docs are immutable per version, so this can safely be long."
+          "description": "How long a fetched gem doc entry is cached before being re-fetched, in days. Gem docs are immutable per version, so this can safely be long.",
+          "scope": "machine-overridable"
         },
         "railsForge.devdocs.offlineEnabled": {
           "type": "boolean",
           "default": true,
-          "description": "Download the project's Ruby/Rails DevDocs docsets to .railsforge/devdocs/ on activation and use them for zero-latency, fully offline hover documentation. When false, only APIDock's network-backed community notes appear on hover."
+          "description": "Download the project's Ruby/Rails DevDocs docsets to .railsforge/devdocs/ on activation and use them for zero-latency, fully offline hover documentation. When false, only APIDock's network-backed community notes appear on hover.",
+          "scope": "machine-overridable"
         },
         "railsForge.devdocs.dataBaseUrl": {
           "type": "string",
           "default": "https://documents.devdocs.io",
-          "description": "Base URL DevDocs docset data (index.json/db.json) is downloaded from. Override to point at a mirror/internal proxy."
+          "description": "Base URL DevDocs docset data (index.json/db.json) is downloaded from. Override to point at a mirror/internal proxy.",
+          "scope": "machine-overridable"
         },
         "railsForge.devdocs.fetchTimeoutMs": {
           "type": "number",
           "default": 30000,
           "minimum": 1000,
-          "description": "Timeout for downloading a DevDocs docset file, in milliseconds. Each docset is several MB, hence the longer default than APIDock/RubyDoc's per-hover timeouts."
+          "description": "Timeout for downloading a DevDocs docset file, in milliseconds. Each docset is several MB, hence the longer default than APIDock/RubyDoc's per-hover timeouts.",
+          "scope": "machine-overridable"
         },
         "railsForge.devdocs.rubySlug": {
           "type": "string",
           "default": "",
-          "description": "DevDocs docset slug to use for offline Ruby core docs, e.g. \"ruby~3.3\". Empty: derived from the project's detected Ruby version."
+          "description": "DevDocs docset slug to use for offline Ruby core docs, e.g. \"ruby~3.3\". Empty: derived from the project's detected Ruby version.",
+          "scope": "machine-overridable"
         },
         "railsForge.devdocs.railsSlug": {
           "type": "string",
           "default": "",
-          "description": "DevDocs docset slug to use for offline Rails docs, e.g. \"rails~7.1\". Empty: derived from the project's detected Rails version."
+          "description": "DevDocs docset slug to use for offline Rails docs, e.g. \"rails~7.1\". Empty: derived from the project's detected Rails version.",
+          "scope": "machine-overridable"
         },
         "railsForge.rubydoc.namespaceMappings": {
           "type": "array",
@@ -546,17 +631,20 @@
                 "description": "Gem name as it appears in Gemfile.lock, e.g. \"view_component\""
               }
             }
-          }
+          },
+          "scope": "machine-overridable"
         },
         "railsForge.types.steepEnabled": {
           "type": "boolean",
           "default": false,
-          "description": "Enable Steep type-checker diagnostics ('RailsForge: Run Steep Type Check'). Requires a Steepfile and the steep gem; off by default since most projects don't use RBS/Steep."
+          "description": "Enable Steep type-checker diagnostics ('RailsForge: Run Steep Type Check'). Requires a Steepfile and the steep gem; off by default since most projects don't use RBS/Steep.",
+          "scope": "machine-overridable"
         },
         "railsForge.types.steepScanOnSave": {
           "type": "boolean",
           "default": false,
-          "description": "Automatically re-run Steep in the background on Ruby file save when railsForge.types.steepEnabled is true. Debounced (like brakeman.scanOnSave) since Steep checks the whole configured target, not just the saved file."
+          "description": "Automatically re-run Steep in the background on Ruby file save when railsForge.types.steepEnabled is true. Debounced (like brakeman.scanOnSave) since Steep checks the whole configured target, not just the saved file.",
+          "scope": "machine-overridable"
         },
         "railsForge.refactoring.aiHints": {
           "type": "string",
@@ -569,41 +657,48 @@
             "After you save a Ruby file, ask the AI about the one scope whose code changed and has no hint yet. Sends that scope and related files to the configured AI provider. One request per save at most."
           ],
           "default": "off",
-          "description": "Background AI hints. Off by default because it sends code to your AI provider without a request from you. Observed hints appear in the CodeLens and the lightbulb until the code in their scope changes."
+          "description": "Background AI hints. Off by default because it sends code to your AI provider without a request from you. Observed hints appear in the CodeLens and the lightbulb until the code in their scope changes.",
+          "scope": "machine-overridable"
         },
         "railsForge.refactoring.codeLens": {
           "type": "boolean",
           "default": true,
-          "description": "Show refactoring opportunities above classes, methods and N+1 loops. Computed locally from the code (no AI call); only medium and high confidence findings are shown. The AI runs only when you choose RailsForge: Suggest Refactorings."
+          "description": "Show refactoring opportunities above classes, methods and N+1 loops. Computed locally from the code (no AI call); only medium and high confidence findings are shown. The AI runs only when you choose RailsForge: Suggest Refactorings.",
+          "scope": "machine-overridable"
         },
         "railsForge.skills.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Route each AI request to the most relevant ruby-agent-skills (bundled, pinned release) and inject their rules into the prompt. The same skills are available to agent mode via the railsforge_get_skill / railsforge_route_skills tools."
+          "description": "Route each AI request to the most relevant ruby-agent-skills (bundled, pinned release) and inject their rules into the prompt. The same skills are available to agent mode via the railsforge_get_skill / railsforge_route_skills tools.",
+          "scope": "machine-overridable"
         },
         "railsForge.agent.toolLoop": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Let the AI look things up with a few read-only RailsForge tools (schema, routes, semantic graph, skills, patterns) before answering. Bounded by `railsForge.agent.maxToolSteps`; no tool can write, run project code or reach the network. Turn off for a single plain completion."
+          "markdownDescription": "Let the AI look things up with a few read-only RailsForge tools (schema, routes, semantic graph, skills, patterns) before answering. Bounded by `railsForge.agent.maxToolSteps`; no tool can write, run project code or reach the network. Turn off for a single plain completion.",
+          "scope": "machine-overridable"
         },
         "railsForge.agent.maxToolSteps": {
           "type": "integer",
           "default": 3,
           "minimum": 1,
           "maximum": 8,
-          "markdownDescription": "Most tool calls the AI may make for one request before it must answer."
+          "markdownDescription": "Most tool calls the AI may make for one request before it must answer.",
+          "scope": "machine-overridable"
         },
         "railsForge.agent.verifyRubySyntax": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Syntax-check Ruby code blocks in AI answers with `ruby -c` (parse only, nothing is executed). A failing block gets one automatic repair attempt; anything still failing is flagged in the answer. Skipped silently when `ruby` is not on the PATH."
+          "markdownDescription": "Syntax-check Ruby code blocks in AI answers with `ruby -c` (parse only, nothing is executed). A failing block gets one automatic repair attempt; anything still failing is flagged in the answer. Skipped silently when `ruby` is not on the PATH.",
+          "scope": "machine-overridable"
         },
         "railsForge.skills.maxPerRequest": {
           "type": "number",
           "default": 4,
           "minimum": 1,
           "maximum": 8,
-          "description": "Maximum domain skills injected per request (cross-cutting skills such as ruby-clean-code are added on top)."
+          "description": "Maximum domain skills injected per request (cross-cutting skills such as ruby-clean-code are added on top).",
+          "scope": "machine-overridable"
         },
         "railsForge.skills.extraPaths": {
           "type": "array",
@@ -611,7 +706,8 @@
             "type": "string"
           },
           "default": [],
-          "markdownDescription": "Extra directories of skills (`<dir>/<skill-id>/SKILL.md`) merged with the bundled pack. The project's own `.agents/skills` is always read, and overrides a bundled skill with the same id."
+          "markdownDescription": "Extra directories of skills (`<dir>/<skill-id>/SKILL.md`) merged with the bundled pack. The project's own `.agents/skills` is always read, and overrides a bundled skill with the same id.",
+          "scope": "machine-overridable"
         },
         "railsForge.analyzers.enabled": {
           "type": "array",
@@ -626,12 +722,14 @@
             ]
           },
           "default": [],
-          "description": "Analyzers run by 'RailsForge: Run Code Analyzers' (findings go to the Problems panel). They must be in your bundle (bundle add <name> --group development). Empty = ask each time."
+          "description": "Analyzers run by 'RailsForge: Run Code Analyzers' (findings go to the Problems panel). They must be in your bundle (bundle add <name> --group development). Empty = ask each time.",
+          "scope": "machine-overridable"
         },
         "railsForge.analyzers.flogThreshold": {
           "type": "number",
           "default": 20,
-          "description": "Flog complexity score at or above which a method is reported."
+          "description": "Flog complexity score at or above which a method is reported.",
+          "scope": "machine-overridable"
         },
         "railsForge.analyzers.paths": {
           "type": "array",
@@ -642,12 +740,14 @@
             "app",
             "lib"
           ],
-          "description": "Project-relative paths the analyzers scan."
+          "description": "Project-relative paths the analyzers scan.",
+          "scope": "machine-overridable"
         },
         "railsForge.runtime.introspection.enabled": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "Allow RailsForge to run `rails runner` to read the application's real models, associations, validations, callbacks, routes and middleware. **This boots your app and executes its initializers.** When off, RailsForge asks before each run. Never runs in untrusted workspaces."
+          "markdownDescription": "Allow RailsForge to run `rails runner` to read the application's real models, associations, validations, callbacks, routes and middleware. **This boots your app and executes its initializers.** When off, RailsForge asks before each run. Never runs in untrusted workspaces.",
+          "scope": "machine-overridable"
         },
         "railsForge.ruby.versionManager": {
           "type": "string",
@@ -661,12 +761,14 @@
             "chruby"
           ],
           "default": "auto",
-          "description": "Version manager used to run project tools (RuboCop, Rails, RSpec, Brakeman, ...) so the project's Ruby is used even when VS Code was launched without shell init. 'auto' detects it from .tool-versions / mise.toml / .ruby-version and only wraps when the manager is installed; 'none' runs tools directly."
+          "description": "Version manager used to run project tools (RuboCop, Rails, RSpec, Brakeman, ...) so the project's Ruby is used even when VS Code was launched without shell init. 'auto' detects it from .tool-versions / mise.toml / .ruby-version and only wraps when the manager is installed; 'none' runs tools directly.",
+          "scope": "machine-overridable"
         },
         "railsForge.types.rbsSigDir": {
           "type": "string",
           "default": "sig",
-          "description": "Directory (relative to the workspace root) RBS signature files are read from for hover/go-to-definition, and written to by 'RailsForge: Generate RBS Signatures for File'."
+          "description": "Directory (relative to the workspace root) RBS signature files are read from for hover/go-to-definition, and written to by 'RailsForge: Generate RBS Signatures for File'.",
+          "scope": "machine-overridable"
         }
       }
     },
