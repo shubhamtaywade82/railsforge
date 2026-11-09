@@ -193,12 +193,12 @@ export class RubyAstParser {
     const paramsNode = methodNode.childForFieldName('parameters')
     const params = (paramsNode?.namedChildren ?? []).map(p => this.paramName(p)).filter((p): p is string => p !== null)
     const signatureEnd = paramsNode ?? nameNode
-    const signatureLines = methodNode.text.split(/\\r?\\n/)
+    const signatureLines = methodNode.text.split(/\r?\n/)
     const endRow = signatureEnd.endPosition.row - methodNode.startPosition.row
     const endColumn = signatureEnd.endPosition.column - (endRow === 0 ? methodNode.startPosition.column : 0)
     signatureLines.splice(endRow + 1)
     signatureLines[endRow] = signatureLines[endRow].slice(0, endColumn)
-    const signature = signatureLines.join('\\n').trim()
+    const signature = signatureLines.join('\n').trim()
 
     return {
       name: nameNode.text,
