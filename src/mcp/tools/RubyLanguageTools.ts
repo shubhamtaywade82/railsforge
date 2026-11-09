@@ -57,7 +57,7 @@ function symbolPayload(file: string, content: string): unknown {
         name: method.name,
         visibility: method.visibility,
         params: method.params,
-        signature: method.bodyText.split(/\r?\n/, 1)[0].trim(),
+        signature: method.signature,
         startLine: method.startLine,
         endLine: method.endLine,
       })),
