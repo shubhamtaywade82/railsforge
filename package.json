@@ -135,12 +135,30 @@
           },
           "uniqueItems": true,
           "default": [],
-          "description": "Optional developer tools to offer for installation. A listed tool that is missing gets one prompt per session. Nothing is installed without your confirmation, and RailsForge never runs an install command itself."
+          "description": "Optional developer tools to offer for installation, and to offer to the agent once installed and listed in railsForge.adapters.agentExecution. A listed tool that is missing gets one prompt per session. Nothing is installed without your confirmation, and RailsForge never runs an install command itself."
         },
         "railsForge.adapters.promptWhenMissing": {
           "type": "boolean",
           "default": true,
           "description": "Ask to install an enabled optional tool when it is missing."
+        },
+        "railsForge.adapters.agentExecution": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "rails-mcp-server",
+              "ruby-console-mcp",
+              "actionmcp",
+              "ask-rails-harness-mcp",
+              "ask-ruby-harness-mcp",
+              "debug-mcp",
+              "gems-mcp"
+            ]
+          },
+          "uniqueItems": true,
+          "default": [],
+          "description": "Optional tools the agent may run as MCP servers, once each is enabled in railsForge.adapters.enabled and installed globally. Each can run code the agent supplies, so this list is a separate consent. Only debug-mcp is supported so far."
         },
         "railsForge.excludePatterns": {
           "type": "array",
@@ -2079,6 +2097,10 @@
       {
         "id": "railsforge.mcp",
         "label": "RailsForge (Rails project context)"
+      },
+      {
+        "id": "railsforge.adapters",
+        "label": "RailsForge optional tools"
       }
     ],
     "viewsWelcome": [

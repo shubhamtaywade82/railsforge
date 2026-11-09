@@ -1249,8 +1249,9 @@ Settings marked **"requires reload"** are read once at activation (or when a pro
 
 | Setting | Type | Default | Reload? | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `railsForge.adapters.enabled` | `string[]` | `[]` | **Requires reload** | Optional MCP tools to offer for installation when missing. See [`optional-tools.md`](optional-tools.md) |
+| `railsForge.adapters.enabled` | `string[]` | `[]` | **Requires reload** for the prompt; live for the agent | Optional MCP tools to offer for installation when missing, and to the agent once installed. See [`optional-tools.md`](optional-tools.md) |
 | `railsForge.adapters.promptWhenMissing` | `boolean` | `true` | **Requires reload** | Ask to install an enabled tool when it is missing |
+| `railsForge.adapters.agentExecution` | `string[]` | `[]` | Live | Optional tools the agent may run as MCP servers, once enabled and installed globally. Each can run code the agent supplies. Only `debug-mcp` is supported so far |
 
 ### Documentation Hovers (APIDock, DevDocs, RubyDoc)
 
