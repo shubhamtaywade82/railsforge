@@ -128,4 +128,32 @@ end
     expect(result.types[0].methods.find((item: { name: string }) => item.name === 'guarded').visibility).toBe('protected')
   })
 
+  it('handles explicit visibility modifiers and a later public section', async () => {
+    fs.mkdirSync(path.join(root, 'app', 'models'), { recursive: true })
+    fs.writeFileSync(path.join(root, 'app', 'models', 'visibility.rb'), `class Visibility
+  def hidden
+    true
+  end
+  private :hidden
+
+  protected
+
+  def guarded
+    true
+  end
+
+  public
+
+  def exposed
+    true
+  end
+end
+`)
+    const result = JSON.parse(await tool('ruby_get_symbols').handler(context, { file: 'app/models/visibility.rb' }))
+    const methods = result.types[0].methods
+    expect(methods.find((item: { name: string }) => item.name === 'hidden').visibility).toBe('private')
+    expect(methods.find((item: { name: string }) => item.name === 'guarded').visibility).toBe('protected')
+    expect(methods.find((item: { name: string }) => item.name === 'exposed').visibility).toBe('public')
+  })
+
 })
