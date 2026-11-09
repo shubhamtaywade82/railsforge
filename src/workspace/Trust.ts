@@ -8,7 +8,8 @@
  *
  * Every process launch goes through ProjectProcess.ts and every terminal write through ProjectTerminal.ts, both
  * of which call assertTrusted(). vscode-free: the extension injects the real provider at activation.
- * Standalone use (the MCP server, unit tests) defaults to trusted because it never launches project processes.
+ * Nothing runs until a provider is installed: the default is fail-closed. The extension installs VS Code's workspace
+ * trust. The standalone MCP server installs its explicit grant (RAILSFORGE_MCP_EXECUTION). Tests opt in per file.
  */
 
 export class UntrustedWorkspaceError extends Error {
@@ -21,7 +22,7 @@ export class UntrustedWorkspaceError extends Error {
 
 export type TrustProvider = () => boolean
 
-let provider: TrustProvider = () => true
+let provider: TrustProvider = () => false // fail closed until a provider is installed
 let onBlocked: ((action: string) => void) | undefined
 
 /** Installs the trust source (VS Code's `workspace.isTrusted`); returns the previous one (tests restore it). */

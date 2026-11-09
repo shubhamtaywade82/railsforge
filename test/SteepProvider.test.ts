@@ -11,6 +11,10 @@ vi.mock('child_process', () => ({ execFile: mockExecFile }))
 vi.mock('util', () => ({ promisify: () => mockExecFile }))
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { setTrustProvider } from '../src/workspace/Trust'
+
+// These tests drive the launch path through a mocked child_process. They describe a trusted workspace.
+beforeEach(() => setTrustProvider(() => true))
 import { parseSteepGithubOutput, SteepProvider } from '../src/types/SteepProvider'
 
 // Real `steep check --format=github` output against a scratch project with a type

@@ -590,6 +590,10 @@ Standalone Node process (separate webpack entry, not loaded by the extension hos
 | `get_dependencies` | Returns the collaborator graph for a given class |
 | `find_duplicate_methods` | Returns near-duplicate method pairs across the codebase |
 
+The server exposes every tool in `src/mcp/tools/definitions.ts`, not only the six above.
+
+**Execution policy.** Each tool declares a risk level, and the server checks it before the handler runs. R0 (static reads) and R1 (cached reads) run unconditionally. R2 tools run project code: `list_rake_tasks` runs `rake -T`, for example. The standalone server runs R2 tools only when the MCP client launches it with `RAILSFORGE_MCP_EXECUTION=project-code`. Without that variable an R2 call is refused, and the refusal names the variable. Every call appends a record to `.railsforge/mcp/audit.jsonl`. The record names the input fields and never their values. The file is git-ignored and rotates at 1 MiB. Inside the editor, R2 tools follow VS Code's workspace trust instead.
+
 #### Cursor Rules Export
 
 **Command:** `RailsForge: Export Cursor Rules & Register MCP Server` (`railsforge.exportCursorRules`)

@@ -17,11 +17,23 @@ import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mc
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ToolContext } from './tools/ToolContext'
 import { RAILSFORGE_TOOLS } from './tools/definitions'
+import { invokeTool } from './policy/ToolInvocation'
+import { readExecutionGrant } from './policy/McpCapabilityPolicy'
+import { isWorkspaceTrusted, setTrustProvider } from '../workspace/Trust'
 
 const workspaceRoot = path.resolve(process.env.RAILSFORGE_WORKSPACE_ROOT ?? process.cwd())
 // dist/mcp/server.js -> dist/skills (the pinned ruby-agent-skills build); RAILSFORGE_SKILLS_DIR overrides.
 const skillsPackDir = path.resolve(path.dirname(process.argv[1] ?? '.'), '..', 'skills')
 const context = new ToolContext(workspaceRoot, skillsPackDir)
+
+// Standalone trust is the explicit grant, never a default. The MCP client launches this process with its own
+// environment, and nothing the workspace contains can change it. R0 and R1 tools do not depend on the grant.
+const grant = readExecutionGrant(process.env)
+setTrustProvider(() => grant.grant === 'project-code')
+const warn = (message: string): void => {
+  process.stderr.write(`[railsforge-mcp] ${message}\n`)
+}
+if (grant.warning) {warn(grant.warning)}
 
 const server = new McpServer({ name: 'railsforge', version: '0.2.0' })
 
@@ -30,9 +42,13 @@ for (const tool of RAILSFORGE_TOOLS) {
   server.registerTool(
     tool.name,
     { title: tool.title, description: tool.description, inputSchema: tool.inputSchema },
-    (async (input: Record<string, unknown>) => ({
-      content: [{ type: 'text' as const, text: await tool.handler(context, input ?? {}) }],
-    })) as never,
+    (async (input: Record<string, unknown>) => {
+      // Every call goes through invokeTool: the declared risk, the execution grant and the audit trail all apply.
+      const result = await invokeTool(tool, context, input ?? {}, { source: 'standalone', isTrusted: isWorkspaceTrusted, warn })
+      return result.ok
+        ? { content: [{ type: 'text' as const, text: result.text }] }
+        : { content: [{ type: 'text' as const, text: result.message }], isError: true }
+    }) as never,
   )
 }
 

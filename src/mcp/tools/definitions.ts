@@ -21,6 +21,7 @@ import { buildSemanticContext, selectSeeds } from '../../semantic/RailsContextBu
 import { routeSkills, suggestPatterns } from '../../skills/SkillRouter'
 import { evaluateSafety } from '../../skills/SafetyRules'
 import { buildSkillContext } from '../../skills/SkillContextBuilder'
+import type { RiskLevel } from '../policy/McpCapabilityPolicy'
 
 export interface ToolDefinition {
   /** MCP tool name (snake_case); the VS Code tool name is `railsforge_<name>`. */
@@ -30,6 +31,11 @@ export interface ToolDefinition {
   inputSchema: z.ZodRawShape
   /** Short sentence for the confirmation/progress UI in VS Code. */
   invocationMessage: string
+  /**
+   * What the handler may do, decided before it runs (src/mcp/policy/McpCapabilityPolicy.ts).
+   * R0 static reads, R1 cached reads, R2 runs project code, R3 needs approval, R4 never exposed.
+   */
+  risk: RiskLevel
   handler(ctx: ToolContext, input: Record<string, unknown>): Promise<string>
 }
 
@@ -50,6 +56,7 @@ function defineTool<S extends z.ZodRawShape>(def: {
   description: string
   inputSchema: S
   invocationMessage: string
+  risk: RiskLevel
   handler(ctx: ToolContext, input: z.infer<z.ZodObject<S>>): Promise<string>
 }): ToolDefinition {
   return def as unknown as ToolDefinition
@@ -58,6 +65,7 @@ function defineTool<S extends z.ZodRawShape>(def: {
 export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   defineTool({
     name: 'get_schema',
+    risk: 'R0',
     title: 'Get ActiveRecord schema',
     description: 'Returns database columns for a model (or all tables if no model is given), from db/schema.rb.',
     inputSchema: { model: z.string().optional().describe('Model class name, e.g. "User"') },
@@ -70,6 +78,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'list_routes',
+    risk: 'R0',
     title: 'List Rails routes',
     description: 'Lists routes, optionally filtered by a search string matched against verb/path/controller#action.',
     inputSchema: { filter: z.string().optional() },
@@ -81,6 +90,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'list_patterns',
+    risk: 'R0',
     title: 'List project patterns',
     description: 'Lists this project\'s own Service/Query/Form/Policy/Decorator/Concern classes, optionally filtered by type.',
     inputSchema: { type: z.enum(PATTERN_TYPES).optional() },
@@ -93,6 +103,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'find_similar_pattern',
+    risk: 'R0',
     title: 'Find similar existing pattern',
     description: 'Given a proposed class name (e.g. "CreateOrderService"), finds the closest existing Service/Query/etc. in this project — use before generating new code.',
     inputSchema: { name: z.string() },
@@ -106,6 +117,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'get_dependencies',
+    risk: 'R0',
     title: 'Get dependencies/callers',
     description: 'Returns collaborators (what this class depends on) and callers (what depends on this class), from the persistent AST index. Requires the workspace to have been opened in VS Code with RailsForge at least once.',
     inputSchema: { name: z.string() },
@@ -119,6 +131,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'find_duplicate_methods',
+    risk: 'R0',
     title: 'Find near-duplicate methods',
     description: 'Checks the codebase for near-duplicate method bodies (candidates for extracting a shared concern/method) — call this before generating a new method, to avoid writing a redundant duplicate of existing logic. Requires the persistent AST index.',
     inputSchema: {},
@@ -131,6 +144,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'get_method_notes',
+    risk: 'R0',
     title: 'Get APIDock method notes',
     description: 'Fetches apidock.com\'s community notes and doc summary for a Ruby/Rails/RSpec method — call this before generating code that uses an unfamiliar method, to ground it in real-world gotchas (skipped validations/callbacks, deprecated behavior, surprising defaults) that official docs often miss. This is APIDock only (community notes); for the official signature/description of a Ruby core or Rails framework method, prefer get_offline_docs instead — it\'s instant (no network call) when the docset is cached.',
     inputSchema: {
@@ -151,6 +165,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'get_gem_documentation',
+    risk: 'R0',
     title: 'Get gem documentation (rubydoc.info)',
     description: 'Fetches YARD documentation (signature, description, params, return type) for a class/method in one of this project\'s dependency gems, at the exact version locked in Gemfile.lock — use this before generating code that calls into a gem (Pundit, Sidekiq, dry-rb, etc.) whose API isn\'t in RailsForge\'s own indexed patterns.',
     inputSchema: {
@@ -180,6 +195,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'get_offline_docs',
+    risk: 'R0',
     title: 'Get offline DevDocs documentation',
     description: 'Looks up a Ruby/Rails method or class in this project\'s locally cached DevDocs data (.railsforge/devdocs/, downloaded by the extension on activation) — instant, no network call, no tokens spent fetching a web page. Prefer this over get_method_notes/get_gem_documentation when you just need the official signature/description for a Ruby core or Rails framework method; use those for community gotchas or gem-specific (non-Rails) APIs instead.',
     inputSchema: {
@@ -196,6 +212,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'get_rbs_signature',
+    risk: 'R0',
     title: 'Get RBS type signature',
     description: 'Returns the RBS (Ruby type signature) declaration for a method, from this project\'s sig/ directory, if one exists. Use this to check a method\'s declared parameter/return types before calling it or writing code against it.',
     inputSchema: {
@@ -214,6 +231,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'list_rake_tasks',
+    risk: 'R2',
     title: 'List Rake tasks',
     description: 'Lists this project\'s Rake tasks (name, namespace, description) via `rake -T` — use before suggesting a shell command, to check whether a task for it already exists (e.g. db:migrate, a custom deploy/report task) rather than proposing a new script.',
     inputSchema: { filter: z.string().optional().describe('Only return tasks whose name contains this substring') },
@@ -226,6 +244,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'suggest_learning_resource',
+    risk: 'R0',
     title: 'Suggest a learning resource for a design smell',
     description: 'Given one of RailsForge\'s own design-principle diagnostic ids (SRP-FAT-CLASS, DEMETER-VIOLATION, KISS-METAPROGRAMMING, YAGNI-UNUSED-PRIVATE — as seen in this project\'s "RailsForge Principles" diagnostics), returns a specific book/chapter recommendation for further reading.',
     inputSchema: { diagnostic_id: z.enum(['SRP-FAT-CLASS', 'DEMETER-VIOLATION', 'KISS-METAPROGRAMMING', 'YAGNI-UNUSED-PRIVATE']) },
@@ -237,6 +256,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'get_project_guidelines',
+    risk: 'R0',
     title: 'Get project architecture guidelines',
     description: 'Returns this project\'s actual conventions — from .railsforge.yml if the team wrote one, otherwise learned from the codebase\'s own existing Service Objects (majority base class + entry-point method name, only when the codebase actually agrees on one) — so an AI agent generates a Service Object matching this repo\'s real pattern (e.g. `Interactor`/`run`) instead of assuming the generic Rails-generator default (`ApplicationService`/`call`). Call this before generating a new Service Object.',
     inputSchema: {},
@@ -254,6 +274,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'get_example_file',
+    risk: 'R0',
     title: 'Get a representative example file for a pattern type',
     description: 'Returns the full content of this project\'s most complete existing Service/Query/Form/Policy/Decorator/Concern, so an AI agent can learn the repo\'s real style (naming, error handling, how it structures the class) by example instead of guessing. Call this alongside get_project_guidelines before generating a new file of the same pattern type.',
     inputSchema: { pattern_type: z.enum(PATTERN_TYPES) },
@@ -272,6 +293,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'get_semantic_context',
+    risk: 'R0',
     title: 'Get Rails application context (semantic graph)',
     description: 'Returns how the parts of THIS Rails app connect for a file or topic: controller actions with their routes and views, models with table/columns/indexes/foreign keys, associations, validations, callbacks, scopes, related services/policies/specs/migrations and who calls whom. Call this FIRST when asked to change or debug a controller, model, service or query, so the change fits the real structure (e.g. before fixing an N+1 in OrdersController#index). Pass a file path and/or class names/controller#action in query.',
     inputSchema: {
@@ -288,6 +310,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'list_skills',
+    risk: 'R0',
     title: 'List engineering skills (ruby-agent-skills)',
     description: 'Lists the Ruby/Rails engineering skills available (id, family, one-line description) from the pinned ruby-agent-skills pack plus any project skills in .agents/skills. Use route_skills to pick for a task rather than reading the whole list.',
     inputSchema: { family: z.string().optional().describe('Only skills of this family, e.g. "rails", "ruby", "design", "security"') },
@@ -301,6 +324,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'route_skills',
+    risk: 'R0',
     title: 'Pick the engineering skills for a task',
     description: 'Given a task description (and optionally the file you are working on), returns the smallest set of ruby-agent-skills that apply — primary, secondary, always-on cross-cutting and safety-forced skills — with the reasons, any safety warnings (destructive commands, SQL injection, mass assignment, risky migrations, ...), plus relevant pattern names. Call this at the START of a Ruby/Rails change, then read the skills with get_skill. Uses the semantic graph of this project so a task touching a controller or migration routes accordingly.',
     inputSchema: {
@@ -320,6 +344,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'get_skill',
+    risk: 'R0',
     title: 'Read an engineering skill',
     description: 'Returns a ruby-agent-skills skill: by default its description plus the decision rules, invariants, failure modes and verification steps (compact); with `full` the whole SKILL.md; with `reference` one of its reference files; with `pattern` an implementation pattern (e.g. "service-object"). Retired skill ids are resolved automatically.',
     inputSchema: {
@@ -347,6 +372,7 @@ References (read with the \`reference\` argument): ${entry.references.map(r => r
   }),
   defineTool({
     name: 'get_runtime_introspection',
+    risk: 'R1',
     title: 'Get Rails runtime introspection',
     description: 'Returns what the RUNNING Rails app knows — real ActiveRecord associations, validations, callbacks, routes and middleware — from the cached `rails runner` snapshot (.railsforge/runtime.json). More accurate than static parsing for metaprogrammed models. Only available after the developer ran "RailsForge: Refresh Rails Runtime Introspection" (it boots the app, so it is never run automatically).',
     inputSchema: {

@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { setTrustProvider } from '../src/workspace/Trust'
+
+// These tests drive the launch path through a mocked child_process. They describe a trusted workspace.
+beforeEach(() => setTrustProvider(() => true))
 import { BundlerAuditScanner } from '../src/lint/BundlerAuditScanner'
 import type { BundlerAuditReport } from '../src/lint/BundlerAuditScanner'
 

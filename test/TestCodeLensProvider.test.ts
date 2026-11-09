@@ -1,4 +1,8 @@
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
+import { setTrustProvider } from '../src/workspace/Trust'
+
+// The lens tests describe a trusted workspace. The untrusted case sets its own provider.
+beforeEach(() => setTrustProvider(() => true))
 import * as vscode from '../test/__mocks__/vscode'
 import { TestCodeLensProvider } from '../src/testing/TestCodeLensProvider'
 
