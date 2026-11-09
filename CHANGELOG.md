@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- **AI refactoring advisor.** Put the cursor in a class, module or method, or select a block, and the lightbulb offers "Suggest refactorings" (or run `RailsForge: Suggest Refactorings (AI)`). The AI proposes up to four design-pattern or best-practice refactorings, grounded in the files the code references, its spec, its callers and the project's existing pattern instances. Picking one shows the exact change as native diffs and asks for confirmation before anything is written. Changes are validated (Rails source roots only, context lines must match, Ruby must parse) and applied as one undoable edit.
+
 ### Testing
 - `pnpm run coverage` enforces per-file v8 coverage floors on the trust gate, workspace-path guard, agent loop, safety rules, freshness, diagnostics and line-diff modules (uploaded as a CI artifact).
 - `pnpm run mutation` mutation-tests those modules with Stryker (command runner; per-group `break` scores in `scripts/mutation.mjs`). Runs weekly, on demand, and on PRs touching those files (`.github/workflows/mutation.yml`).

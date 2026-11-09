@@ -209,6 +209,7 @@ RailsForge builds a graph of how *your* app fits together — route → controll
 |:-------------------------------------------------------------|:---------------------------------------|
 | **RailsForge: Scan Workspace for Patterns, Smells & Safety** | `railsforge.scanWorkspaceArchitecture` |
 | **RailsForge: Refactor Selection (Design Patterns)**         | `railsforge.refactorSelection`         |
+| **RailsForge: Suggest Refactorings (AI)**                   | `railsforge.suggestRefactorings`       |
 | **RailsForge: Go to Matching Model**                         | `railsforge.goToModel`                 |
 | **RailsForge: Go to Matching Controller**                    | `railsforge.goToController`            |
 | **RailsForge: Go to Matching View**                          | `railsforge.goToView`                  |

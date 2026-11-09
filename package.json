@@ -749,6 +749,11 @@
         "category": "RailsForge"
       },
       {
+        "command": "railsforge.suggestRefactorings",
+        "title": "RailsForge: Suggest Refactorings (AI)",
+        "category": "RailsForge"
+      },
+      {
         "command": "railsforge.goToModel",
         "title": "RailsForge: Go to Matching Model",
         "category": "RailsForge"
@@ -1120,6 +1125,11 @@
           "command": "railsforge.refactorSelection",
           "when": "editorHasSelection && resourceLangId == ruby",
           "group": "1_refactor@3"
+        },
+        {
+          "command": "railsforge.suggestRefactorings",
+          "when": "resourceLangId == ruby",
+          "group": "1_refactor@4"
         },
         {
           "command": "railsforge.goToSpec",

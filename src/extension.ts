@@ -73,6 +73,14 @@ import { RelatedHoverProvider } from './graph/RelatedHoverProvider'
 import { FormObjectExtractor } from './refactor/FormObjectExtractor'
 import { ValueObjectExtractor } from './refactor/ValueObjectExtractor'
 import { RefactoringMenuProvider } from './refactor/RefactoringMenuProvider'
+import { RefactorAdvisor } from './refactor/advisor/RefactorAdvisor'
+import {
+  RefactorAdvisorCommand,
+  RefactorSuggestionCodeActionProvider,
+  SUGGEST_REFACTORINGS_COMMAND,
+  vsCodeSourceReader,
+} from './refactor/advisor/RefactorAdvisorCommand'
+import { TargetResolver } from './refactor/advisor/TargetResolver'
 import { RailsAgent, AiFixProposal, RailsAgentConfig } from './agent/RailsAgent'
 import { applyUnifiedHunks, parseUnifiedDiff } from './patch/UnifiedDiff'
 import { RailsChatParticipant } from './chat/RailsChatParticipant'
@@ -116,7 +124,7 @@ import { parseVersion, bumpVersion, replaceVersionInContent, VersionBumpPart } f
 import { SpeculativeFixCache } from './agent/SpeculativeFixCache'
 import { Logger } from './util/Logger'
 import { diffLines, filterFixHunks, applyHunks } from './patch/LineDiff'
-import { rubySyntaxError } from './util/RubySyntax'
+import { checkRubySyntax, rubySyntaxError } from './util/RubySyntax'
 import { handleWorkspaceAutoOptimization, optimizeRailsWorkspace } from './workspace/WorkspaceOptimizer'
 import {
   ProviderRegistry,
@@ -906,6 +914,38 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
 
   providerRegistry.activate()
   context.subscriptions.push(providerRegistry)
+
+  // 7c. Refactoring advisor: AI suggestions for a class, method or selection. Suggestions are
+  //     validated, then shown as native diffs; nothing is written before the user confirms.
+  //     Uses the agent's provider settings, and the semantic index and pattern catalog for context.
+  if (activeProject.root) {
+    const refactorTargets = new TargetResolver()
+    const refactorAdvisor = new RefactorAdvisor({
+      agent,
+      index: semanticIndexAdapter,
+      files: vsCodeSourceReader(activeProject.root),
+      catalog: patternCatalogAdapter,
+      checkSyntax: code => checkRubySyntax(code),
+      log: message => Logger.debug(message),
+    })
+    const refactorCommand = new RefactorAdvisorCommand({
+      advisor: refactorAdvisor,
+      resolver: refactorTargets,
+      editProvider: sharedEditProvider,
+      projectRoot: () => activeProject.root,
+    })
+    context.subscriptions.push(
+      vscode.languages.registerCodeActionsProvider(
+        { language: 'ruby', scheme: 'file' },
+        new RefactorSuggestionCodeActionProvider(refactorTargets),
+        { providedCodeActionKinds: RefactorSuggestionCodeActionProvider.providedCodeActionKinds },
+      ),
+      vscode.commands.registerCommand(
+        SUGGEST_REFACTORINGS_COMMAND,
+        (uri?: vscode.Uri, range?: vscode.Range | vscode.Selection) => refactorCommand.run(uri, range),
+      ),
+    )
+  }
 
   // 7b. File watchers - migrated from direct vscode.workspace.createFileSystemWatcher
   //     calls to providerRegistry.workspaceFs.createWatcher(). The watch* helper

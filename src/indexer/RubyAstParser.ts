@@ -40,6 +40,9 @@ export interface ParsedClass {
   calls: ParsedCall[]
 }
 
+/** A class or module definition; `kind` is the only difference from ParsedClass. */
+export type ParsedTypeDefinition = ParsedClass & { kind: 'class' | 'module' }
+
 interface SyntaxNode {
   type: string
   text: string
@@ -74,6 +77,28 @@ export class RubyAstParser {
       }
     })
     return classes
+  }
+
+  /**
+   * Classes AND modules (concerns, namespaces), each tagged with `kind`. Additive: `parseClasses`
+   * keeps its class-only behavior for the indexers that depend on it. Never throws.
+   */
+  parseTypeDefinitions(content: string): ParsedTypeDefinition[] {
+    let tree: { rootNode: SyntaxNode }
+    try {
+      tree = this.parser.parse(content)
+    } catch {
+      return []
+    }
+
+    const types: ParsedTypeDefinition[] = []
+    this.walk(tree.rootNode, node => {
+      if (node.type === 'class' || node.type === 'module') {
+        const parsed = this.extractClass(node)
+        if (parsed) {types.push({ ...parsed, kind: node.type === 'class' ? 'class' : 'module' })}
+      }
+    })
+    return types
   }
 
   private walk(node: SyntaxNode, visit: (node: SyntaxNode) => void): void {

@@ -142,6 +142,12 @@ export interface RailsAgentContext {
    * content reach the model. Used for requests whose text is self-contained (pattern explanations).
    */
   isolated?: boolean
+  /**
+   * Isolated requests only: replaces the default isolated system prompt. For callers that build a
+   * self-contained prompt with their own instructions (e.g. the refactoring advisor). The isolation
+   * guarantee is unchanged: only `prompt` is sent.
+   */
+  isolatedSystemPrompt?: string
 }
 
 const ISOLATED_SYSTEM_PROMPT = [
@@ -196,7 +202,7 @@ export class RailsAgent {
   async run(prompt: string, context: RailsAgentContext): Promise<RailsAgentResult> {
     const startedAt = Date.now()
     if (context.isolated) {
-      const systemPrompt = ISOLATED_SYSTEM_PROMPT
+      const systemPrompt = context.isolatedSystemPrompt ?? ISOLATED_SYSTEM_PROMPT
       const provider = this.config.provider ?? 'ollama'
       this.log('debug', `[AI] ${provider} isolated request: model=${this.modelFor(provider)}, prompt=${prompt.length} chars`)
       const { success, response } = await this.chatCompletion(systemPrompt, prompt)
