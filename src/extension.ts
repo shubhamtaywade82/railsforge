@@ -32,6 +32,7 @@ import { ViewPartialDefinitionProvider } from './rails/ViewPartialDefinitionProv
 import { TestExplorerController, debugRubyCommand } from './testing/TestExplorerController'
 import { TestCodeLensProvider } from './testing/TestCodeLensProvider'
 import { activeWorkspaceRoot, workspaceRoots, workspaceRootFor } from './workspace/activeRoot'
+import { checkEnabledAdapters, registerAdapterCommands } from './adapters/AdapterUi'
 import { isInside, resolveWorkspaceRoot } from './workspace/WorkspaceRoots'
 import { RubyAnalyzersProvider, AnalyzerRunResult } from './lint/RubyAnalyzersProvider'
 import { ANALYZER_IDS, AnalyzerId } from './lint/AnalyzerParsers'
@@ -918,6 +919,14 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
 
   providerRegistry.activate()
   context.subscriptions.push(providerRegistry)
+
+  // Optional tools (rails-mcp-server, debug-mcp, ...). The commands are always available. An enabled tool that is
+  // missing gets one prompt per session, and nothing is installed without the user's confirmation.
+  context.subscriptions.push(...registerAdapterCommands(() => activeWorkspaceRoot()))
+  const adapterRoot = activeWorkspaceRoot()
+  if (adapterRoot) {
+    void checkEnabledAdapters(context.workspaceState, adapterRoot)
+  }
 
   // 7c. Refactoring Intelligence. Deterministic findings drive the CodeLens and the lightbulb, and never
   //     call a model. The AI is reached only through the explicit command, which reviews measured

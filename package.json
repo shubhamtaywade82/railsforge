@@ -119,6 +119,29 @@
     "configuration": {
       "title": "RailsForge",
       "properties": {
+        "railsForge.adapters.enabled": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "rails-mcp-server",
+              "ruby-console-mcp",
+              "actionmcp",
+              "ask-rails-harness-mcp",
+              "ask-ruby-harness-mcp",
+              "debug-mcp",
+              "gems-mcp"
+            ]
+          },
+          "uniqueItems": true,
+          "default": [],
+          "description": "Optional developer tools to offer for installation. A listed tool that is missing gets one prompt per session. Nothing is installed without your confirmation, and RailsForge never runs an install command itself."
+        },
+        "railsForge.adapters.promptWhenMissing": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ask to install an enabled optional tool when it is missing."
+        },
         "railsForge.excludePatterns": {
           "type": "array",
           "items": {
@@ -685,6 +708,17 @@
       ]
     },
     "commands": [
+      {
+        "command": "railsforge.adapters.status",
+        "title": "RailsForge: Optional Tools Status",
+        "category": "RailsForge"
+      },
+      {
+        "command": "railsforge.adapters.install",
+        "title": "RailsForge: Install Optional Tool…",
+        "category": "RailsForge",
+        "enablement": "isWorkspaceTrusted"
+      },
       {
         "command": "railsforge.optimizeWorkspacePerformance",
         "title": "RailsForge: Optimize Rails Workspace Performance",

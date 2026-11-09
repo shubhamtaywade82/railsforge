@@ -71,4 +71,5 @@ export const TRUST_GATED_COMMANDS: readonly string[] = [
   'railsforge.generateRBS',
   'railsforge.refreshRakeTasks',
   'railsforge.fixAllInFile',
+  'railsforge.adapters.install',
 ]
