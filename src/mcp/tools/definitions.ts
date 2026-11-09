@@ -22,7 +22,9 @@ import { routeSkills, suggestPatterns } from '../../skills/SkillRouter'
 import { evaluateSafety } from '../../skills/SafetyRules'
 import { buildSkillContext } from '../../skills/SkillContextBuilder'
 import type { RiskLevel } from '../policy/McpCapabilityPolicy'
-import { RUBY_LANGUAGE_TOOLS } from './RubyLanguageTools'
+import { RUBY_TOOLS } from './ruby'
+import { QUALITY_TOOLS } from './quality'
+import { OBSERVABILITY_TOOLS } from './observability'
 
 export interface ToolDefinition {
   /** MCP tool name (snake_case); the VS Code tool name is `railsforge_<name>`. */
@@ -397,5 +399,7 @@ References (read with the \`reference\` argument): ${entry.references.map(r => r
       return format === 'markdown' ? formatSnapshotMarkdown(snapshot) : json({ ...snapshot, models: snapshot.models.map(m => ({ name: m.name, table: m.table, associations: m.associations.length, validations: m.validations.length, callbacks: m.callbacks.length })) })
     },
   }),
-  ...RUBY_LANGUAGE_TOOLS,
+  ...RUBY_TOOLS,
+  ...QUALITY_TOOLS,
+  ...OBSERVABILITY_TOOLS,
 ]

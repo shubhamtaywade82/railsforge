@@ -33,6 +33,7 @@ import { TestExplorerController, debugRubyCommand } from './testing/TestExplorer
 import { TestCodeLensProvider } from './testing/TestCodeLensProvider'
 import { activeWorkspaceRoot, workspaceRoots, workspaceRootFor } from './workspace/activeRoot'
 import { checkEnabledAdapters, registerAdapterCommands } from './adapters/AdapterUi'
+import { registerAdapterMcpProvider } from './adapters/AdapterMcpProvider'
 import { isInside, resolveWorkspaceRoot } from './workspace/WorkspaceRoots'
 import { RubyAnalyzersProvider, AnalyzerRunResult } from './lint/RubyAnalyzersProvider'
 import { ANALYZER_IDS, AnalyzerId } from './lint/AnalyzerParsers'
@@ -929,6 +930,8 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   if (adapterRoot) {
     void checkEnabledAdapters(context.workspaceState, adapterRoot)
   }
+  // Offers enabled, allowed and installed tools to the agent as MCP servers. Trusted workspaces only.
+  registerAdapterMcpProvider(context, () => activeWorkspaceRoot())
 
   // 7c. Refactoring Intelligence. Deterministic findings drive the CodeLens and the lightbulb, and never
   //     call a model. The AI is reached only through the explicit command, which reviews measured

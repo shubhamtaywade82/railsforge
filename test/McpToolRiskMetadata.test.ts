@@ -13,15 +13,20 @@ describe('MCP tool risk metadata', () => {
     }
   })
 
-  it('classifies cached snapshots as R1 and process-launching tools as R2', () => {
+  it('classifies the cached-snapshot read as R1 and process-running tools as R2', () => {
     const risk = Object.fromEntries(RAILSFORGE_TOOLS.map(tool => [tool.name, tool.risk]))
     expect(risk.get_runtime_introspection).toBe('R1')
+    expect(risk.ruby_read_log).toBe('R1')
     expect(risk.list_rake_tasks).toBe('R2')
-    expect(RAILSFORGE_TOOLS.filter(tool => tool.risk === 'R2').map(tool => tool.name)).toEqual(['list_rake_tasks', 'ruby_check_syntax'])
-    expect(risk.ruby_get_symbols).toBe('R0')
-    expect(risk.ruby_get_method_details).toBe('R0')
     expect(risk.ruby_check_syntax).toBe('R2')
-    expect(risk.ruby_get_project_capabilities).toBe('R0')
+    expect(risk.ruby_run_tests).toBe('R2')
+    expect(risk.ruby_run_linter).toBe('R2')
+    expect(RAILSFORGE_TOOLS.filter(tool => tool.risk === 'R2').map(tool => tool.name)).toEqual([
+      'list_rake_tasks',
+      'ruby_check_syntax',
+      'ruby_run_tests',
+      'ruby_run_linter',
+    ])
   })
 
   it('never classifies a handler that starts a process below R2', () => {
@@ -33,6 +38,6 @@ describe('MCP tool risk metadata', () => {
   })
 
   it('keeps the existing tool set, so no client loses a tool name', () => {
-    expect(RAILSFORGE_TOOLS.map(tool => tool.name)).toHaveLength(23)
+    expect(RAILSFORGE_TOOLS.map(tool => tool.name)).toHaveLength(28)
   })
 })

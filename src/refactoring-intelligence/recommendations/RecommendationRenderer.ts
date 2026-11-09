@@ -18,6 +18,8 @@ export function renderRecommendation(rec: Recommendation): string {
     '',
     `**Scope:** ${describeScope(rec.scope)} in \`${rec.path}\``,
     '',
+    '> **Next Step:** Click the **"Preview change"** button in the notification popup (bottom-right) to generate side-by-side diffs and apply this refactoring.',
+    '',
     '## Problem',
     rec.problem,
     '',

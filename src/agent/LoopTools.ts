@@ -15,6 +15,9 @@ export const READ_ONLY_LOOP_TOOLS: readonly string[] = [
   'get_schema', 'list_routes', 'list_patterns', 'find_similar_pattern', 'get_dependencies',
   'get_semantic_context', 'route_skills', 'list_skills', 'get_skill',
   'get_project_guidelines', 'get_example_file', 'list_rake_tasks', 'get_runtime_introspection',
+  'ruby_get_symbols', 'ruby_get_method_details', 'ruby_get_project_capabilities',
+  'ruby_find_affected_tests', 'ruby_analyze_test_failure', 'ruby_read_log',
+  'ruby_run_tests', 'ruby_run_linter',
 ]
 
 export function createLoopTools(ctx: ToolContext, definitions: readonly ToolDefinition[] = RAILSFORGE_TOOLS, allow: readonly string[] = READ_ONLY_LOOP_TOOLS): LoopTool[] {

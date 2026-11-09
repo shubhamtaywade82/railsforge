@@ -46,7 +46,7 @@ export interface AdapterEntry {
   label: string
   package:
     | { kind: 'ruby-gem'; name: string; executable: string | null }
-    | { kind: 'npm'; name: string; executable: string }
+    | { kind: 'npm'; name: string; executable: string | null }
   summary: string
   /** Minimum Ruby the tool states, or null when none is stated. */
   minimumRuby: string | null
@@ -136,7 +136,7 @@ export const ADAPTERS: readonly AdapterEntry[] = [
     ],
     notes: [
       'Run it from the application root with `bundle exec ask-rails-harness-mcp`. Its README does not name a Gemfile group.',
-      'Includes a generic run_command tool. Disable it in any client that does not need it.',
+      'Its RubyGems page shows neither an executable name nor the run_command tool named in earlier notes. Treat it as able to run commands until its README is checked.',
     ],
     authority: 'arbitrary-execution',
   },
@@ -178,7 +178,7 @@ export const ADAPTERS: readonly AdapterEntry[] = [
   {
     id: 'gems-mcp',
     label: '@ruby-mcp/gems-mcp',
-    package: { kind: 'npm', name: '@ruby-mcp/gems-mcp', executable: 'gems-mcp' },
+    package: { kind: 'npm', name: '@ruby-mcp/gems-mcp', executable: null },
     summary: 'RubyGems.org lookups, gem versions, and Gemfile and gemspec parsing.',
     minimumRuby: null,
     minimumNode: '18.0.0',
@@ -189,6 +189,7 @@ export const ADAPTERS: readonly AdapterEntry[] = [
     notes: [
       'Its README lists Gemfile edits and bundle install operations. Review any change it proposes before accepting it.',
       'The npm metadata names github.com/ruby-mcp/ruby-mcp, but the README clone command names fugufish/ruby-mcp. Check the source before you trust either.',
+      'Its README names no executable and no transport, so RailsForge does not launch it. Read the npm bin field and the source first.',
     ],
     authority: 'project-code',
   },
