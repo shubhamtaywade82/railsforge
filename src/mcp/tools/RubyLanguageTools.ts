@@ -149,7 +149,7 @@ export const RUBY_LANGUAGE_TOOLS: readonly ToolDefinition[] = [
   {
     name: 'ruby_get_method_details',
     title: 'Get Ruby method details',
-    description: 'Returns one method declaration line, parameter names, visibility and exact source line range from a Ruby class/module. Requires file, class_name and method_name. Reads source only.',
+    description: 'Returns a method's full declaration/signature, parameter names, visibility and exact source line range from a Ruby class/module. Requires file, class_name and method_name. Reads source only.',
     inputSchema: {
       file: z.string().min(1).describe('Workspace-relative or absolute path to a .rb file'),
       class_name: z.string().min(1).describe('Class or module name; nested constants use ::'),
