@@ -1,11 +1,11 @@
 /**
  * RefactoringCommand - the two entry points behind the refactoring hints.
  *
- *   reviewObserved (railsForge.reviewAiHints)
+ *   reviewObserved (railsforge.reviewAiHints)
  *     Shows AI hints already observed for the scope. No model call. Hints are kept per scope and
  *     are only shown while the scope's code is unchanged.
  *
- *   run (railsForge.suggestRefactorings)
+ *   run (railsforge.suggestRefactorings)
  *     1. Collects deterministic candidates for the scope. No candidates: say so, no model call.
  *     2. Asks the AI to decide on those candidates (one call, on this explicit request), and keeps
  *        the answer as an observation. If the AI is unavailable, shows the rule-based recommendations.
@@ -30,8 +30,9 @@ import { AdvisorFailure, AdvisorResult, describeScope, ProposedChange, Recommend
 import { renderRecommendation } from '../recommendations/RecommendationRenderer'
 import { relativeTo, toSelectionLines, withProgress } from './workspacePaths'
 
-export const SUGGEST_REFACTORINGS_COMMAND = 'railsForge.suggestRefactorings'
-export const REVIEW_AI_HINTS_COMMAND = 'railsForge.reviewAiHints'
+// Command IDs are case-sensitive and must match package.json exactly. The repo's convention is lowercase.
+export const SUGGEST_REFACTORINGS_COMMAND = 'railsforge.suggestRefactorings'
+export const REVIEW_AI_HINTS_COMMAND = 'railsforge.reviewAiHints'
 
 export interface RefactoringCommandDeps {
   engine: RefactoringEngine

@@ -773,7 +773,7 @@
         "category": "RailsForge"
       },
       {
-        "command": "railsForge.reviewAiHints",
+        "command": "railsforge.reviewAiHints",
         "title": "RailsForge: Review AI Hints (observed)",
         "category": "RailsForge"
       },
