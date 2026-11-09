@@ -102,8 +102,15 @@ function projectCapabilities(root: string): unknown {
   const lockRuby = lockfile?.match(/^RUBY VERSION\s*\n\s*ruby\s+([^\s]+)$/m)?.[1] ?? null
   const gemNames = new Set<string>()
   if (lockfile) {
-    const specs = lockfile.match(/^  specs:\s*\n([\s\S]*?)(?=^[A-Z][A-Z ]*$|$)/m)?.[1] ?? ''
-    for (const match of specs.matchAll(/^    ([a-zA-Z0-9_.-]+) \(/gm)) { gemNames.add(match[1]) }
+    const lines = lockfile.split(/\r?\n/)
+    const specsStart = lines.findIndex(line => line === '  specs:')
+    if (specsStart >= 0) {
+      for (const line of lines.slice(specsStart + 1)) {
+        if (/^[A-Z][A-Z ]*$/.test(line)) { break }
+        const match = /^    ([a-zA-Z0-9_.-]+) \(/.exec(line)
+        if (match) { gemNames.add(match[1]) }
+      }
+    }
   }
   const frameworks = ['rails', 'rspec-rails', 'minitest', 'sidekiq', 'devise', 'pundit', 'factory_bot_rails']
     .filter(name => gemNames.has(name))
