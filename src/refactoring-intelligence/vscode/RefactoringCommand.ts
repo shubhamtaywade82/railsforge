@@ -2,13 +2,15 @@
  * RefactoringCommand - the two entry points behind the refactoring hints.
  *
  *   reviewObserved (railsforge.reviewAiHints)
- *     Shows AI hints already observed for the scope. No model call. Hints are kept per scope and
- *     are only shown while the scope's code is unchanged.
+ *     Shows what the AI has already said about the scope. No model call. Three outcomes, reported
+ *     distinctly: hints observed; reviewed with nothing to change (with the AI's reasons); or not
+ *     reviewed yet (rule-based findings exist, so it says how to ask).
  *
  *   run (railsforge.suggestRefactorings)
  *     1. Collects deterministic candidates for the scope. No candidates: say so, no model call.
- *     2. Asks the AI to decide on those candidates (one call, on this explicit request), and keeps
- *        the answer as an observation. If the AI is unavailable, shows the rule-based recommendations.
+ *     2. Asks the AI to decide on those candidates (one call, on this explicit request), and keeps the
+ *        outcome, including the reasons it skipped candidates. If the AI is unavailable, shows the
+ *        rule-based recommendations instead.
  *     3. Opens the picked recommendation as a reviewable document.
  *     4. Only after an explicit "Preview change", the AI writes the diff. The diff is shown as native
  *        diffs and applied after a modal confirmation, as one undoable WorkspaceEdit.
@@ -24,13 +26,12 @@ import { Logger } from '../../util/Logger'
 import { EditOperation, RefactoringEditProvider } from '../../providers/RefactoringEditProvider'
 import { RefactoringAdvisor } from '../core/RefactoringAdvisor'
 import { RefactoringEngine } from '../core/RefactoringEngine'
-import { observedWithin, ObservationStore, recordRefinement } from '../core/ObservationStore'
+import { hintsWithin, ObservationStore, recordRefinement, ScopeFingerprint } from '../core/ObservationStore'
 import { describeTarget, TargetResolver } from '../core/ScopeResolver'
 import { AdvisorFailure, AdvisorResult, describeScope, ProposedChange, Recommendation, RefactorTarget } from '../core/types'
 import { renderRecommendation } from '../recommendations/RecommendationRenderer'
 import { relativeTo, toSelectionLines, withProgress } from './workspacePaths'
 
-// Command IDs are case-sensitive and must match package.json exactly. The repo's convention is lowercase.
 export const SUGGEST_REFACTORINGS_COMMAND = 'railsforge.suggestRefactorings'
 export const REVIEW_AI_HINTS_COMMAND = 'railsforge.reviewAiHints'
 
@@ -60,29 +61,34 @@ interface Request {
 export class RefactoringCommand {
   constructor(private readonly deps: RefactoringCommandDeps) {}
 
-  /** Shows AI hints already observed for the scope. Never calls a model. */
+  /** Shows what the AI has already said about the scope. Never calls a model. */
   async reviewObserved(uriArg?: vscode.Uri, rangeArg?: vscode.Range | vscode.Selection): Promise<void> {
     const request = await this.resolveRequest(uriArg, rangeArg)
     if (!request) {return}
+    const { relativePath, content, target, label } = request
+    const { engine, observations } = this.deps
 
-    const observed = observedWithin(
-      this.deps.observations,
-      request.relativePath,
-      request.content,
-      this.deps.engine.scopes(request.content),
-      request.target,
-    ).filter(r => r.confidence !== 'low')
-
-    if (observed.length === 0) {
+    const within = await hintsWithin(observations, relativePath, content, engine.scopes(content), target, this.fingerprintFor(relativePath, content))
+    if (within.observed.length > 0) {
+      await this.pick(within.observed, request, 'AI hints observed for')
+      return
+    }
+    if (within.reviewed) {
+      const reasons = within.reviewed.slice(0, 2).join(' ')
+      void vscode.window.showInformationMessage(`RailsForge: the AI reviewed ${label} and found nothing to change there. ${reasons}`.trim())
+      return
+    }
+    const rules = engine.recommendations(relativePath, content, target).filter(r => r.confidence !== 'low')
+    if (rules.length > 0) {
       void vscode.window.showInformationMessage(
-        `RailsForge: no AI hints observed for ${request.label} yet. Run Suggest Refactorings to ask the AI, or set railsForge.refactoring.aiHints to on-save.`,
+        `RailsForge: the AI has not reviewed ${label} yet. Run Suggest Refactorings to ask it about the rule-based findings, or turn on railsForge.refactoring.aiHints.`,
       )
       return
     }
-    await this.pick(observed, request, 'AI hints observed for')
+    void vscode.window.showInformationMessage(`RailsForge: nothing to review for ${label}.`)
   }
 
-  /** Asks the AI about the scope's measured findings, keeps the answer, and offers a review. */
+  /** Asks the AI about the scope's measured findings, keeps the outcome, and offers a review. */
   async run(uriArg?: vscode.Uri, rangeArg?: vscode.Range | vscode.Selection): Promise<void> {
     const request = await this.resolveRequest(uriArg, rangeArg)
     if (!request) {return}
@@ -101,7 +107,15 @@ export class RefactoringCommand {
 
       let recommendations: Recommendation[]
       if (refined.ok) {
-        recordRefinement(this.deps.observations, relativePath, content, target, refined.value.recommendations)
+        await recordRefinement(
+          this.deps.observations,
+          relativePath,
+          content,
+          target,
+          refined.value.recommendations,
+          refined.value.skipped,
+          this.fingerprintFor(relativePath, content),
+        )
         if (refined.value.recommendations.length === 0) {
           const reasons = refined.value.skipped.slice(0, 2).map(s => s.reason).join(' ')
           void vscode.window.showInformationMessage(`RailsForge: the AI found nothing worth changing in ${label}. ${reasons}`.trim())
@@ -118,6 +132,10 @@ export class RefactoringCommand {
       Logger.error(`[Refactoring] ${String(err)}`)
       void vscode.window.showErrorMessage(`RailsForge: the refactoring analysis failed: ${errorText(err)}`)
     }
+  }
+
+  private fingerprintFor(relativePath: string, content: string): ScopeFingerprint {
+    return scope => this.deps.advisor.fingerprint(relativePath, content, scope)
   }
 
   /** Resolves the request from a code action's arguments, or from the active editor. */

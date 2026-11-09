@@ -29,7 +29,24 @@ The AI produces hints in two ways. Both store the result per scope (class, metho
 | **Suggest Refactorings** (on request) | when you run it from the lightbulb, CodeLens or palette | the AI's recommendations for the scope; an empty result when it found nothing |
 | **Background review** (opt-in, `railsForge.refactoring.aiHints: "on-save"`) | after you save a Ruby file | one scope per save: the highest-ranked scope whose current text has no observation |
 
-An observation is kept in the workspace state, so it survives a reload. It is shown only while the scope's text is unchanged: an edit inside the method or class hides its hints, and an edit elsewhere in the file does not. Moving a method does not invalidate its hints, because scopes are keyed by name.
+An observation is kept in the workspace state (per project root), so it survives a reload. An observation is shown only while two things still match what the AI saw:
+
+- **the scope's own text:** an edit inside the method or class hides its hints, but an edit elsewhere in the file does not, and moving a method does not invalidate it (scopes are keyed by name);
+- **the context fingerprint:** a hash of what the advice depends on outside the scope, which is the definitions of constants the scope references, its spec, its callers and the project's conventions. Changing a referenced constant's file, or a spec, makes the hint stale even though the scope did not change.
+
+The fingerprint deliberately excludes the primary file, because its own text is already covered by the scope hash.
+
+An observation is in one of three states:
+
+| State | Meaning | What the editor shows |
+| --- | --- | --- |
+| unobserved | never reviewed, or stale for either reason | rule-based findings, if any |
+| observed with recommendations | the AI proposed at least one | the AI's hints (medium and high confidence only) |
+| observed without recommendations | the AI looked and proposed nothing | "AI reviewed: nothing to change", and the review shows the AI's reasons for skipping |
+
+When a scope is observed only with low-confidence recommendations, the rule-based findings still show, because a low-confidence AI item never takes the place of a stronger finding. The CodeLens and the lightbulb both follow this order, implemented once in `core/HintPrecedence.ts`.
+
+Background reviews are queued, not dropped: a save of another file while a review runs waits its turn, and a document saved twice while queued is reviewed once, with its newest text.
 
 Where observed hints appear:
 
@@ -148,4 +165,6 @@ Safety boundaries for the diff: every path must be a workspace-relative `.rb` fi
 - The N+1 rule depends on the schema tables and on association names inferred from column names. It reports nothing when the schema is unknown.
 - Project-collaborator checks depend on the semantic index. Until it is ready, collaborator-based rules report nothing rather than guessing.
 - The design-principle findings exist only after the linter has analysed the file.
+- **One project root.** The analysis and the editor integration are bound to the project root that is active when the extension activates. Files in other workspace folders get no hints. Observations are stored per root, so the same relative path in two roots never shares one. Analysis of every folder is not built yet.
+- The context fingerprint covers what the advice was built from. It does not detect a change in an unrelated file that would change the advice in some other way, for example a new caller in a file that is not yet indexed.
 - The model's answers were exercised with scripted replies in the tests. Output quality against a live local or cloud model has not been measured.

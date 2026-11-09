@@ -80,6 +80,7 @@ import { TargetResolver } from './refactoring-intelligence/core/ScopeResolver'
 import { RefactoringCommand, REVIEW_AI_HINTS_COMMAND, SUGGEST_REFACTORINGS_COMMAND } from './refactoring-intelligence/vscode/RefactoringCommand'
 import { BackgroundHints } from './refactoring-intelligence/vscode/BackgroundHints'
 import { ObservationSnapshot, ObservationStore } from './refactoring-intelligence/core/ObservationStore'
+import type { ScopeRef } from './refactoring-intelligence/core/types'
 import { relativeTo, vsCodeSourceReader } from './refactoring-intelligence/vscode/workspacePaths'
 import { RefactoringCodeActionProvider } from './providers/RefactoringCodeActionProvider'
 import { RefactoringCodeLensProvider } from './providers/RefactoringCodeLensProvider'
@@ -945,7 +946,8 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
       log: message => Logger.debug(message),
     })
     // AI hints survive a window reload: the observations are kept in the workspace state, per scope.
-    const observationsKey = 'railsforge.refactoring.observations.v1'
+    // Per project root: the same relative path in two folders must never share an observation.
+    const observationsKey = `railsforge.refactoring.observations.v2:${root}`
     const observations = new ObservationStore(context.workspaceState.get<ObservationSnapshot>(observationsKey))
     const persistObservations = observations.onDidChange(() => {
       void context.workspaceState.update(observationsKey, observations.snapshot())
@@ -960,9 +962,11 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     })
     const aiHintsOnSave = () => vscode.workspace.getConfiguration('railsForge').get<string>('refactoring.aiHints', 'off') === 'on-save'
     const refactorBackground = new BackgroundHints({ engine: refactorEngine, advisor: refactorAdvisor, observations, pathOf, enabled: aiHintsOnSave })
+    const fingerprint = (path: string, content: string, scope: ScopeRef) => refactorAdvisor.fingerprint(path, content, scope)
     const lensProvider = new RefactoringCodeLensProvider({
       engine: refactorEngine,
       observations,
+      fingerprint,
       pathOf,
       enabled: () => vscode.workspace.getConfiguration('railsForge').get<boolean>('refactoring.codeLens', true),
     })
@@ -974,7 +978,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
       refactorBackground,
       vscode.languages.registerCodeActionsProvider(
         selector,
-        new RefactoringCodeActionProvider({ engine: refactorEngine, resolver: refactorTargets, observations, pathOf }),
+        new RefactoringCodeActionProvider({ engine: refactorEngine, resolver: refactorTargets, observations, fingerprint, pathOf }),
         { providedCodeActionKinds: RefactoringCodeActionProvider.providedCodeActionKinds },
       ),
       vscode.languages.registerCodeLensProvider(selector, lensProvider),

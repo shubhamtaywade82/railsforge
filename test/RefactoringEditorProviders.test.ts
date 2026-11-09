@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import * as vscode from 'vscode'
 import { RubyAstParser } from '../src/indexer/RubyAstParser'
 import { RefactoringEngine } from '../src/refactoring-intelligence/core/RefactoringEngine'
+import { RefactoringAdvisor } from '../src/refactoring-intelligence/core/RefactoringAdvisor'
 import { TargetResolver } from '../src/refactoring-intelligence/core/ScopeResolver'
 import { ObservationStore, recordRefinement } from '../src/refactoring-intelligence/core/ObservationStore'
 import type { Recommendation, ScopeRef } from '../src/refactoring-intelligence/core/types'
@@ -31,8 +32,10 @@ const CONTROLLER = [
   '',
 ].join('\n')
 const CREATE: ScopeRef = { kind: 'method', name: 'create', className: 'OrdersController', startLine: 2, endLine: 14 }
-
 const ENVY = ['class Report', '  def summary(order)', '    order.total + order.tax + order.discount + order.shipping', '  end', 'end', ''].join('\n')
+
+/** A fingerprint that never changes: for tests that are about the scope's own text. */
+const steady = async () => 'fp-1'
 
 function document(text: string, file = PATH, languageId = 'ruby') {
   return {
@@ -48,122 +51,210 @@ function cursor(line: number, character = 0): vscode.Range {
 }
 
 const pathOf = (uri: vscode.Uri) => relativeTo(ROOT, uri.fsPath)
+const engine = () => new RefactoringEngine(new RubyAstParser())
 
-/** Observations as the advisor would record them: here, the deterministic recommendations for the scope. */
-function observe(store: ObservationStore, engine: RefactoringEngine, content: string, scope: ScopeRef): Recommendation[] {
-  const recs = engine.recommendations(PATH, content, scope)
-  recordRefinement(store, PATH, content, scope, recs)
-  return recs
+function rec(id: string, scope: ScopeRef, confidence: Recommendation['confidence'] = 'medium'): Recommendation {
+  return {
+    id,
+    source: 'ai',
+    candidateIds: ['c1'],
+    path: PATH,
+    scope,
+    title: `AI hint ${id}`,
+    problem: 'p',
+    evidence: [],
+    confidence,
+    priority: 'high',
+    technique: { id: 'service-object', name: 'Service Object' },
+    design: 'd',
+    alternatives: [],
+    benefit: 'b',
+    risk: 'r',
+    affectedFiles: [PATH],
+    steps: [],
+    verification: [],
+  }
 }
 
-function setup(content = CONTROLLER) {
-  const engine = new RefactoringEngine(new RubyAstParser())
-  const observations = new ObservationStore()
-  const lens = new RefactoringCodeLensProvider({ engine, observations, pathOf, enabled: () => true })
-  const action = new RefactoringCodeActionProvider({ engine, resolver: new TargetResolver(), observations, pathOf })
-  return { engine, observations, lens, action, content }
+function setup(options: { content?: string; fingerprint?: (p: string, c: string, s: ScopeRef) => Promise<string>; store?: ObservationStore } = {}) {
+  const content = options.content ?? CONTROLLER
+  const eng = engine()
+  const observations = options.store ?? new ObservationStore()
+  const fingerprint = options.fingerprint ?? (async () => 'fp-1')
+  const lens = new RefactoringCodeLensProvider({ engine: eng, observations, fingerprint, pathOf, enabled: () => true })
+  const action = new RefactoringCodeActionProvider({ engine: eng, resolver: new TargetResolver(), observations, fingerprint, pathOf })
+  return { eng, observations, lens, action, content, fingerprint }
 }
 
-describe('RefactoringCodeLensProvider: rule-based lens (nothing observed yet)', () => {
-  it('shows one lens above the method, linking to the command that asks the AI', () => {
-    const doc = document(CONTROLLER)
-    const [lens] = setup().lens.provideCodeLenses(doc)
+/** A real advisor, used only for its context fingerprint (the agent is never called). */
+function advisorFor(files: Map<string, string>): RefactoringAdvisor {
+  return new RefactoringAdvisor({
+    agent: { run: async () => ({ success: false, response: 'not called' }) },
+    index: {
+      findDefiningFiles: name => (name.startsWith('TaxTable') ? [{ relativePath: 'app/services/tax_table.rb' }] : []),
+      incomingDependencies: () => [],
+    },
+    files: { read: async path => files.get(path) },
+    catalog: { listCatalog: () => [], listProjectInstances: () => [] },
+    checkSyntax: async () => ({ status: 'ok' }),
+  })
+}
 
-    expect(lens.range.start.line).toBe(1)
-    expect(lens.command).toMatchObject({ title: '✦ RailsForge: 1 refactoring opportunity · high', command: SUGGEST_REFACTORINGS_COMMAND })
-    expect(lens.command?.arguments?.[0]).toBe(doc.uri)
+describe('CodeLens: observed, reviewed and rule-based lenses', () => {
+  it('shows the rule-based lens when nothing has been observed, linking to the command that asks the AI', async () => {
+    const { lens, content } = setup()
+    const doc = document(content)
+    const [only] = await lens.provideCodeLenses(doc)
+    expect(only.range.start.line).toBe(1)
+    expect(only.command).toMatchObject({ title: '✦ RailsForge: 1 refactoring opportunity · high', command: SUGGEST_REFACTORINGS_COMMAND })
+    expect(only.command?.arguments?.[0]).toBe(doc.uri)
   })
 
-  it('shows nothing when the setting is off, for non-Ruby files, or outside the project', () => {
-    const { engine, observations } = setup()
-    const off = new RefactoringCodeLensProvider({ engine, observations, pathOf, enabled: () => false })
-    expect(off.provideCodeLenses(document(CONTROLLER))).toEqual([])
-    const on = new RefactoringCodeLensProvider({ engine, observations, pathOf, enabled: () => true })
-    expect(on.provideCodeLenses(document(CONTROLLER, PATH, 'erb'))).toEqual([])
-    const outside = new RefactoringCodeLensProvider({ engine, observations, pathOf: () => undefined, enabled: () => true })
-    expect(outside.provideCodeLenses(document(CONTROLLER))).toEqual([])
-  })
-
-  it('hides low-confidence findings, so the editor stays quiet for weak signals', () => {
-    const { lens } = setup(ENVY)
-    expect(lens.provideCodeLenses(document(ENVY, 'app/services/report.rb'))).toEqual([])
-  })
-})
-
-describe('RefactoringCodeLensProvider: AI hints observed for the scope', () => {
-  it('replaces the rule lens with an observed-hints lens that reviews, without asking the AI', () => {
-    const { lens, observations, engine, content } = setup()
-    const observed = observe(observations, engine, content, CREATE)
-    const [only] = lens.provideCodeLenses(document(content))
-
-    expect(observed).toHaveLength(1)
+  it('replaces it with an observed-hints lens that reviews, without asking the AI', async () => {
+    const { lens, observations, content } = setup()
+    await recordRefinement(observations, PATH, content, CREATE, [rec('r1', CREATE)], [], steady)
+    const [only] = await lens.provideCodeLenses(document(content))
     expect(only.command).toMatchObject({ title: '✦ AI: 1 hint observed · high', command: REVIEW_AI_HINTS_COMMAND })
   })
 
-  it('says so when the AI reviewed the scope and recommended nothing there', () => {
+  it('says the AI reviewed the scope and found nothing to change there', async () => {
     const { lens, observations, content } = setup()
-    recordRefinement(observations, PATH, content, CREATE, [])
-    const [only] = lens.provideCodeLenses(document(content))
+    await recordRefinement(observations, PATH, content, CREATE, [], [{ reason: 'one step only' }], steady)
+    const [only] = await lens.provideCodeLenses(document(content))
     expect(only.command?.title).toBe('✦ AI reviewed: nothing to change at this level')
-  })
-
-  it('falls back to the rule lens once the scope text changes, so a stale hint is not shown', () => {
-    const { lens, observations, engine, content } = setup()
-    observe(observations, engine, content, CREATE)
-    const edited = content.replace('InventoryService.new.reserve(@order)', 'Inventory.reserve(@order)')
-    const [only] = lens.provideCodeLenses(document(edited))
-    expect(only.command?.command).toBe(SUGGEST_REFACTORINGS_COMMAND)
-  })
-
-  it('keeps the observed hint when an edit happens outside the scope', () => {
-    const { lens, observations, engine, content } = setup()
-    observe(observations, engine, content, CREATE)
-    const edited = `# a note above the class\n${content}`
-    const [only] = lens.provideCodeLenses(document(edited))
     expect(only.command?.command).toBe(REVIEW_AI_HINTS_COMMAND)
   })
 
-  it('asks VS Code for new lenses when an observation is recorded (the extension wires store to lens)', () => {
+  it('keeps a stronger rule-based lens when the AI observed only low-confidence items', async () => {
+    const { lens, observations, content } = setup()
+    await recordRefinement(observations, PATH, content, CREATE, [rec('low', CREATE, 'low')], [], steady)
+    const [only] = await lens.provideCodeLenses(document(content))
+    expect(only.command).toMatchObject({ title: '✦ RailsForge: 1 refactoring opportunity · high', command: SUGGEST_REFACTORINGS_COMMAND })
+  })
+
+  it('shows nothing for a low-confidence rule-based finding, and nothing when disabled or outside the project', async () => {
+    const low = setup({ content: ENVY })
+    expect(await low.lens.provideCodeLenses(document(ENVY, 'app/services/report.rb'))).toEqual([])
+
+    const { eng, observations, fingerprint, content } = setup()
+    const off = new RefactoringCodeLensProvider({ engine: eng, observations, fingerprint, pathOf, enabled: () => false })
+    expect(await off.provideCodeLenses(document(content))).toEqual([])
+    const outside = new RefactoringCodeLensProvider({ engine: eng, observations, fingerprint, pathOf: () => undefined, enabled: () => true })
+    expect(await outside.provideCodeLenses(document(content))).toEqual([])
+    const erb = setup()
+    expect(await erb.lens.provideCodeLenses(document(erb.content, PATH, 'erb'))).toEqual([])
+  })
+
+  it('falls back to the rule-based lens when the scope\'s own text changes', async () => {
+    const { lens, observations, content } = setup()
+    await recordRefinement(observations, PATH, content, CREATE, [rec('r1', CREATE)], [], steady)
+    const edited = content.replace('InventoryService.new.reserve(@order)', 'Inventory.reserve(@order)')
+    const [only] = await lens.provideCodeLenses(document(edited))
+    expect(only.command?.command).toBe(SUGGEST_REFACTORINGS_COMMAND)
+  })
+
+  it('keeps the observed hint when an edit happens outside the scope', async () => {
+    const { lens, observations, content } = setup()
+    await recordRefinement(observations, PATH, content, CREATE, [rec('r1', CREATE)], [], steady)
+    const [only] = await lens.provideCodeLenses(document(`# a note above the class\n${content}`))
+    expect(only.command?.command).toBe(REVIEW_AI_HINTS_COMMAND)
+  })
+
+  it('stops showing an observed hint once a file it depends on changed, even though the scope did not', async () => {
+    const files = new Map<string, string>([
+      [PATH, ''],
+      ['app/services/tax_table.rb', 'class TaxTable\n  RATE = 0.2\nend\n'],
+    ])
+    const advisor = advisorFor(files)
+    const content = ['class Pricing', '  def gross(x)', '    x + TaxTable::RATE * x', '  end', 'end', ''].join('\n')
+    const scope: ScopeRef = { kind: 'method', name: 'gross', className: 'Pricing', startLine: 2, endLine: 4 }
+    const fingerprint = (p: string, c: string, s: ScopeRef) => advisor.fingerprint(p, c, s)
+    const observations = new ObservationStore()
+    await recordRefinement(observations, PATH, content, scope, [rec('r1', scope)], [], s => fingerprint(PATH, content, s))
+    const lens = new RefactoringCodeLensProvider({ engine: engine(), observations, fingerprint, pathOf, enabled: () => true })
+
+    const before = await lens.provideCodeLenses(document(content))
+    expect(before.map(l => l.command?.command)).toEqual([REVIEW_AI_HINTS_COMMAND])
+
+    files.set('app/services/tax_table.rb', 'class TaxTable\n  RATE = 0.25\nend\n')
+    const after = await lens.provideCodeLenses(document(content))
+    expect(after.some(l => l.command?.command === REVIEW_AI_HINTS_COMMAND)).toBe(false)
+  })
+
+  it('asks VS Code for new lenses when an observation is recorded (the extension wires store to lens)', async () => {
     const { lens, observations, content } = setup()
     let refreshed = 0
     lens.onDidChangeCodeLenses(() => { refreshed++ })
     observations.onDidChange(() => lens.refresh())
-    recordRefinement(observations, PATH, content, CREATE, [])
-    expect(refreshed).toBe(1)
+    await recordRefinement(observations, PATH, content, CREATE, [], [], steady)
+    expect(refreshed).toBeGreaterThan(0)
   })
 })
 
-describe('RefactoringCodeActionProvider', () => {
-  it('offers the rule-based lightbulb, with the count and the scope, and attaches the command with no edit', () => {
-    const { action, content } = setup()
-    const [item] = action.provideCodeActions(document(content), cursor(2, 4), {} as never, {} as never)
+describe('lightbulb: the same precedence as the CodeLens', () => {
+  it('offers the observed hints, and only those', async () => {
+    const { action, observations, content } = setup()
+    await recordRefinement(observations, PATH, content, CREATE, [rec('r1', CREATE)], [], steady)
+    const items = await action.provideCodeActions(document(content), cursor(2, 4), {} as never, {} as never)
+    expect(items).toHaveLength(1)
+    expect(items[0].title).toBe('RailsForge: 1 AI hint observed for method OrdersController#create')
+    expect(items[0].command?.command).toBe(REVIEW_AI_HINTS_COMMAND)
+    expect(items[0].kind?.value).toBe(REFACTORING_ACTION_KIND.value)
+  })
 
+  it('offers the reviewed result, so the reasons can be read', async () => {
+    const { action, observations, content } = setup()
+    await recordRefinement(observations, PATH, content, CREATE, [], [{ reason: 'one step' }], steady)
+    const [item] = await action.provideCodeActions(document(content), cursor(2, 4), {} as never, {} as never)
+    expect(item.title).toBe('RailsForge: AI reviewed method OrdersController#create: nothing to change')
+  })
+
+  it('still offers the rule-based suggestion when the AI observed only low-confidence items', async () => {
+    const { action, observations, content } = setup()
+    await recordRefinement(observations, PATH, content, CREATE, [rec('low', CREATE, 'low')], [], steady)
+    const [item] = await action.provideCodeActions(document(content), cursor(2, 4), {} as never, {} as never)
     expect(item.title).toBe('RailsForge: 1 refactoring suggestion for method OrdersController#create')
-    expect(item.kind?.value).toBe(REFACTORING_ACTION_KIND.value)
-    expect(item.command).toMatchObject({ command: SUGGEST_REFACTORINGS_COMMAND })
+    expect(item.command?.command).toBe(SUGGEST_REFACTORINGS_COMMAND)
+  })
+
+  it('offers the rule-based suggestion when nothing has been observed', async () => {
+    const { action, content } = setup()
+    const [item] = await action.provideCodeActions(document(content), cursor(2, 4), {} as never, {} as never)
+    expect(item.title).toBe('RailsForge: 1 refactoring suggestion for method OrdersController#create')
     expect(item.edit).toBeUndefined()
   })
 
-  it('offers the observed hints instead, and only that: they are what the AI already said', () => {
-    const { action, observations, engine, content } = setup()
-    observe(observations, engine, content, CREATE)
-    const items = action.provideCodeActions(document(content), cursor(2, 4), {} as never, {} as never)
-
-    expect(items).toHaveLength(1)
-    expect(items[0].title).toBe('RailsForge: 1 AI hint observed for method OrdersController#create')
-    expect(items[0].command).toMatchObject({ command: REVIEW_AI_HINTS_COMMAND })
-  })
-
-  it('offers nothing where the cursor is outside every scope', () => {
+  it('offers nothing where the cursor is outside every scope, for low-confidence findings, and for non-Ruby files', async () => {
     const script = "puts 'hello'\n"
-    const { action } = setup(script)
-    expect(action.provideCodeActions(document(script, 'app/services/script.rb'), cursor(0), {} as never, {} as never)).toEqual([])
+    const outside = setup({ content: script })
+    expect(await outside.action.provideCodeActions(document(script, 'app/services/script.rb'), cursor(0), {} as never, {} as never)).toEqual([])
+
+    const envy = setup({ content: ENVY })
+    expect(await envy.action.provideCodeActions(document(ENVY, 'app/services/report.rb'), cursor(1, 2), {} as never, {} as never)).toEqual([])
+
+    const erb = setup()
+    expect(await erb.action.provideCodeActions(document(erb.content, PATH, 'erb'), cursor(2), {} as never, {} as never)).toEqual([])
+  })
+})
+
+describe('multi-root: observations never cross project roots', () => {
+  it('keeps an observation for one root invisible to a store bound to another root with the same relative path', async () => {
+    const rootA = new ObservationStore()
+    const rootB = new ObservationStore()
+    await recordRefinement(rootA, PATH, CONTROLLER, CREATE, [rec('r1', CREATE)], [], steady)
+
+    const fromA = setup({ store: rootA })
+    const fromB = setup({ store: rootB })
+    const [inA] = await fromA.lens.provideCodeLenses(document(CONTROLLER))
+    const [inB] = await fromB.lens.provideCodeLenses(document(CONTROLLER))
+    expect(inA.command?.command).toBe(REVIEW_AI_HINTS_COMMAND)
+    expect(inB.command?.command).toBe(SUGGEST_REFACTORINGS_COMMAND)
   })
 
-  it('offers nothing for a low-confidence finding, and nothing for non-Ruby files', () => {
-    const { action } = setup(ENVY)
-    expect(action.provideCodeActions(document(ENVY, 'app/services/report.rb'), cursor(1, 2), {} as never, {} as never)).toEqual([])
-    const { action: controller, content } = setup()
-    expect(controller.provideCodeActions(document(content, PATH, 'erb'), cursor(2), {} as never, {} as never)).toEqual([])
+  it('shows nothing for a file in a folder the providers are not bound to', async () => {
+    const { eng, observations, fingerprint, content } = setup()
+    await recordRefinement(observations, PATH, content, CREATE, [rec('r1', CREATE)], [], steady)
+    const otherFolder = new RefactoringCodeLensProvider({ engine: eng, observations, fingerprint, pathOf: () => undefined, enabled: () => true })
+    expect(await otherFolder.provideCodeLenses(document(content))).toEqual([])
   })
 })

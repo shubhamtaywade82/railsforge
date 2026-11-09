@@ -1,26 +1,29 @@
 /**
  * RefactoringCodeLensProvider - shows refactoring hints above the classes, methods and loops where
- * they apply.
+ * they apply. What a scope shows follows the precedence in core/HintPrecedence, the same rule the
+ * lightbulb uses:
  *
- * Three kinds of lens, in order of precedence for each scope:
- *   1. AI hints observed for the scope's current text: "✦ AI: 2 hints observed". Clicking reviews them.
- *      No model call.
- *   2. The AI reviewed the scope and recommended nothing: "✦ AI reviewed: no change recommended".
- *   3. Rule-based findings only: "✦ RailsForge: 1 refactoring opportunity". Clicking asks the AI.
+ *   observed  "✦ AI: 2 hints observed"               (click reviews them, no model call)
+ *   reviewed  "✦ AI reviewed: nothing to change"     (click shows the AI's reasons)
+ *   rules     "✦ RailsForge: 1 refactoring opportunity" (click asks the AI)
  *
- * Only medium and high confidence items are shown. The lens is refreshed when observations change, and
- * it can be turned off with `railsForge.refactoring.codeLens`.
+ * An observation counts only while its own text and its context fingerprint still match (see
+ * core/ObservationStore). The lens is refreshed when observations change and can be turned off with
+ * `railsForge.refactoring.codeLens`.
  */
 
 import * as vscode from 'vscode'
 import { REVIEW_AI_HINTS_COMMAND, SUGGEST_REFACTORINGS_COMMAND } from '../refactoring-intelligence/vscode/RefactoringCommand'
 import { RefactoringEngine } from '../refactoring-intelligence/core/RefactoringEngine'
-import { observedFor, ObservationStore, scopeText } from '../refactoring-intelligence/core/ObservationStore'
+import { currentObservation, ObservationStore, ScopeFingerprint } from '../refactoring-intelligence/core/ObservationStore'
+import { resolveScopeHint, ScopeHint } from '../refactoring-intelligence/core/HintPrecedence'
 import type { Recommendation, ScopeRef } from '../refactoring-intelligence/core/types'
 
 export interface RefactoringCodeLensDeps {
   engine: RefactoringEngine
   observations: ObservationStore
+  /** Context fingerprint of one scope of the given document (see RefactoringAdvisor.fingerprint). */
+  fingerprint: (path: string, content: string, scope: ScopeRef) => Promise<string>
   /** Workspace-relative path of a document, or undefined when it is outside the project. */
   pathOf: (uri: vscode.Uri) => string | undefined
   enabled: () => boolean
@@ -37,54 +40,60 @@ export class RefactoringCodeLensProvider implements vscode.CodeLensProvider {
     this.changed.fire()
   }
 
-  provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
+  async provideCodeLenses(document: vscode.TextDocument): Promise<vscode.CodeLens[]> {
     if (!this.deps.enabled() || document.languageId !== 'ruby') {return []}
     const relativePath = this.deps.pathOf(document.uri)
     if (!relativePath) {return []}
 
-    const { engine, observations } = this.deps
+    const { engine, observations, fingerprint } = this.deps
     const content = document.getText()
-    const visible = engine.allRecommendations(relativePath, content).filter(r => r.confidence !== 'low')
+    const fingerprintOf: ScopeFingerprint = scope => fingerprint(relativePath, content, scope)
+    const rules = engine.allRecommendations(relativePath, content)
     const lenses: vscode.CodeLens[] = []
 
     for (const scope of engine.scopes(content)) {
-      const observed = observations.get(relativePath, scope, scopeText(content, scope))
-      if (observed !== undefined) {
-        const hints = observed.filter(r => r.confidence !== 'low')
-        if (hints.length > 0) {lenses.push(observedLens(document, scope, hints))}
-        else if (observed.length === 0) {lenses.push(reviewedLens(document, scope))}
-        continue
-      }
-      const anchored = visible.filter(r => r.scope.kind === scope.kind && r.scope.startLine === scope.startLine)
-      if (anchored.length > 0) {lenses.push(ruleLens(document, scope.startLine, scope.endLine, anchored))}
+      const observation = await currentObservation(observations, relativePath, content, scope, fingerprintOf)
+      const anchored = rules.filter(r => r.scope.kind === scope.kind && r.scope.startLine === scope.startLine)
+      lenses.push(...lensFor(document, scope, resolveScopeHint(observation, anchored)))
     }
 
-    for (const block of visible.filter(r => r.scope.kind === 'block')) {
-      const hints = observedFor(observations, relativePath, content, block.scope).filter(r => r.confidence !== 'low')
-      lenses.push(hints.length > 0 ? observedLens(document, block.scope, hints) : ruleLens(document, block.scope.startLine, block.scope.endLine, [block]))
+    const blocks = new Map<string, ScopeRef>()
+    for (const rec of rules) {
+      if (rec.scope.kind === 'block') {blocks.set(`${rec.scope.startLine}:${rec.scope.endLine}`, rec.scope)}
+    }
+    for (const block of blocks.values()) {
+      const observation = await currentObservation(observations, relativePath, content, block, fingerprintOf)
+      const anchored = rules.filter(r => r.scope.kind === 'block' && r.scope.startLine === block.startLine)
+      lenses.push(...lensFor(document, block, resolveScopeHint(observation, anchored)))
     }
     return lenses
   }
 }
 
-function observedLens(document: vscode.TextDocument, scope: ScopeRef, hints: Recommendation[]): vscode.CodeLens {
-  const count = hints.length
-  return new vscode.CodeLens(lineRange(scope.startLine), {
-    title: `✦ AI: ${count} hint${count === 1 ? '' : 's'} observed · ${hints[0].priority}`,
-    command: REVIEW_AI_HINTS_COMMAND,
-    arguments: [document.uri, lineSpan(scope)],
-  })
+function lensFor(document: vscode.TextDocument, scope: ScopeRef, hint: ScopeHint): vscode.CodeLens[] {
+  switch (hint.kind) {
+    case 'observed': {
+      const count = hint.recommendations.length
+      return [new vscode.CodeLens(lineRange(scope.startLine), {
+        title: `✦ AI: ${count} hint${count === 1 ? '' : 's'} observed · ${hint.recommendations[0].priority}`,
+        command: REVIEW_AI_HINTS_COMMAND,
+        arguments: [document.uri, lineSpan(scope)],
+      })]
+    }
+    case 'reviewed':
+      return [new vscode.CodeLens(lineRange(scope.startLine), {
+        title: '✦ AI reviewed: nothing to change at this level',
+        command: REVIEW_AI_HINTS_COMMAND,
+        arguments: [document.uri, lineSpan(scope)],
+      })]
+    case 'rules':
+      return [ruleLens(document, scope.startLine, scope.endLine, hint.recommendations)]
+    case 'none':
+      return []
+  }
 }
 
-function reviewedLens(document: vscode.TextDocument, scope: ScopeRef): vscode.CodeLens {
-  return new vscode.CodeLens(lineRange(scope.startLine), {
-    title: '✦ AI reviewed: nothing to change at this level',
-    command: REVIEW_AI_HINTS_COMMAND,
-    arguments: [document.uri, lineSpan(scope)],
-  })
-}
-
-function ruleLens(document: vscode.TextDocument, startLine: number, endLine: number, recommendations: Recommendation[]): vscode.CodeLens {
+function ruleLens(document: vscode.TextDocument, startLine: number, endLine: number, recommendations: readonly Recommendation[]): vscode.CodeLens {
   const count = recommendations.length
   return new vscode.CodeLens(lineRange(startLine), {
     title: `✦ RailsForge: ${count} refactoring ${count === 1 ? 'opportunity' : 'opportunities'} · ${recommendations[0].priority}`,

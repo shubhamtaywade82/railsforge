@@ -17,6 +17,7 @@ import { alternativesFor, selectTechniques } from '../patterns/TechniqueSelector
 import type { Technique } from '../patterns/TechniqueCatalog'
 import { confidenceOf, priorityOf, rank, scopeLabel } from '../recommendations/RecommendationBuilder'
 import { askWithRepair } from './ModelExchange'
+import { scopeText, textHash } from './ObservationStore'
 import { RefactoringContextBuilder } from './RefactoringContextBuilder'
 import { buildPlanPrompt, buildRefinePrompt, FindingView } from './RefactoringPrompts'
 import { parseRefinement, RawDecision } from './ResponseParsers'
@@ -31,6 +32,7 @@ import {
   ProposedPlan,
   Recommendation,
   RefactorTarget,
+  ScopeRef,
   SourceReader,
   SyntaxVerdict,
 } from './types'
@@ -132,6 +134,23 @@ export class RefactoringAdvisor {
       log: this.deps.log,
       validate: text => validateDiffPlan(text, files, this.deps.checkSyntax),
     })
+  }
+
+  /**
+   * A hash of the context the advice for `scope` depends on, other than the scope's own text: the
+   * definitions of the constants it references, its spec, its callers and the project's conventions.
+   * It is built with the same context builder as the prompt, so it covers what the model was shown.
+   * The primary file itself is excluded; the scope's own text is hashed separately.
+   */
+  async fingerprint(path: string, content: string, scope: ScopeRef): Promise<string> {
+    const target: RefactorTarget = { ...scope, text: scopeText(content, scope) }
+    const context = await this.contextBuilder.build({ relativePath: path, content, target })
+    return textHash(JSON.stringify({
+      related: context.related.map(r => [r.path, r.excerpt]),
+      specs: context.specs.map(s => [s.path, s.excerpt]),
+      callers: context.callers,
+      conventions: context.conventions,
+    }))
   }
 
   private validateRefinement(text: string, findings: readonly FindingView[], primaryPath: string): AdvisorResult<RefinementResult> {

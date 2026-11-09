@@ -4,16 +4,17 @@ import { RubyAstParser } from '../src/indexer/RubyAstParser'
 import { RefactoringEngine } from '../src/refactoring-intelligence/core/RefactoringEngine'
 import {
   chooseBackgroundScope,
-  observedFor,
-  observedWithin,
+  currentObservation,
+  hintsWithin,
+  observationStateOf,
   ObservationStore,
   recordRefinement,
   scopeText,
   textHash,
 } from '../src/refactoring-intelligence/core/ObservationStore'
 import type { Recommendation, RefactorTarget, ScopeRef } from '../src/refactoring-intelligence/core/types'
-import { BackgroundHints } from '../src/refactoring-intelligence/vscode/BackgroundHints'
 import type { RefactoringAdvisor } from '../src/refactoring-intelligence/core/RefactoringAdvisor'
+import { BackgroundHints } from '../src/refactoring-intelligence/vscode/BackgroundHints'
 
 const PATH = 'app/services/pricing.rb'
 const SOURCE = [
@@ -33,17 +34,20 @@ const GROSS: ScopeRef = { kind: 'method', name: 'gross', className: 'Pricing', s
 const NET: ScopeRef = { kind: 'method', name: 'net', className: 'Pricing', startLine: 6, endLine: 8 }
 const CLASS: ScopeRef = { kind: 'class', name: 'Pricing', startLine: 1, endLine: 9 }
 
-function rec(id: string, scope: ScopeRef, title = `hint ${id}`): Recommendation {
+/** A fingerprint that is the same for every scope: the tests that care about it override it. */
+const steady = async () => 'fp-1'
+
+function rec(id: string, scope: ScopeRef, confidence: Recommendation['confidence'] = 'medium'): Recommendation {
   return {
     id,
     source: 'ai',
     candidateIds: ['c1'],
     path: PATH,
     scope,
-    title,
+    title: `hint ${id}`,
     problem: 'p',
     evidence: [],
-    confidence: 'medium',
+    confidence,
     priority: 'high',
     technique: { id: 'extract-method', name: 'Extract Method' },
     design: 'd',
@@ -61,114 +65,147 @@ describe('scope text and hashes', () => {
     expect(scopeText(SOURCE, GROSS)).toBe('  def gross(x)\n    base = x * 2\n    base + 1\n  end')
   })
 
-  it('changes the hash when the text changes, and keeps it when only the line numbers move', () => {
+  it('changes the hash when the text changes, and keeps it when it does not', () => {
     expect(textHash('a')).not.toBe(textHash('b'))
     expect(textHash('same')).toBe(textHash('same'))
   })
 })
 
-describe('ObservationStore', () => {
-  it('returns the observation while the scope text is unchanged', () => {
+describe('ObservationStore: three states', () => {
+  it('is unobserved when there is no entry, observed with recommendations, or observed without them', async () => {
     const store = new ObservationStore()
-    store.put(PATH, GROSS, scopeText(SOURCE, GROSS), [rec('r1', GROSS)])
-    expect(store.get(PATH, GROSS, scopeText(SOURCE, GROSS))?.map(r => r.title)).toEqual(['hint r1'])
+    expect(await currentObservation(store, PATH, SOURCE, GROSS, steady)).toBeUndefined()
+
+    store.put(PATH, GROSS, scopeText(SOURCE, GROSS), 'fp-1', [rec('r1', GROSS)])
+    const withRecs = await currentObservation(store, PATH, SOURCE, GROSS, steady)
+    expect(withRecs && observationStateOf(withRecs)).toBe('observed_with_recommendations')
+
+    store.put(PATH, NET, scopeText(SOURCE, NET), 'fp-1', [], ['one step only'])
+    const without = await currentObservation(store, PATH, SOURCE, NET, steady)
+    expect(without && observationStateOf(without)).toBe('observed_without_recommendations')
+    expect(without?.reasons).toEqual(['one step only'])
   })
 
-  it('returns undefined once the scope text has changed, so a stale hint is never shown', () => {
+  it('treats an observation as stale when the scope text changed', async () => {
     const store = new ObservationStore()
-    store.put(PATH, GROSS, scopeText(SOURCE, GROSS), [rec('r1', GROSS)])
+    store.put(PATH, GROSS, scopeText(SOURCE, GROSS), 'fp-1', [rec('r1', GROSS)])
     const edited = SOURCE.replace('base = x * 2', 'base = x * 3')
-    expect(store.get(PATH, GROSS, scopeText(edited, GROSS))).toBeUndefined()
+    expect(await currentObservation(store, PATH, edited, GROSS, steady)).toBeUndefined()
   })
 
-  it('finds the observation after the scope moves, because the key is the name, not the line', () => {
+  it('treats an observation as stale when the context fingerprint changed, even if the scope text did not', async () => {
     const store = new ObservationStore()
-    store.put(PATH, GROSS, scopeText(SOURCE, GROSS), [rec('r1', GROSS)])
+    store.put(PATH, GROSS, scopeText(SOURCE, GROSS), 'fp-1', [rec('r1', GROSS)])
+    // The constant it references, defined in another file, changed: the advice no longer describes it.
+    expect(await currentObservation(store, PATH, SOURCE, GROSS, async () => 'fp-2')).toBeUndefined()
+    expect(await currentObservation(store, PATH, SOURCE, GROSS, async () => 'fp-1')).toBeDefined()
+  })
+
+  it('finds the observation after the scope moves, because the key is the name, not the line', async () => {
+    const store = new ObservationStore()
+    store.put(PATH, GROSS, scopeText(SOURCE, GROSS), 'fp-1', [rec('r1', GROSS)])
     // Thirty-eight filler lines push the same four lines down to 39-42.
     const moved = { ...GROSS, startLine: 39, endLine: 42 }
     const shifted = `${'# filler\n'.repeat(38)}${scopeText(SOURCE, GROSS)}`
-    expect(store.get(PATH, moved, scopeText(shifted, moved))).toHaveLength(1)
+    expect(await currentObservation(store, PATH, shifted, moved, steady)).toBeDefined()
   })
 
-  it('keeps "observed, nothing to change" distinct from "never observed"', () => {
-    const store = new ObservationStore()
-    expect(store.get(PATH, NET, scopeText(SOURCE, NET))).toBeUndefined()
-    store.put(PATH, NET, scopeText(SOURCE, NET), [])
-    expect(store.get(PATH, NET, scopeText(SOURCE, NET))).toEqual([])
-  })
-
-  it('survives a reload: a store restored from its snapshot answers the same way', () => {
+  it('survives a reload: a store restored from its snapshot answers the same way', async () => {
     const first = new ObservationStore()
-    first.put(PATH, GROSS, scopeText(SOURCE, GROSS), [rec('r1', GROSS)])
+    first.put(PATH, GROSS, scopeText(SOURCE, GROSS), 'fp-1', [rec('r1', GROSS)], ['why'])
     const restored = new ObservationStore(JSON.parse(JSON.stringify(first.snapshot())))
-    expect(restored.get(PATH, GROSS, scopeText(SOURCE, GROSS))).toHaveLength(1)
+    const entry = await currentObservation(restored, PATH, SOURCE, GROSS, steady)
+    expect(entry?.recommendations).toHaveLength(1)
+    expect(entry?.reasons).toEqual(['why'])
   })
 
-  it('ignores a snapshot it does not recognise, rather than failing', () => {
+  it('ignores a snapshot it does not recognise, and entries missing a fingerprint', () => {
     expect(new ObservationStore({ version: 2, entries: [] } as never).snapshot().entries).toEqual([])
-    expect(new ObservationStore({ version: 1, entries: [{ nonsense: true }] } as never).snapshot().entries).toEqual([])
+    expect(new ObservationStore({ version: 1, entries: [{ key: 'k', scopeHash: 'h', recommendations: [] }] } as never).snapshot().entries).toEqual([])
   })
 
   it('keeps only the most recent scopes when it is full', () => {
     const store = new ObservationStore(undefined, 2)
-    store.put(PATH, GROSS, 'g', [], 1)
-    store.put(PATH, NET, 'n', [], 2)
-    store.put(PATH, CLASS, 'c', [], 3)
-    const keys = store.snapshot().entries.map(e => e.scope.name)
-    expect(keys.sort()).toEqual(['Pricing', 'net'])
+    store.put(PATH, GROSS, 'g', 'f', [], [], 1)
+    store.put(PATH, NET, 'n', 'f', [], [], 2)
+    store.put(PATH, CLASS, 'c', 'f', [], [], 3)
+    expect(store.snapshot().entries.map(e => e.scope.name).sort()).toEqual(['Pricing', 'net'])
   })
 
   it('notifies listeners on each change, and stops after unsubscribe', () => {
     const store = new ObservationStore()
     const listener = vi.fn()
     const unsubscribe = store.onDidChange(listener)
-    store.put(PATH, GROSS, scopeText(SOURCE, GROSS), [])
+    store.put(PATH, GROSS, scopeText(SOURCE, GROSS), 'f', [])
     expect(listener).toHaveBeenCalledTimes(1)
     unsubscribe()
-    store.put(PATH, NET, scopeText(SOURCE, NET), [])
+    store.put(PATH, NET, scopeText(SOURCE, NET), 'f', [])
     expect(listener).toHaveBeenCalledTimes(1)
   })
 })
 
-describe('recordRefinement and observedWithin', () => {
-  it('stores each recommendation under its own scope, and an empty observation for the target when nothing was recommended there', () => {
+describe('recordRefinement and hintsWithin', () => {
+  it('stores each recommendation under its own scope, and the reviewed target with the AI\'s reasons', async () => {
     const store = new ObservationStore()
-    recordRefinement(store, PATH, SOURCE, CLASS, [rec('r1', GROSS)])
+    await recordRefinement(store, PATH, SOURCE, CLASS, [rec('r1', GROSS)], [{ reason: 'the class is cohesive' }], steady)
 
-    expect(observedFor(store, PATH, SOURCE, GROSS).map(r => r.id)).toEqual(['r1'])
-    expect(store.get(PATH, CLASS, scopeText(SOURCE, CLASS))).toEqual([])
-    expect(store.get(PATH, NET, scopeText(SOURCE, NET))).toBeUndefined()
+    expect((await currentObservation(store, PATH, SOURCE, GROSS, steady))?.recommendations.map(r => r.id)).toEqual(['r1'])
+    const classEntry = await currentObservation(store, PATH, SOURCE, CLASS, steady)
+    expect(classEntry && observationStateOf(classEntry)).toBe('observed_without_recommendations')
+    expect(classEntry?.reasons).toEqual(['the class is cohesive'])
+    expect(await currentObservation(store, PATH, SOURCE, NET, steady)).toBeUndefined()
   })
 
-  it('gathers a class target\'s observations from the methods inside it, but not from outside it', () => {
+  it('records a review that found nothing at all, so the same code is not asked about again', async () => {
+    const store = new ObservationStore()
+    await recordRefinement(store, PATH, SOURCE, GROSS, [], [{ reason: 'one step' }], steady)
+    const entry = await currentObservation(store, PATH, SOURCE, GROSS, steady)
+    expect(entry && observationStateOf(entry)).toBe('observed_without_recommendations')
+  })
+
+  it('gathers a class target\'s observations from the methods inside it, but not from outside it', async () => {
     const scopes = [CLASS, GROSS, NET]
     const store = new ObservationStore()
-    recordRefinement(store, PATH, SOURCE, GROSS, [rec('r1', GROSS)])
-    recordRefinement(store, PATH, SOURCE, NET, [rec('r2', NET)])
+    await recordRefinement(store, PATH, SOURCE, GROSS, [rec('r1', GROSS)], [], steady)
+    await recordRefinement(store, PATH, SOURCE, NET, [rec('r2', NET)], [], steady)
 
-    expect(observedWithin(store, PATH, SOURCE, scopes, CLASS).map(r => r.id).sort()).toEqual(['r1', 'r2'])
-    expect(observedWithin(store, PATH, SOURCE, scopes, NET).map(r => r.id)).toEqual(['r2'])
+    expect((await hintsWithin(store, PATH, SOURCE, scopes, CLASS, steady)).observed.map(r => r.id).sort()).toEqual(['r1', 'r2'])
+    expect((await hintsWithin(store, PATH, SOURCE, scopes, NET, steady)).observed.map(r => r.id)).toEqual(['r2'])
+  })
+
+  it('never counts low-confidence items as observed hints, and does not call the target reviewed when the AI proposed something there', async () => {
+    const store = new ObservationStore()
+    await recordRefinement(store, PATH, SOURCE, GROSS, [rec('low', GROSS, 'low')], [], steady)
+    const within = await hintsWithin(store, PATH, SOURCE, [GROSS], GROSS, steady)
+    expect(within.observed).toEqual([])
+    expect(within.reviewed).toBeUndefined()
+  })
+
+  it('reports the AI\'s reasons for a target it reviewed and left alone', async () => {
+    const store = new ObservationStore()
+    await recordRefinement(store, PATH, SOURCE, CLASS, [], [{ reason: 'cohesive' }], steady)
+    const within = await hintsWithin(store, PATH, SOURCE, [CLASS, GROSS], CLASS, steady)
+    expect(within.observed).toEqual([])
+    expect(within.reviewed).toEqual(['cohesive'])
   })
 })
 
 describe('chooseBackgroundScope', () => {
-  it('chooses the highest-ranked scope with no observation for its current text', () => {
+  it('chooses the highest-ranked scope with no current observation', async () => {
     const store = new ObservationStore()
     const ranked = [rec('r1', GROSS), rec('r2', NET)]
-    expect(chooseBackgroundScope(PATH, SOURCE, ranked, store)).toEqual(GROSS)
+    expect(await chooseBackgroundScope(PATH, SOURCE, ranked, store, steady)).toEqual(GROSS)
 
-    store.put(PATH, GROSS, scopeText(SOURCE, GROSS), [])
-    expect(chooseBackgroundScope(PATH, SOURCE, ranked, store)).toEqual(NET)
+    store.put(PATH, GROSS, scopeText(SOURCE, GROSS), 'fp-1', [])
+    expect(await chooseBackgroundScope(PATH, SOURCE, ranked, store, steady)).toEqual(NET)
   })
 
-  it('chooses nothing once every ranked scope is observed, and asks again only when a scope changes', () => {
+  it('asks again when a scope went stale through its context, not only through its own text', async () => {
     const store = new ObservationStore()
+    store.put(PATH, GROSS, scopeText(SOURCE, GROSS), 'fp-1', [])
     const ranked = [rec('r1', GROSS)]
-    store.put(PATH, GROSS, scopeText(SOURCE, GROSS), [])
-    expect(chooseBackgroundScope(PATH, SOURCE, ranked, store)).toBeUndefined()
-
-    const edited = SOURCE.replace('base = x * 2', 'base = x * 9')
-    expect(chooseBackgroundScope(PATH, edited, ranked, store)).toEqual(GROSS)
+    expect(await chooseBackgroundScope(PATH, SOURCE, ranked, store, steady)).toBeUndefined()
+    expect(await chooseBackgroundScope(PATH, SOURCE, ranked, store, async () => 'fp-2')).toEqual(GROSS)
   })
 })
 
@@ -181,22 +218,6 @@ describe('BackgroundHints', () => {
     } as unknown as vscode.TextDocument
   }
 
-  function harness(options: { enabled?: boolean; refine?: (scope: RefactorTarget) => Promise<unknown> } = {}) {
-    const engine = new RefactoringEngine(new RubyAstParser())
-    const observations = new ObservationStore()
-    const refine = vi.fn(options.refine ?? (async () => ({ ok: true, value: { recommendations: [], skipped: [] } })))
-    const advisor = { refine } as unknown as RefactoringAdvisor
-    const hints = new BackgroundHints({
-      engine,
-      advisor,
-      observations,
-      pathOf: uri => uri.fsPath.replace('/proj/', ''),
-      enabled: () => options.enabled ?? true,
-      debounceMs: 10,
-    })
-    return { hints, refine, observations }
-  }
-
   const LONG = [
     'class Pricing',
     '  def gross(x)',
@@ -206,35 +227,61 @@ describe('BackgroundHints', () => {
     '',
   ].join('\n')
 
-  it('does nothing while the setting is off, even on save', async () => {
+  function harness(options: {
+    enabled?: boolean
+    refine?: (input: unknown) => Promise<unknown>
+    debounceMs?: number
+  } = {}) {
+    const engine = new RefactoringEngine(new RubyAstParser())
+    const observations = new ObservationStore()
+    const refine = vi.fn(options.refine ?? (async () => ({ ok: true, value: { recommendations: [], skipped: [] } })))
+    const fingerprint = vi.fn(async () => 'fp-1')
+    const advisor = { refine, fingerprint } as unknown as RefactoringAdvisor
+    const hints = new BackgroundHints({
+      engine,
+      advisor,
+      observations,
+      pathOf: uri => uri.fsPath.replace('/proj/', ''),
+      enabled: () => options.enabled ?? true,
+      debounceMs: options.debounceMs ?? 10,
+    })
+    return { hints, refine, observations }
+  }
+
+  it('does nothing while the setting is off, even when a file is saved', async () => {
     const { hints, refine } = harness({ enabled: false })
-    await hints.review(fakeDocument(LONG))
+    hints.enqueue(fakeDocument(LONG))
+    await hints.whenIdle()
     expect(refine).not.toHaveBeenCalled()
   })
 
   it('asks the AI about one unobserved scope, then records the answer so the same code is not asked again', async () => {
     const { hints, refine, observations } = harness()
-    await hints.review(fakeDocument(LONG))
+    hints.enqueue(fakeDocument(LONG))
+    await hints.whenIdle()
     expect(refine).toHaveBeenCalledTimes(1)
     expect(refine.mock.calls[0][0]).toMatchObject({ path: PATH, scope: { kind: 'method', name: 'gross' } })
-
-    await hints.review(fakeDocument(LONG))
-    expect(refine).toHaveBeenCalledTimes(1)
     expect(observations.snapshot().entries).toHaveLength(1)
+
+    hints.enqueue(fakeDocument(LONG))
+    await hints.whenIdle()
+    expect(refine).toHaveBeenCalledTimes(1)
   })
 
   it('records nothing when the AI is unavailable, so the next save tries again', async () => {
     const { hints, observations } = harness({ refine: async () => ({ ok: false, reason: 'model-unavailable', message: 'no model' }) })
-    await hints.review(fakeDocument(LONG))
+    hints.enqueue(fakeDocument(LONG))
+    await hints.whenIdle()
     expect(observations.snapshot().entries).toEqual([])
   })
 
-  it('debounces a burst of saves into one review', async () => {
+  it('debounces a burst of saves to one file into one queued review', async () => {
     vi.useFakeTimers()
     try {
-      const { hints, refine } = harness()
+      const { hints, refine } = harness({ debounceMs: 2_000 })
       for (let i = 0; i < 5; i++) {hints.onDidSave(fakeDocument(LONG))}
-      await vi.advanceTimersByTimeAsync(50)
+      await vi.advanceTimersByTimeAsync(2_500)
+      await hints.whenIdle()
       expect(refine).toHaveBeenCalledTimes(1)
       hints.dispose()
     } finally {
@@ -242,15 +289,45 @@ describe('BackgroundHints', () => {
     }
   })
 
-  it('does not start a second review while one is running', async () => {
-    let finish: () => void = () => {}
+  it('queues a save of another file while a review is running, instead of dropping it', async () => {
+    const releases: Array<() => void> = []
     const { hints, refine } = harness({
-      refine: () => new Promise(resolve => { finish = () => resolve({ ok: true, value: { recommendations: [], skipped: [] } }) }),
+      refine: () => new Promise(resolve => {
+        releases.push(() => resolve({ ok: true, value: { recommendations: [], skipped: [] } }))
+      }),
     })
-    const first = hints.review(fakeDocument(LONG))
-    await hints.review(fakeDocument(LONG))
-    expect(refine).toHaveBeenCalledTimes(1)
-    finish()
-    await first
+    hints.enqueue(fakeDocument(LONG, 'app/services/first.rb'))
+    hints.enqueue(fakeDocument(LONG, 'app/services/second.rb'))
+    await vi.waitFor(() => expect(refine).toHaveBeenCalledTimes(1))
+    expect(refine.mock.calls[0][0]).toMatchObject({ path: 'app/services/first.rb' })
+
+    releases.shift()?.()
+    await vi.waitFor(() => expect(refine).toHaveBeenCalledTimes(2))
+    expect(refine.mock.calls[1][0]).toMatchObject({ path: 'app/services/second.rb' })
+
+    releases.shift()?.()
+    await hints.whenIdle()
+    expect(refine).toHaveBeenCalledTimes(2)
+  })
+
+  it('reviews a document queued twice once, with its newest text', async () => {
+    const release: { fn?: () => void } = {}
+    const { hints, refine } = harness({
+      refine: () => new Promise(resolve => {
+        release.fn = () => resolve({ ok: true, value: { recommendations: [], skipped: [] } })
+      }),
+    })
+    hints.enqueue(fakeDocument(LONG, 'app/services/first.rb'))
+    hints.enqueue(fakeDocument(LONG, 'app/services/second.rb'))
+    const newest = LONG.replace('v_0 = x + 0', 'v_0 = x + 99')
+    hints.enqueue(fakeDocument(newest, 'app/services/second.rb'))
+
+    await vi.waitFor(() => expect(refine).toHaveBeenCalledTimes(1))
+    release.fn?.()
+    await vi.waitFor(() => expect(refine).toHaveBeenCalledTimes(2))
+    expect(refine.mock.calls[1][0].content).toContain('v_0 = x + 99')
+    release.fn?.()
+    await hints.whenIdle()
+    expect(refine).toHaveBeenCalledTimes(2)
   })
 })
