@@ -112,7 +112,7 @@ export const OBSERVABILITY_TOOLS: readonly ToolDefinition[] = [
     },
     invocationMessage: 'Reading Rails log',
     async handler(ctx: ToolContext, { environment = 'development', lines = 50, filter }) {
-      const relPath = path.join('log', `${environment}.log`)
+      const relPath = path.posix.join('log', `${environment}.log`)
       const resolved = resolveWithinRoot(ctx.workspaceRoot, relPath)
       if (!resolved.ok) {return json({ error: `Invalid path: ${resolved.reason}` })}
       if (!fs.existsSync(resolved.fullPath)) {return json({ error: `Log file not found: ${relPath}` })}

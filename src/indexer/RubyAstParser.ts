@@ -24,6 +24,8 @@ export interface ParsedCall {
 export interface ParsedMethod {
   name: string
   isPublic: boolean
+  visibility: 'public' | 'private' | 'protected'
+  signature: string
   startLine: number
   endLine: number
   bodyText: string
@@ -118,7 +120,7 @@ export class RubyAstParser {
     const includes: string[] = []
     const methods: ParsedMethod[] = []
     const calls: ParsedCall[] = []
-    let inPrivateSection = false
+    let visibility: ParsedMethod['visibility'] = 'public'
 
     if (bodyNode) {
       for (const child of bodyNode.namedChildren) {
@@ -133,16 +135,30 @@ export class RubyAstParser {
             continue
           }
 
-          if (callInfo.receiver === null && callInfo.method === 'private' && child.namedChildren.every(c => c.type !== 'argument_list')) {
-            inPrivateSection = true
+          if (callInfo.receiver === null && ['private', 'protected', 'public'].includes(callInfo.method)) {
+            const nextVisibility: ParsedMethod['visibility'] = callInfo.method === 'public'
+              ? 'public'
+              : callInfo.method === 'protected' ? 'protected' : 'private'
+            const targets = (child.childForFieldName('arguments')?.namedChildren ?? [])
+              .map(argument => argument.text.replace(/^:/, ''))
+            if (targets.length === 0) {
+              visibility = nextVisibility
+            } else {
+              for (const method of methods) {
+                if (targets.includes(method.name)) {
+                  method.visibility = nextVisibility
+                  method.isPublic = nextVisibility === 'public'
+                }
+              }
+            }
             continue
           }
 
           calls.push(callInfo)
-        } else if (child.type === 'identifier' && (child.text === 'private' || child.text === 'protected')) {
-          inPrivateSection = true
+        } else if (child.type === 'identifier' && (child.text === 'private' || child.text === 'protected' || child.text === 'public')) {
+          visibility = child.text === 'public' ? 'public' : child.text === 'protected' ? 'protected' : 'private'
         } else if (child.type === 'method') {
-          const method = this.extractMethod(child, !inPrivateSection)
+          const method = this.extractMethod(child, visibility)
           if (method) {methods.push(method)}
         }
 
@@ -184,16 +200,25 @@ export class RubyAstParser {
     }
   }
 
-  private extractMethod(methodNode: SyntaxNode, isPublic: boolean): ParsedMethod | null {
+  private extractMethod(methodNode: SyntaxNode, visibility: ParsedMethod['visibility']): ParsedMethod | null {
     const nameNode = methodNode.childForFieldName('name')
     if (!nameNode) {return null}
 
     const paramsNode = methodNode.childForFieldName('parameters')
     const params = (paramsNode?.namedChildren ?? []).map(p => this.paramName(p)).filter((p): p is string => p !== null)
+    const signatureEnd = paramsNode ?? nameNode
+    const signatureLines = methodNode.text.split(/\r?\n/)
+    const endRow = signatureEnd.endPosition.row - methodNode.startPosition.row
+    const endColumn = signatureEnd.endPosition.column - (endRow === 0 ? methodNode.startPosition.column : 0)
+    signatureLines.splice(endRow + 1)
+    signatureLines[endRow] = signatureLines[endRow].slice(0, endColumn)
+    const signature = signatureLines.join('\n').trim()
 
     return {
       name: nameNode.text,
-      isPublic,
+      isPublic: visibility === 'public',
+      visibility,
+      signature,
       startLine: methodNode.startPosition.row + 1,
       endLine: methodNode.endPosition.row + 1,
       bodyText: methodNode.text,

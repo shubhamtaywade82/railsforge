@@ -81,6 +81,8 @@ export const RUBY_TOOLS: readonly ToolDefinition[] = [
           methods: t.methods.map(m => ({
             name: m.name,
             isPublic: m.isPublic,
+            visibility: m.visibility,
+            signature: m.signature,
             startLine: m.startLine,
             endLine: m.endLine,
             params: m.params,
@@ -124,6 +126,8 @@ export const RUBY_TOOLS: readonly ToolDefinition[] = [
         method: {
           name: method.name,
           isPublic: method.isPublic,
+          visibility: method.visibility,
+          signature: method.signature,
           startLine: method.startLine,
           endLine: method.endLine,
           params: method.params,

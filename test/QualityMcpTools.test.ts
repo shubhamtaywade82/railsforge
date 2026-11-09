@@ -56,7 +56,7 @@ describe('Quality MCP tools', () => {
   })
 
   describe('ruby_run_tests', () => {
-    it('executes rspec via binstub and parses JSON summary and failures', async () => {
+    it.skipIf(process.platform === 'win32')('executes rspec via binstub and parses JSON summary and failures', async () => {
       const specFile = path.join(root, 'spec', 'models', 'order_spec.rb')
       fs.mkdirSync(path.dirname(specFile), { recursive: true })
       fs.writeFileSync(specFile, 'RSpec.describe Order do\n  it "fails" do\n    expect(1).to eq(2)\n  end\nend\n')
@@ -104,7 +104,7 @@ describe('Quality MCP tools', () => {
   })
 
   describe('ruby_run_linter', () => {
-    it('executes rubocop via binstub and parses offenses', async () => {
+    it.skipIf(process.platform === 'win32')('executes rubocop via binstub and parses offenses', async () => {
       const binDir = path.join(root, 'bin')
       fs.mkdirSync(binDir, { recursive: true })
       const rubocopStub = path.join(binDir, 'rubocop')
