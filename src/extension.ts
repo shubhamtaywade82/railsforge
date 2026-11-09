@@ -92,6 +92,7 @@ import { RailsChatParticipant } from './chat/RailsChatParticipant'
 import { RailsChatViewProvider } from './chat/RailsChatViewProvider'
 import { smartApplyResponse } from './chat/ChatDiffApplier'
 import { PersistentIndexManager } from './indexer/PersistentIndexManager'
+import { ensureSafeProcessReport } from './indexer/nativeSupport'
 import { PerRootRegistry } from './workspace/PerRootRegistry'
 import { DevDocsProject } from './docs/DevDocsProject'
 import { PersistentIndexRegistry, IndexState } from './indexer/PersistentIndexRegistry'
@@ -164,6 +165,7 @@ export interface RailsForgeTestApi {
 }
 
 export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
+  ensureSafeProcessReport()
   projectState = new ProjectState(context.workspaceState)
   skillsPackDir = path.join(context.extensionPath, 'dist', 'skills')
   setVersionManagerSettingProvider(() => readConfig().rubyVersionManager)

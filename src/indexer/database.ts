@@ -16,6 +16,8 @@
  * module. `PersistentIndexManager.isSupported()` gates the actual call.
  */
 
+import { ensureSafeProcessReport } from './nativeSupport'
+
 export interface SqliteStatement {
   run(...params: unknown[]): unknown
   get(...params: unknown[]): unknown
@@ -31,7 +33,7 @@ export interface SqliteDatabase {
 }
 
 export function openIndexDatabase(dbPath: string, readonly = false): SqliteDatabase {
-   
+  ensureSafeProcessReport()
   const Database = require('better-sqlite3')
   const db: SqliteDatabase = new Database(dbPath, { readonly, fileMustExist: readonly, timeout: 2000 })
   if (!readonly) {

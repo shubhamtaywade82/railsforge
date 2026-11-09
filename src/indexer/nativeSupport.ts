@@ -100,10 +100,48 @@ export function resetPersistentIndexSupportCache(): void {
 }
 
 /**
+ * Ensures process.report.getReport() returns an object with `header`.
+ * Some host extensions (e.g. GitHub Copilot) replace `process.report.getReport`
+ * with an empty stub returning undefined, which triggers a TypeError inside
+ * better-sqlite3's `isLinuxMusl()` when it reads `.header`.
+ */
+export function ensureSafeProcessReport(): void {
+  if (process.platform !== 'linux') {return}
+
+  try {
+    const glibc = getLinuxGlibcVersion()
+    const safeReport = { header: { glibcVersionRuntime: glibc } }
+
+    if (!process.report) {
+      Object.defineProperty(process, 'report', {
+        value: { getReport: () => safeReport },
+        writable: true,
+        configurable: true,
+        enumerable: true,
+      })
+      return
+    }
+
+    const current = process.report.getReport?.() as { header?: unknown } | undefined
+    if (!current || typeof current !== 'object' || !current.header) {
+      Object.defineProperty(process.report, 'getReport', {
+        value: () => safeReport,
+        writable: true,
+        configurable: true,
+        enumerable: true,
+      })
+    }
+  } catch {
+    // Process object might be sealed in certain strict sandboxes
+  }
+}
+
+/**
  * Same gate as isPersistentIndexSupported, but says *why* it failed so the UI can tell the
  * user instead of silently disabling the AST features.
  */
 export function getPersistentIndexSupport(): PersistentIndexSupport {
+  ensureSafeProcessReport()
   if (cachedSupport) {return cachedSupport}
 
   const napiVersion = Number(process.versions.napi)

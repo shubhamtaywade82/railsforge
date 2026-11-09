@@ -14,8 +14,10 @@ export class MigrationDiagnostics implements vscode.CodeActionProvider {
   }
 
   updateDiagnostics(document: vscode.TextDocument): void {
-    if (!document.fileName.replace(/\\/g, '/').includes('/db/migrate/')) {
-      this.diagnosticCollection.delete(document.uri)
+    if (!document?.fileName || !document.fileName.replace(/\\/g, '/').includes('/db/migrate/')) {
+      if (document?.uri) {
+        this.diagnosticCollection.delete(document.uri)
+      }
       return
     }
 

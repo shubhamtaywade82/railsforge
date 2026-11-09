@@ -91,6 +91,9 @@ export class Logger {
 function formatArgs(args: unknown[]): string {
   if (args.length === 0) { return '' }
   return ` ${args.map(a => {
+    if (a instanceof Error) {
+      return a.stack ?? a.message
+    }
     try {
       return typeof a === 'object' ? JSON.stringify(a) : String(a)
     } catch {

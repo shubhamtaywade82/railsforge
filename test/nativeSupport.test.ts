@@ -13,6 +13,7 @@ import {
   getPersistentIndexSupport,
   resetPersistentIndexSupportCache,
   getLinuxGlibcVersion,
+  ensureSafeProcessReport,
 } from '../src/indexer/nativeSupport'
 
 describe('isPersistentIndexSupported', () => {
@@ -177,5 +178,65 @@ describe('getPersistentIndexSupport reasons', () => {
   it('explains a missing N-API version', () => {
     Object.defineProperty(process.versions, 'napi', { value: undefined, configurable: true })
     expect(getPersistentIndexSupport().reason).toContain('unknown')
+  })
+})
+
+describe('ensureSafeProcessReport', () => {
+  const originalPlatform = process.platform
+  const originalReport = process.report
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
+    Object.defineProperty(process, 'report', { value: originalReport, configurable: true })
+  })
+
+  it('replaces an empty stub (e.g. Copilot getReport: () => {}) with a safe header', () => {
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+    Object.defineProperty(process, 'report', {
+      value: { getReport: () => undefined },
+      configurable: true,
+      writable: true,
+    })
+
+    ensureSafeProcessReport()
+
+    const report = (process.report as { getReport: () => { header: { glibcVersionRuntime?: string } } }).getReport()
+    expect(report).toBeDefined()
+    expect(report.header).toBeDefined()
+  })
+
+  it('creates process.report if missing on Linux', () => {
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+    Object.defineProperty(process, 'report', { value: undefined, configurable: true })
+
+    ensureSafeProcessReport()
+
+    const report = (process.report as { getReport: () => { header: { glibcVersionRuntime?: string } } })?.getReport()
+    expect(report).toBeDefined()
+    expect(report.header).toBeDefined()
+  })
+
+  it('leaves existing valid report with header untouched', () => {
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true })
+    const validReport = { header: { glibcVersionRuntime: '2.35', custom: 'preserved' } }
+    Object.defineProperty(process, 'report', {
+      value: { getReport: () => validReport },
+      configurable: true,
+      writable: true,
+    })
+
+    ensureSafeProcessReport()
+
+    const report = (process.report as { getReport: () => typeof validReport }).getReport()
+    expect(report).toBe(validReport)
+  })
+
+  it('does nothing on non-Linux platforms', () => {
+    Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
+    Object.defineProperty(process, 'report', { value: undefined, configurable: true })
+
+    ensureSafeProcessReport()
+
+    expect(process.report).toBeUndefined()
   })
 })

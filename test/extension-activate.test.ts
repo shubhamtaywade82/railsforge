@@ -125,7 +125,7 @@ vi.mock('child_process', () => ({
   spawn: vi.fn(() => ({ on: vi.fn(), kill: vi.fn(), stdout: { on: vi.fn() }, stderr: { on: vi.fn() } })),
 }))
 vi.mock('../src/indexer/PersistentIndexManager', () => ({ PersistentIndexManager: { activate: vi.fn(() => Promise.resolve({ dependencyGraph: { findCycles: vi.fn(() => []) }, duplicateDetector: { findDuplicates: vi.fn(() => []) }, dispose: vi.fn() })) } }))
-vi.mock('../src/chat/RailsChatParticipant', () => ({ RailsChatParticipant: { getInstance: vi.fn(() => ({ register: vi.fn() })) } }))
+vi.mock('../src/chat/RailsChatParticipant', () => ({ RailsChatParticipant: { getInstance: vi.fn(() => ({ register: vi.fn(), createParticipant: vi.fn() })) } }))
 vi.mock('../src/chat/RailsChatViewProvider', () => ({ RailsChatViewProvider: vi.fn() }))
 vi.mock('../src/workspace/WorkspaceOptimizer', () => ({ handleWorkspaceAutoOptimization: vi.fn(() => Promise.resolve()), optimizeRailsWorkspace: vi.fn(() => Promise.resolve()) }))
 
