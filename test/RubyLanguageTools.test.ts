@@ -63,6 +63,7 @@ end
     expect(result).toMatchObject({
       className: 'Orders',
       methodName: 'call',
+      signature: 'def call(order_id:, force: false)',
       params: ['order_id', 'force'],
       startLine: 2,
       endLine: 4,
