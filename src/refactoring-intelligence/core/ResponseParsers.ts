@@ -1,62 +1,74 @@
 /**
- * ResponseParsers - turns raw model text into validated values. Nothing downstream sees model text
- * directly.
+ * ResponseParsers - turns raw model text into validated values. Nothing downstream sees model text.
  *
- *   - Suggestions come back as one JSON object (small, structured, easy to validate with zod).
- *   - Code changes come back as a unified diff (scales with the change, not the file size, so a
- *     rewrite of a large class does not exceed the output budget). Reuses the strict parser the
- *     existing fix flow uses.
+ *   - Refinement decisions come back as one JSON object (small and structured; validated with zod).
+ *   - Code changes come back as a unified diff (scales with the change, not the file size). Reuses
+ *     the strict parser the existing fix flow uses.
+ *
+ * Semantic checks (does the candidate exist? is the technique allowed for it?) happen in
+ * RefactoringAdvisor, where the candidates are known. These parsers only check shape.
  */
 
 import { z } from 'zod'
 import { parseUnifiedDiff, UnifiedHunk } from '../../patch/UnifiedDiff'
 
-export interface RawSuggestion {
-  title: string
-  pattern: string
-  principle?: string
-  impact: 'low' | 'medium' | 'high'
-  rationale: string
-  files: string[]
+export interface RawDecision {
+  candidateId: string
+  decision: 'recommend' | 'skip'
+  technique?: string
+  reason?: string
+  design?: string
+  benefit?: string
+  risk?: string
+  alternatives: Array<{ name: string; whenBetter: string }>
+  affectedFiles: string[]
   steps: string[]
+  verification: string[]
 }
 
-const suggestionSchema = z.object({
-  title: z.string().trim().min(3),
-  pattern: z.string().trim().min(2),
-  principle: z.string().trim().optional(),
-  impact: z.string().optional(),
-  rationale: z.string().trim().min(10),
-  files: z.array(z.string().trim().min(1)).min(1),
-  steps: z.array(z.string().trim()).optional(),
+const decisionSchema = z.object({
+  candidateId: z.string().trim().min(1),
+  decision: z.string().optional(),
+  technique: z.string().trim().optional(),
+  reason: z.string().trim().optional(),
+  design: z.string().trim().optional(),
+  benefit: z.string().trim().optional(),
+  risk: z.string().trim().optional(),
+  alternatives: z.array(z.object({ name: z.string().trim().min(1), whenBetter: z.string().trim().optional() })).optional(),
+  affectedFiles: z.array(z.string().trim().min(1)).optional(),
+  steps: z.array(z.string().trim().min(1)).optional(),
+  verification: z.array(z.string().trim().min(1)).optional(),
 })
 
-const adviceSchema = z.object({
-  suggestions: z.array(suggestionSchema),
+const refinementSchema = z.object({
+  decisions: z.array(decisionSchema),
 })
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; message: string }
 
-/** Parses a suggestion answer. An empty list is valid: it means the target is already well designed. */
-export function parseAdvice(text: string): ParseResult<RawSuggestion[]> {
+export function parseRefinement(text: string): ParseResult<RawDecision[]> {
   const json = extractJsonObject(text)
   if (!json.ok) {return json}
 
-  const parsed = adviceSchema.safeParse(json.value)
+  const parsed = refinementSchema.safeParse(json.value)
   if (!parsed.success) {
     return { ok: false, message: `The answer did not match the required shape: ${summarizeIssues(parsed.error.issues)}.` }
   }
 
   return {
     ok: true,
-    value: parsed.data.suggestions.map(s => ({
-      title: s.title,
-      pattern: s.pattern,
-      principle: s.principle || undefined,
-      impact: normalizeImpact(s.impact),
-      rationale: s.rationale,
-      files: s.files,
-      steps: s.steps ?? [],
+    value: parsed.data.decisions.map(d => ({
+      candidateId: d.candidateId,
+      decision: normalizeDecision(d.decision),
+      technique: d.technique || undefined,
+      reason: d.reason || undefined,
+      design: d.design || undefined,
+      benefit: d.benefit || undefined,
+      risk: d.risk || undefined,
+      alternatives: (d.alternatives ?? []).map(a => ({ name: a.name, whenBetter: a.whenBetter ?? '' })),
+      affectedFiles: d.affectedFiles ?? [],
+      steps: d.steps ?? [],
+      verification: d.verification ?? [],
     })),
   }
 }
@@ -104,10 +116,8 @@ export function extractJsonObject(text: string): ParseResult<unknown> {
   }
 }
 
-function normalizeImpact(value: string | undefined): 'low' | 'medium' | 'high' {
-  const v = (value ?? '').trim().toLowerCase()
-  if (v === 'low' || v === 'high') {return v}
-  return 'medium'
+function normalizeDecision(value: string | undefined): 'recommend' | 'skip' {
+  return (value ?? '').trim().toLowerCase() === 'skip' ? 'skip' : 'recommend'
 }
 
 function summarizeIssues(issues: ReadonlyArray<{ path: PropertyKey[]; message: string }>): string {

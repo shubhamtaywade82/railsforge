@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { ContextBuilder, clip } from '../src/refactor/advisor/ContextBuilder'
-import { ADVISOR_LIMITS, RefactorTarget } from '../src/refactor/advisor/types'
+import { RefactoringContextBuilder as ContextBuilder, clip } from '../src/refactoring-intelligence/core/RefactoringContextBuilder'
+import { ADVISOR_LIMITS, RefactorTarget } from '../src/refactoring-intelligence/core/types'
 
 function harness(options: {
   files: Record<string, string>

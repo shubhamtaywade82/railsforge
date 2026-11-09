@@ -73,14 +73,14 @@ import { RelatedHoverProvider } from './graph/RelatedHoverProvider'
 import { FormObjectExtractor } from './refactor/FormObjectExtractor'
 import { ValueObjectExtractor } from './refactor/ValueObjectExtractor'
 import { RefactoringMenuProvider } from './refactor/RefactoringMenuProvider'
-import { RefactorAdvisor } from './refactor/advisor/RefactorAdvisor'
-import {
-  RefactorAdvisorCommand,
-  RefactorSuggestionCodeActionProvider,
-  SUGGEST_REFACTORINGS_COMMAND,
-  vsCodeSourceReader,
-} from './refactor/advisor/RefactorAdvisorCommand'
-import { TargetResolver } from './refactor/advisor/TargetResolver'
+import { RubyAstParser } from './indexer/RubyAstParser'
+import { RefactoringEngine } from './refactoring-intelligence/core/RefactoringEngine'
+import { RefactoringAdvisor } from './refactoring-intelligence/core/RefactoringAdvisor'
+import { TargetResolver } from './refactoring-intelligence/core/ScopeResolver'
+import { RefactoringCommand, SUGGEST_REFACTORINGS_COMMAND } from './refactoring-intelligence/vscode/RefactoringCommand'
+import { relativeTo, vsCodeSourceReader } from './refactoring-intelligence/vscode/workspacePaths'
+import { RefactoringCodeActionProvider } from './providers/RefactoringCodeActionProvider'
+import { RefactoringCodeLensProvider } from './providers/RefactoringCodeLensProvider'
 import { RailsAgent, AiFixProposal, RailsAgentConfig } from './agent/RailsAgent'
 import { applyUnifiedHunks, parseUnifiedDiff } from './patch/UnifiedDiff'
 import { RailsChatParticipant } from './chat/RailsChatParticipant'
@@ -915,30 +915,54 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   providerRegistry.activate()
   context.subscriptions.push(providerRegistry)
 
-  // 7c. Refactoring advisor: AI suggestions for a class, method or selection. Suggestions are
-  //     validated, then shown as native diffs; nothing is written before the user confirms.
-  //     Uses the agent's provider settings, and the semantic index and pattern catalog for context.
+  // 7c. Refactoring Intelligence. Deterministic findings drive the CodeLens and the lightbulb, and never
+  //     call a model. The AI is reached only through the explicit command, which reviews measured
+  //     findings and, on a further request, writes a diff that is shown and approved before it is applied.
   if (activeProject.root) {
+    const root = activeProject.root
+    const pathOf = (uri: vscode.Uri) => relativeTo(root, uri.fsPath)
+    const refactorEngine = new RefactoringEngine(new RubyAstParser(), {
+      schemaTables: () => schemaIndexer.getAllTables().map(table => ({ name: table.name, columns: [...table.columns.keys()] })),
+      principleFindings: rel => semanticIndexAdapter.violationsFor(rel).map(v => ({
+        id: v.id,
+        title: v.title,
+        message: v.message,
+        line: v.line,
+        endLine: v.endLine,
+        severity: v.severity,
+      })),
+      isProjectType: name => semanticIndexAdapter.findDefiningFiles(name).length > 0,
+    })
     const refactorTargets = new TargetResolver()
-    const refactorAdvisor = new RefactorAdvisor({
+    const refactorAdvisor = new RefactoringAdvisor({
       agent,
       index: semanticIndexAdapter,
-      files: vsCodeSourceReader(activeProject.root),
+      files: vsCodeSourceReader(root),
       catalog: patternCatalogAdapter,
       checkSyntax: code => checkRubySyntax(code),
       log: message => Logger.debug(message),
     })
-    const refactorCommand = new RefactorAdvisorCommand({
+    const refactorCommand = new RefactoringCommand({
+      engine: refactorEngine,
       advisor: refactorAdvisor,
       resolver: refactorTargets,
       editProvider: sharedEditProvider,
-      projectRoot: () => activeProject.root,
+      projectRoot: () => root,
     })
+    const selector = { language: 'ruby', scheme: 'file' }
     context.subscriptions.push(
       vscode.languages.registerCodeActionsProvider(
-        { language: 'ruby', scheme: 'file' },
-        new RefactorSuggestionCodeActionProvider(refactorTargets),
-        { providedCodeActionKinds: RefactorSuggestionCodeActionProvider.providedCodeActionKinds },
+        selector,
+        new RefactoringCodeActionProvider({ engine: refactorEngine, resolver: refactorTargets, pathOf }),
+        { providedCodeActionKinds: RefactoringCodeActionProvider.providedCodeActionKinds },
+      ),
+      vscode.languages.registerCodeLensProvider(
+        selector,
+        new RefactoringCodeLensProvider({
+          engine: refactorEngine,
+          pathOf,
+          enabled: () => vscode.workspace.getConfiguration('railsForge').get<boolean>('refactoring.codeLens', true),
+        }),
       ),
       vscode.commands.registerCommand(
         SUGGEST_REFACTORINGS_COMMAND,

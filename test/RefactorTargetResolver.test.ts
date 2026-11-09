@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { TargetResolver, describeTarget } from '../src/refactor/advisor/TargetResolver'
-import { ADVISOR_LIMITS } from '../src/refactor/advisor/types'
+import { TargetResolver, describeTarget } from '../src/refactoring-intelligence/core/ScopeResolver'
+import { ADVISOR_LIMITS } from '../src/refactoring-intelligence/core/types'
 import { RubyAstParser } from '../src/indexer/RubyAstParser'
 
 const ORDER = [
@@ -75,6 +75,7 @@ describe('TargetResolver', () => {
       ok: true,
       target: {
         kind: 'block',
+        name: 'lines 3-3',
         startLine: 3,
         endLine: 3,
         text: '    items.sum(&:price) * 1.2',

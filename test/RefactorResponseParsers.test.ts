@@ -1,14 +1,17 @@
 import { describe, it, expect } from 'vitest'
-import { extractJsonObject, parseAdvice, parseCodeDiff } from '../src/refactor/advisor/ResponseParsers'
+import { extractJsonObject, parseCodeDiff, parseRefinement } from '../src/refactoring-intelligence/core/ResponseParsers'
 
-const validSuggestion = {
-  title: 'Extract PaymentGateway behind a Strategy',
-  pattern: 'Strategy',
-  principle: 'OCP',
-  impact: 'medium',
-  rationale: 'Order#charge branches on the provider name, so every new provider edits Order.',
-  files: ['app/models/order.rb', 'app/services/payment_gateway.rb'],
-  steps: ['Create PaymentGateway', 'Delegate from Order'],
+const recommendation = {
+  candidateId: 'c1',
+  decision: 'recommend',
+  technique: 'strategy',
+  design: 'One strategy object per payment type.',
+  benefit: 'Adding a payment type adds a class.',
+  risk: 'Selection logic must cover the default.',
+  alternatives: [{ name: 'Hash lookup', whenBetter: 'branches only map values' }],
+  affectedFiles: ['app/services/checkout.rb'],
+  steps: ['List the values', 'Create one class per value'],
+  verification: ['Spec every value and the default'],
 }
 
 describe('extractJsonObject', () => {
@@ -17,8 +20,8 @@ describe('extractJsonObject', () => {
   })
 
   it('reads a fenced JSON block surrounded by prose', () => {
-    const text = 'Here you go:\n```json\n{"suggestions": []}\n```\nHope it helps.'
-    expect(extractJsonObject(text)).toEqual({ ok: true, value: { suggestions: [] } })
+    const text = 'Here you go:\n```json\n{"decisions": []}\n```\nHope it helps.'
+    expect(extractJsonObject(text)).toEqual({ ok: true, value: { decisions: [] } })
   })
 
   it('reports an answer with no object at all', () => {
@@ -26,60 +29,64 @@ describe('extractJsonObject', () => {
   })
 
   it('reports malformed JSON without throwing', () => {
-    const result = extractJsonObject('{"suggestions": [}')
+    const result = extractJsonObject('{"decisions": [}')
     expect(result.ok).toBe(false)
     expect(result.ok ? '' : result.message).toContain('not valid JSON')
   })
 })
 
-describe('parseAdvice', () => {
-  it('accepts a well-formed answer and normalises optional fields', () => {
-    const result = parseAdvice(JSON.stringify({ suggestions: [validSuggestion] }))
+describe('parseRefinement', () => {
+  it('accepts a recommend decision and keeps its fields', () => {
+    const result = parseRefinement(JSON.stringify({ decisions: [recommendation] }))
     expect(result).toEqual({
       ok: true,
       value: [{
-        title: 'Extract PaymentGateway behind a Strategy',
-        pattern: 'Strategy',
-        principle: 'OCP',
-        impact: 'medium',
-        rationale: 'Order#charge branches on the provider name, so every new provider edits Order.',
-        files: ['app/models/order.rb', 'app/services/payment_gateway.rb'],
-        steps: ['Create PaymentGateway', 'Delegate from Order'],
+        candidateId: 'c1',
+        decision: 'recommend',
+        technique: 'strategy',
+        reason: undefined,
+        design: 'One strategy object per payment type.',
+        benefit: 'Adding a payment type adds a class.',
+        risk: 'Selection logic must cover the default.',
+        alternatives: [{ name: 'Hash lookup', whenBetter: 'branches only map values' }],
+        affectedFiles: ['app/services/checkout.rb'],
+        steps: ['List the values', 'Create one class per value'],
+        verification: ['Spec every value and the default'],
       }],
     })
   })
 
-  it('accepts an empty list: the target is already well designed', () => {
-    expect(parseAdvice('{"suggestions": []}')).toEqual({ ok: true, value: [] })
+  it('accepts a skip decision with its reason', () => {
+    const result = parseRefinement('{"decisions":[{"candidateId":"c2","decision":"skip","reason":"one stable collaborator"}]}')
+    expect(result.ok && result.value[0]).toMatchObject({ candidateId: 'c2', decision: 'skip', reason: 'one stable collaborator' })
   })
 
-  it('lowercases impact and falls back to medium for unknown values', () => {
-    const upper = parseAdvice(JSON.stringify({ suggestions: [{ ...validSuggestion, impact: 'HIGH' }] }))
-    expect(upper.ok && upper.value[0].impact).toBe('high')
-    const unknown = parseAdvice(JSON.stringify({ suggestions: [{ ...validSuggestion, impact: 'catastrophic' }] }))
-    expect(unknown.ok && unknown.value[0].impact).toBe('medium')
+  it('reads decision casing leniently, and treats anything other than skip as recommend', () => {
+    const skip = parseRefinement('{"decisions":[{"candidateId":"c1","decision":"Skip"}]}')
+    expect(skip.ok && skip.value[0].decision).toBe('skip')
+    const unknown = parseRefinement('{"decisions":[{"candidateId":"c1","decision":"maybe"}]}')
+    expect(unknown.ok && unknown.value[0].decision).toBe('recommend')
   })
 
-  it('drops an empty principle rather than keeping a blank string', () => {
-    const result = parseAdvice(JSON.stringify({ suggestions: [{ ...validSuggestion, principle: '  ' }] }))
-    expect(result.ok && result.value[0].principle).toBeUndefined()
+  it('fills missing optional lists with empty arrays', () => {
+    const result = parseRefinement('{"decisions":[{"candidateId":"c1","decision":"recommend","technique":"extract-method"}]}')
+    expect(result.ok && result.value[0]).toMatchObject({ affectedFiles: [], steps: [], verification: [], alternatives: [] })
   })
 
-  it('rejects a suggestion with no files and names the field', () => {
-    const result = parseAdvice(JSON.stringify({ suggestions: [{ ...validSuggestion, files: [] }] }))
+  it('rejects a decision with no candidate id, and names the field', () => {
+    const result = parseRefinement('{"decisions":[{"decision":"recommend"}]}')
     expect(result.ok).toBe(false)
-    expect(result.ok ? '' : result.message).toContain('files')
+    expect(result.ok ? '' : result.message).toContain('candidateId')
   })
 
-  it('rejects a rationale too short to cite anything', () => {
-    const result = parseAdvice(JSON.stringify({ suggestions: [{ ...validSuggestion, rationale: 'ok' }] }))
-    expect(result.ok).toBe(false)
-  })
-
-  it('rejects an answer missing the suggestions key', () => {
-    const result = parseAdvice('{"items": []}')
+  it('rejects an answer without a decisions list', () => {
+    const result = parseRefinement('{"suggestions": []}')
     expect(result.ok).toBe(false)
     expect(result.ok ? '' : result.message).toContain('required shape')
+  })
+
+  it('accepts an empty decisions list at parse time (the advisor decides whether that is acceptable)', () => {
+    expect(parseRefinement('{"decisions": []}')).toEqual({ ok: true, value: [] })
   })
 })
 
@@ -95,8 +102,7 @@ describe('parseCodeDiff', () => {
   ].join('\n')
 
   it('parses a bare diff into hunks tagged with their file', () => {
-    const hunks = parseCodeDiff(diff)
-    expect(hunks).toEqual([{
+    expect(parseCodeDiff(diff)).toEqual([{
       file: 'app/models/order.rb',
       oldStart: 0,
       oldLines: ['class Order', '  def total; 1; end', 'end'],
@@ -118,8 +124,7 @@ describe('parseCodeDiff', () => {
       '-  def a; end',
       '+  def a = nil',
     ].join('\n')
-    const hunks = parseCodeDiff(withBlank)
-    expect(hunks?.[0].oldLines).toEqual(['class Order', '', '  def a; end'])
+    expect(parseCodeDiff(withBlank)?.[0].oldLines).toEqual(['class Order', '', '  def a; end'])
   })
 
   it('returns null when the answer has no hunk at all', () => {

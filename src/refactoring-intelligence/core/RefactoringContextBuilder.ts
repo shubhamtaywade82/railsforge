@@ -10,7 +10,7 @@
  */
 
 import { ADVISOR_LIMITS, AdvisorCatalog, AdvisorIndex, RefactorTarget, SourceReader } from './types'
-import { specCandidates } from './PathGuard'
+import { specCandidates } from '../planning/PathGuard'
 
 export interface ContextExcerpt {
   path: string
@@ -31,7 +31,7 @@ export interface AdvisorContext {
 const CONSTANT_REF = /(?<![\w:@$.])([A-Z][A-Za-z0-9_]*(?:::[A-Z][A-Za-z0-9_]*)*)/g
 const MAX_CONSTANTS_LOOKED_UP = 8
 
-export class ContextBuilder {
+export class RefactoringContextBuilder {
   constructor(
     private readonly index: AdvisorIndex,
     private readonly files: SourceReader,

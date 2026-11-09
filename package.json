@@ -496,6 +496,11 @@
           "default": false,
           "description": "Automatically re-run Steep in the background on Ruby file save when railsForge.types.steepEnabled is true. Debounced (like brakeman.scanOnSave) since Steep checks the whole configured target, not just the saved file."
         },
+        "railsForge.refactoring.codeLens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show refactoring opportunities above classes, methods and N+1 loops. Computed locally from the code (no AI call); only medium and high confidence findings are shown. The AI runs only when you choose RailsForge: Suggest Refactorings."
+        },
         "railsForge.skills.enabled": {
           "type": "boolean",
           "default": true,

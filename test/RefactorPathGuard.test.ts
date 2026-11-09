@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { checkAdvisorPath, specCandidates } from '../src/refactor/advisor/PathGuard'
+import { checkAdvisorPath, specCandidates } from '../src/refactoring-intelligence/planning/PathGuard'
 
 describe('checkAdvisorPath', () => {
   it.each([

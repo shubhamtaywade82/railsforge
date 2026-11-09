@@ -58,6 +58,7 @@ export class TargetResolver {
         ok: true,
         target: {
           kind: 'block',
+          name: `lines ${first}-${last}`,
           startLine: first,
           endLine: last,
           text,
@@ -137,12 +138,5 @@ function tooLarge(subject: string, chars: number): string {
   return `${subject} is ${chars} characters; the advisor accepts up to ${ADVISOR_LIMITS.targetMaxChars}. Put the cursor on a method or select a smaller block.`
 }
 
-/**
- * Compact label for UI text ("method Order#total", "class Order", "lines 12-30"). Kept with the
- * resolver so the command and the code action describe a target the same way.
- */
-export function describeTarget(target: RefactorTarget): string {
-  if (target.kind === 'class') {return `class ${target.name}`}
-  if (target.kind === 'method') {return target.className ? `method ${target.className}#${target.name}` : `method ${target.name}`}
-  return `lines ${target.startLine}-${target.endLine}`
-}
+/** Same label the rest of the pipeline uses ("method Order#total", "class Order", "lines 12-30"). */
+export { describeScope as describeTarget } from './types'

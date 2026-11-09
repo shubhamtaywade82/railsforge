@@ -333,7 +333,7 @@ Select code in the editor and extract it to the right Rails pattern — in a **s
 
 **Refactoring Menu:** `RailsForge: Refactor Selection (Design Patterns)` opens a Quick Pick of all applicable extractors for the current selection.
 
-**AI Refactoring Advisor** (`railsforge.suggestRefactorings`, source [`refactor/advisor/`](src/refactor/advisor/)): a lightbulb on a class, module, method or selection asks the configured AI provider for up to four design-pattern or best-practice refactorings. The model sees the target, the files it references (found through the semantic index), the conventional spec, the files that call it, and the project's existing pattern instances. The flow:
+**Refactoring Intelligence** (`railsforge.suggestRefactorings`, source [`refactoring-intelligence/`](src/refactoring-intelligence/), reference [`docs/refactoring-intelligence.md`](docs/refactoring-intelligence.md)): deterministic analyzers find candidates in classes, methods and Rails code; design techniques are offered only when their validators pass; the AI decides on measured findings on request. A CodeLens and a lightbulb show medium and high confidence findings without any AI call. The AI-assisted flow:
 
 1. **Suggest** returns structured suggestions (pattern, principle, impact, rationale, files). Nothing is written.
 2. **Plan**, on the pick, asks for a unified diff over the listed files. The diff is applied to the current editor buffers; a hunk whose context no longer matches, or a file outside `app/`, `lib/`, `spec/` and `test/`, is rejected. Each changed file must parse as Ruby when `ruby` is installed.
