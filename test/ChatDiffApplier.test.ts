@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
   showInformationMessage: vi.fn(),
   executeCommand: vi.fn(async () => undefined),
   replace: vi.fn(),
+  workspaceFolders: [] as any[],
 }))
 
 vi.mock('vscode', () => ({
@@ -21,6 +22,7 @@ vi.mock('vscode', () => ({
     fs: { stat: h.stat, writeFile: h.writeFile, createDirectory: h.createDirectory },
     openTextDocument: h.openTextDocument,
     applyEdit: vi.fn(async () => true),
+    get workspaceFolders() { return h.workspaceFolders },
   },
   window: {
     showTextDocument: h.showTextDocument,
@@ -36,13 +38,14 @@ vi.mock('vscode', () => ({
   TextEditorRevealType: { AtTop: 1 },
 }))
 
-import { createNewFile, inferTargetFile, smartApplyResponse } from '../src/chat/ChatDiffApplier'
+import { applyDiffToFile, createNewFile, inferTargetFile, smartApplyResponse } from '../src/chat/ChatDiffApplier'
 
 const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'railsforge-cda-')))
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
 
 beforeEach(() => {
   vi.clearAllMocks()
+  h.workspaceFolders = [{ uri: { fsPath: root, toString: () => `file://${root}` } }]
   h.stat.mockRejectedValue(new Error('ENOENT'))
   h.openTextDocument.mockResolvedValue({ uri: { fsPath: 'x' }, getText: () => 'class A\nend\n', languageId: 'ruby', positionAt: () => ({}) })
 })
@@ -133,5 +136,17 @@ describe('smartApplyResponse (create commands)', () => {
     const response = '```ruby:app/services/ok.rb\nclass Ok\nend\n```'
     const result = await smartApplyResponse(response, { workspaceRoot: root, command: 'service' })
     expect(result).toEqual({ applied: true, message: 'Created app/services/ok.rb' })
+  })
+
+  it('rejects hunks targeting another file with the same basename', async () => {
+    const targetUri = { scheme: 'file', fsPath: path.join(root, 'app', 'models', 'user.rb'), path: path.join(root, 'app', 'models', 'user.rb'), toString: () => `file://${path.join(root, 'app', 'models', 'user.rb')}` }
+    const diff = '--- a/lib/user.rb\n+++ b/lib/user.rb\n@@ -1,2 +1,2 @@\n-class User\n+class UserFixed\n'
+    h.openTextDocument.mockResolvedValueOnce({
+      uri: targetUri,
+      getText: () => 'class User\nend\n',
+    })
+    const res = await applyDiffToFile(diff, targetUri as any, 'Fix')
+    expect(res.applied).toBe(false)
+    expect(res.message).toContain('The diff only targets other files')
   })
 })

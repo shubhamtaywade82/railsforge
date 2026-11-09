@@ -14,6 +14,8 @@ import * as vscode from 'vscode'
 import * as path from 'path'
 import { parseUnifiedDiff, applyUnifiedHunks } from '../patch/UnifiedDiff'
 import { diffLines, applyHunks } from '../patch/LineDiff'
+import { patchFileMatches } from '../patch/PatchPaths'
+import { workspaceRootFor } from '../workspace/activeRoot'
 import { Logger } from '../util/Logger'
 import { resolveWithinRoot } from '../util/WorkspacePath'
 
@@ -102,8 +104,12 @@ export async function applyDiffToFile(
   const fullText = document.getText()
 
   // Filter hunks to this file only (multi-file diffs may have hunks for others)
-  const targetName = path.basename(targetUri.fsPath)
-  const relevant = hunks.filter(h => h.file === null || path.basename(h.file) === targetName)
+  const root = workspaceRootFor(targetUri)
+  const relevant = hunks.filter(h => {
+    if (h.file === null) {return true}
+    if (root) {return patchFileMatches(h.file, targetUri.fsPath, root)}
+    return path.basename(h.file) === path.basename(targetUri.fsPath)
+  })
 
   if (relevant.length === 0) {
     return { applied: false, message: 'The diff only targets other files — nothing to apply to this file.' }
