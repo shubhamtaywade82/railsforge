@@ -135,13 +135,13 @@ export class RubyAstParser {
           }
 
           if (callInfo.receiver === null && ['private', 'protected'].includes(callInfo.method) && child.namedChildren.every(c => c.type !== 'argument_list')) {
-            visibility = callInfo.method
+            visibility = callInfo.method === 'protected' ? 'protected' : 'private'
             continue
           }
 
           calls.push(callInfo)
         } else if (child.type === 'identifier' && (child.text === 'private' || child.text === 'protected')) {
-          visibility = child.text
+          visibility = child.text === 'protected' ? 'protected' : 'private'
         } else if (child.type === 'method') {
           const method = this.extractMethod(child, visibility)
           if (method) {methods.push(method)}
