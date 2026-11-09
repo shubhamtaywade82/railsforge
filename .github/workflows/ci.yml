@@ -96,13 +96,13 @@ jobs:
       # command is registered, and per-folder schema isolation. One Node version is enough.
       - name: Run Extension Host Integration Tests
         if: matrix.node-version == '22.x'
-        run: xvfb-run -a pnpm run test:host
+        run: xvfb-run -a node scripts/run-with-download-retry.mjs pnpm run test:host
 
       # Restricted Mode, for real: VS Code launched with workspace trust ON on a workspace full of fake Ruby tools.
       # Untrusted: read-only features work and no tool runs. Control run (trusted): the same commands do run them.
       - name: Restricted Mode host test
         if: matrix.node-version == '22.x'
-        run: xvfb-run -a pnpm run test:restricted
+        run: xvfb-run -a node scripts/run-with-download-retry.mjs pnpm run test:restricted
 
       - name: Build VSIX Package
         run: pnpm run vsce-package
@@ -111,7 +111,7 @@ jobs:
       # native modules in Electron, activation, commands, LM tools, MCP server, native AST index).
       - name: Installed VSIX smoke test
         if: matrix.node-version == '22.x'
-        run: xvfb-run -a pnpm run vsix-smoke
+        run: xvfb-run -a node scripts/run-with-download-retry.mjs pnpm run vsix-smoke
 
       # Lets a PR reviewer download and manually install/test the exact build a PR
       # produces, without checking it out and building it themselves. Only the
@@ -181,13 +181,13 @@ jobs:
 
       # Real VS Code (latest stable) with the multi-root fixture. Windows/macOS runners have a display.
       - name: Run Extension Host Integration Tests (stable)
-        run: pnpm run test:host:stable
+        run: node scripts/run-with-download-retry.mjs pnpm run test:host:stable
 
       - name: Build VSIX Package
         run: pnpm run vsce-package
 
       - name: Installed VSIX smoke test
-        run: pnpm run vsix-smoke
+        run: node scripts/run-with-download-retry.mjs pnpm run vsix-smoke
 
   ruby-addon:
     name: Ruby LSP Add-on (ruby-lsp ${{ matrix.ruby-lsp }})
