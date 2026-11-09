@@ -654,7 +654,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   // All diagnostics are debounced to prevent blocking the UI on every keystroke.
   const lintTimers = new Map<string, NodeJS.Timeout>()
   const scheduleDiagnostics = (doc: vscode.TextDocument, delayMs: number): void => {
-    if (doc.languageId !== 'ruby' && doc.languageId !== 'erb') {return}
+    if (!doc || typeof doc.getText !== 'function' || (doc.languageId !== 'ruby' && doc.languageId !== 'erb')) {return}
     const key = `diag:${doc.uri.toString()}`
     const existing = lintTimers.get(key)
     if (existing) {clearTimeout(existing)}
@@ -668,7 +668,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     }, delayMs))
   }
   const scheduleRubocopLint = (doc: vscode.TextDocument, delayMs: number): void => {
-    if (doc.languageId !== 'ruby' || !isWorkspaceTrusted()) {return}
+    if (!doc || typeof doc.getText !== 'function' || doc.languageId !== 'ruby' || !isWorkspaceTrusted()) {return}
     const key = `rubocop:${doc.uri.toString()}`
     const existing = lintTimers.get(key)
     if (existing) {clearTimeout(existing)}

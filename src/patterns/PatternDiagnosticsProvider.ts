@@ -11,7 +11,7 @@ export class PatternDiagnosticsProvider implements vscode.CodeActionProvider {
   private engine = new PatternRecognitionEngine()
 
   updateDiagnostics(document: vscode.TextDocument): void {
-    if (document.languageId !== 'ruby' && document.languageId !== 'erb') {
+    if (!document || typeof document.getText !== 'function' || (document.languageId !== 'ruby' && document.languageId !== 'erb')) {
       return
     }
 

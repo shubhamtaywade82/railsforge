@@ -637,7 +637,7 @@
         "id": "railsforge.agent",
         "name": "rails",
         "fullName": "RailsForge (Ruby on Rails AI)",
-        "description": "Ruby on Rails engineering agent grounded in active schema, routes, and best practices.",
+        "description": "Ruby on Rails engineering agent grounded in active schema, routes, and best practices (in Copilot Agent Mode, tools are available directly without @rails).",
         "isSticky": true,
         "commands": [
           {

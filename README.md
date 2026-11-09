@@ -167,12 +167,19 @@ contain your words.
   know which mode answered.
 - Select a result to jump straight to that file and line.
 
-### 🤖 11. Grounded Local AI Agent (`@rails`)
+### 🤖 11. Grounded AI Integration (Copilot Agent Mode, MCP, & `@rails`)
 
-Powered by local Ollama (`qwen2.5-coder:14b` / `7b`):
+RailsForge connects your active application context (schema, routes, AST patterns, and conventions) to modern AI harnesses:
 
+#### GitHub Copilot Agent Mode (VS Code Native)
+*In alignment with VS Code's deprecation of extension-provided `@participant` integrations in the Copilot harness, RailsForge provides agent-native Extension Tools and a bundled MCP server:*
+- **Direct Tool Calling:** You don't need to type `@rails`. Simply ask Copilot questions in Agent Mode (e.g. *"Inspect the users schema and list routes for /billing"* or *"Scaffold a service object for Stripe checkout"*), and Copilot autonomously discovers and calls RailsForge tools (`#railsforge_get_schema`, `#railsforge_list_routes`, `#railsforge_list_patterns`, etc.).
+- **Bundled MCP Server:** Exposes deep AST dependencies, database schemas, and project guidelines over stdio.
+
+#### Cursor & Local Compatibility Mode (`@rails`)
+*For Cursor and VS Code Local harness compatibility, the `@rails` chat participant remains fully supported:*
 - **Version Anti-Hallucination:** Automatically discovers active Ruby and Rails versions from `Gemfile.lock` and `.ruby-version`, constraining the AI to compatible APIs only.
-- **Context Grounding:** Injects relevant database schema tables, column definitions, route mappings, and a summary of existing Service/Query/Form/Policy patterns into prompts, with an explicit instruction to reuse or extend a close match before generating new code.
+- **Context Grounding:** Injects relevant database schema tables, column definitions, route mappings, and existing Service/Query/Form/Policy patterns into prompts with an explicit instruction to reuse or extend a close match before generating new code.
 - **Slash Commands in Chat:**
   - `@rails /explain` — Explain complex queries, scopes, and associations.
   - `@rails /service` — Scaffold clean Service Objects with Result monads.
@@ -180,6 +187,9 @@ Powered by local Ollama (`qwen2.5-coder:14b` / `7b`):
   - `@rails /spec` — Generate complete RSpec request and unit specs using FactoryBot.
   - `@rails /optimize` — Detect N+1 query risks and missing eager loads (`.includes`).
   - `@rails /migrate` — Generate safe, reversible ActiveRecord migrations.
+
+#### Standalone RailsForge Chat View
+- **Private Local Inference:** Use the dedicated RailsForge Chat panel in the Activity Bar powered by local Ollama (`qwen2.5-coder:14b` / `7b`), OpenAI, or Anthropic — fully functional without requiring Copilot.
 
 ---
 

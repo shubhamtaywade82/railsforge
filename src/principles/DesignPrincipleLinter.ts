@@ -35,7 +35,7 @@ export class DesignPrincipleLinter implements vscode.CodeActionProvider {
   }
 
   updateDiagnostics(document: vscode.TextDocument): void {
-    if (document.languageId !== 'ruby' || document.isUntitled) {
+    if (!document || typeof document.getText !== 'function' || document.languageId !== 'ruby' || document.isUntitled) {
       return
     }
 

@@ -519,11 +519,24 @@ DFS cycle detection (A → B → C → A) over an AST-derived dependency graph t
 
 ---
 
-### F-15 Grounded Local AI Agent (`@rails`)
+### F-15 Grounded AI Agent (Copilot Agent Mode, MCP, & `@rails`)
 
-**Source:** [`agent/RailsAgent.ts`](src/agent/RailsAgent.ts), [`agent/RailsRAGContext.ts`](src/agent/RailsRAGContext.ts), [`chat/RailsChatParticipant.ts`](src/chat/RailsChatParticipant.ts), [`chat/RailsChatViewProvider.ts`](src/chat/RailsChatViewProvider.ts)
+**Source:** [`agent/RailsAgent.ts`](src/agent/RailsAgent.ts), [`agent/RailsRAGContext.ts`](src/agent/RailsRAGContext.ts), [`chat/RailsChatParticipant.ts`](src/chat/RailsChatParticipant.ts), [`chat/RailsChatViewProvider.ts`](src/chat/RailsChatViewProvider.ts), [`ai/RailsLanguageModelTools.ts`](src/ai/RailsLanguageModelTools.ts)
 
-A `@rails` VS Code / Cursor Chat Participant backed by a local Ollama model — grounded in your actual project context.
+Grounded AI integration supporting modern **Copilot Agent Mode**, **MCP clients**, and the legacy **`@rails` Chat Participant** for Cursor and VS Code Local compatibility.
+
+#### GitHub Copilot Agent Mode (VS Code Native)
+In line with VS Code's deprecation of extension `@participant` mentions in the Copilot harness:
+- Users interact directly with Copilot Agent Mode without typing `@rails`.
+- Copilot autonomously invokes RailsForge's registered Language Model Tools (`#railsforge_get_schema`, `#railsforge_list_routes`, `#railsforge_list_patterns`, `#railsforge_find_similar_pattern`, `#railsforge_get_dependencies`, `#railsforge_get_runtime_introspection`, etc.) to ground its responses in active project state.
+
+#### Cursor & Local Harness Compatibility (`@rails`)
+For Cursor and environments retaining the Chat Participant API:
+- Registers the `@rails` chat participant backed by local Ollama, OpenAI, Anthropic, or VS Code Language Model API.
+- Implements slash commands: `/explain`, `/fix`, `/service`, `/scaffold`, `/spec`, `/optimize`, `/migrate`.
+
+#### Standalone RailsForge Chat View
+- Inline Webview sidebar panel in the Activity Bar for private local AI workflows without Copilot dependencies.
 
 #### Anti-Hallucination Grounding
 

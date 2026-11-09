@@ -41,7 +41,7 @@ export class RailsDeprecationLinter implements vscode.CodeActionProvider {
   ]
 
   updateDiagnostics(document: vscode.TextDocument, env: ProjectEnvironment): void {
-    if (document.languageId !== 'ruby' && document.languageId !== 'erb') {
+    if (!document || typeof document.getText !== 'function' || (document.languageId !== 'ruby' && document.languageId !== 'erb')) {
       return
     }
 
