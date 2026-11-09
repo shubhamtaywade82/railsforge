@@ -315,6 +315,10 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     ollamaKeepAlive: cfg.ollamaKeepAlive,
     ollamaRepeatPenalty: cfg.ollamaRepeatPenalty,
     ollamaMinP: cfg.ollamaMinP,
+    ollamaApiKey: cfg.ollamaApiKey,
+    ollamaCredentials: cfg.ollamaCredentials,
+    ollamaModelBindings: cfg.ollamaModelBindings,
+    ollamaDefaultCredential: cfg.ollamaDefaultCredential,
     getApiKey: async () => context.secrets.get(aiApiKeySecretKey(readConfig().aiProvider)),
     vscodeLmFamily: cfg.aiVscodeLmFamily,
     toolLoop: { enabled: cfg.agentToolLoop, maxSteps: cfg.agentMaxToolSteps, verifySyntax: cfg.agentVerifySyntax },
@@ -522,7 +526,9 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
         ai: {
           provider: cfg.aiProvider,
           model: activeAiModel(cfg),
-          hasApiKey: cfg.aiProvider === 'ollama' || cfg.aiProvider === 'vscode-lm' ? false : Boolean(await context.secrets.get(aiApiKeySecretKey(cfg.aiProvider))),
+          hasApiKey: cfg.aiProvider === 'vscode-lm'
+            ? false
+            : Boolean(await context.secrets.get(aiApiKeySecretKey(cfg.aiProvider))) || (cfg.aiProvider === 'ollama' && Boolean(cfg.ollamaApiKey || Object.keys(cfg.ollamaCredentials).length)),
         },
       })
       const doc = await vscode.workspace.openTextDocument({ content: renderDiagnosticsDoc(info), language: 'markdown' })
@@ -1981,10 +1987,11 @@ function registerCommands(
     }),
     vscode.commands.registerCommand('railsforge.setAiApiKey', async () => {
       let provider = readConfig().aiProvider
-      if (provider === 'ollama' || provider === 'vscode-lm') {
+      if (provider === 'vscode-lm') {
         const choice = await vscode.window.showQuickPick(
           [
-            { label: '$(cloud) OpenAI / Compatible', description: 'OpenAI, OpenRouter, MiniMax, Groq, DeepSeek', provider: 'openai' as const },
+            { label: '$(cloud) Ollama Cloud', description: 'Ollama Cloud (https://ollama.com)', provider: 'ollama' as const },
+            { label: '$(cloud) OpenAI / Compatible', description: 'OpenAI, OpenRouter, Groq, DeepSeek', provider: 'openai' as const },
             { label: '$(cloud) Anthropic', description: 'Claude Sonnet / Opus', provider: 'anthropic' as const },
           ],
           { placeHolder: 'Select the cloud provider to set an API key for' },
@@ -1993,7 +2000,7 @@ function registerCommands(
         provider = choice.provider
       }
 
-      const providerLabel = provider === 'openai' ? 'OpenAI / Compatible' : 'Anthropic'
+      const providerLabel = provider === 'ollama' ? 'Ollama Cloud' : provider === 'openai' ? 'OpenAI / Compatible' : 'Anthropic'
       const key = await vscode.window.showInputBox({
         title: `RailsForge: Set ${providerLabel} API Key`,
         prompt: 'Stored securely via VS Code SecretStorage, never written to settings.json. Leave blank and press Enter to clear the stored key.',

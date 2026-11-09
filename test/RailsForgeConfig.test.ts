@@ -114,6 +114,10 @@ describe('readConfig', () => {
     expect(config.routesAutoIndex).toBe(true)
     expect(config.ollamaHost).toBe('http://localhost:11434')
     expect(config.ollamaModel).toBe('qwen2.5-coder:14b')
+    expect(config.ollamaApiKey).toBe('')
+    expect(config.ollamaCredentials).toEqual({})
+    expect(config.ollamaModelBindings).toEqual({})
+    expect(config.ollamaDefaultCredential).toBe('')
     expect(config.ollamaEmbeddingModel).toBe('nomic-embed-text')
     expect(config.ollamaNumCtx).toBe(8192)
     expect(config.ollamaKeepAlive).toBe('30m')
@@ -224,6 +228,10 @@ describe('readConfig', () => {
     getConfigSpy.mockReturnValue({
       get: makeMockGet({
         'ollama.model': 'llama3:70b',
+        'ollama.apiKey': 'ollama-secret-123',
+        'ollama.credentials': { free: { apiKey: 'key-1' } },
+        'ollama.modelBindings': { 'gemma4:31b': 'free' },
+        'ollama.defaultCredential': 'free',
         'ollama.embeddingModel': 'mxbai-embed-large',
         'ollama.numCtx': 16384,
         'ollama.keepAlive': '60m',
@@ -236,6 +244,10 @@ describe('readConfig', () => {
     const config = readConfig()
 
     expect(config.ollamaModel).toBe('llama3:70b')
+    expect(config.ollamaApiKey).toBe('ollama-secret-123')
+    expect(config.ollamaCredentials).toEqual({ free: { apiKey: 'key-1' } })
+    expect(config.ollamaModelBindings).toEqual({ 'gemma4:31b': 'free' })
+    expect(config.ollamaDefaultCredential).toBe('free')
     expect(config.ollamaEmbeddingModel).toBe('mxbai-embed-large')
     expect(config.ollamaNumCtx).toBe(16384)
     expect(config.ollamaKeepAlive).toBe('60m')

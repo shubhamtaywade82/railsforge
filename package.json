@@ -268,6 +268,26 @@
           "default": "qwen2.5-coder:14b",
           "description": "Default Ollama model to use for @rails AI Agent"
         },
+        "railsForge.ollama.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for Ollama Cloud (https://ollama.com). Optional fallback; prefer storing securely via 'RailsForge: Set AI Provider API Key' (railsforge.setAiApiKey) or setting OLLAMA_API_KEY in your environment."
+        },
+        "railsForge.ollama.credentials": {
+          "type": "object",
+          "default": {},
+          "description": "Named Ollama credentials/endpoints for multi-key routing, e.g. {\"free1\": {\"apiKey\": \"...\"}, \"pro\": {\"apiKey\": \"...\"}}. Combine with railsForge.ollama.modelBindings to scope models to specific credentials."
+        },
+        "railsForge.ollama.modelBindings": {
+          "type": "object",
+          "default": {},
+          "description": "Maps model names to credential IDs, e.g. {\"gemma4:31b\": \"free1\", \"gpt-oss:120b\": \"free2\", \"nemotron-3-super\": \"pro\"}."
+        },
+        "railsForge.ollama.defaultCredential": {
+          "type": "string",
+          "default": "",
+          "description": "Default credential ID from railsForge.ollama.credentials to use for any model not explicitly in modelBindings."
+        },
         "railsForge.ollama.embeddingModel": {
           "type": "string",
           "default": "nomic-embed-text",

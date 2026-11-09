@@ -38,6 +38,12 @@ export const DEFAULT_EXCLUDE_PATTERNS = [
   '**/public/packs/**',
 ]
 
+export interface OllamaCredentialSetting {
+  apiKey: string
+  baseUrl?: string
+  headers?: Record<string, string>
+}
+
 export interface RailsForgeConfig {
   excludePatterns: string[]
   projectTypeOverride: ProjectTypeOverride
@@ -49,6 +55,10 @@ export interface RailsForgeConfig {
   routesAutoIndex: boolean
   ollamaHost: string
   ollamaModel: string
+  ollamaApiKey: string
+  ollamaCredentials: Record<string, OllamaCredentialSetting>
+  ollamaModelBindings: Record<string, string | string[]>
+  ollamaDefaultCredential: string
   ollamaEmbeddingModel: string
   ollamaNumCtx: number
   ollamaKeepAlive: string
@@ -120,6 +130,10 @@ export function readConfig(scope?: vscode.ConfigurationScope): RailsForgeConfig 
     routesAutoIndex: cfg.get<boolean>('routes.autoIndex', true),
     ollamaHost: cfg.get<string>('ollama.host', 'http://localhost:11434'),
     ollamaModel: cfg.get<string>('ollama.model', 'qwen2.5-coder:14b'),
+    ollamaApiKey: cfg.get<string>('ollama.apiKey', ''),
+    ollamaCredentials: cfg.get<Record<string, OllamaCredentialSetting>>('ollama.credentials', {}),
+    ollamaModelBindings: cfg.get<Record<string, string | string[]>>('ollama.modelBindings', {}),
+    ollamaDefaultCredential: cfg.get<string>('ollama.defaultCredential', ''),
     ollamaEmbeddingModel: cfg.get<string>('ollama.embeddingModel', 'nomic-embed-text'),
     ollamaNumCtx: cfg.get<number>('ollama.numCtx', 8192),
     ollamaKeepAlive: cfg.get<string>('ollama.keepAlive', '30m'),

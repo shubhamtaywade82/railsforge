@@ -44,6 +44,66 @@ describe('RailsAgent provider dispatch', () => {
     expect((init.headers as Record<string, string>).Authorization).toBeUndefined()
   })
 
+  it('sends Authorization Bearer header when ollamaApiKey is configured for Ollama Cloud', async () => {
+    const fetchMock = vi.fn(cassetteFetch(OLLAMA_CASSETTE))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const agent = buildAgent({
+      ollamaHost: 'https://ollama.com',
+      model: 'gemma4:31b',
+      ollamaApiKey: 'ollama-cloud-token',
+    })
+    const result = await agent.run('In one sentence, what does ActiveRecord::Base#save do?', {})
+
+    expect(result.success).toBe(true)
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('https://ollama.com/api/chat')
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer ollama-cloud-token')
+  })
+
+  it('routes requests to specific credentials based on modelBindings for Ollama Cloud', async () => {
+    const fetchMock = vi.fn(cassetteFetch(OLLAMA_CASSETTE))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const agent = buildAgent({
+      ollamaHost: 'https://ollama.com',
+      model: 'gpt-oss:120b',
+      ollamaCredentials: {
+        free1: { apiKey: 'key-for-free1' },
+        free2: { apiKey: 'key-for-free2' },
+      },
+      ollamaModelBindings: {
+        'gemma4:31b': 'free1',
+        'gpt-oss:120b': 'free2',
+      },
+      ollamaDefaultCredential: 'free1',
+    })
+
+    const result = await agent.run('In one sentence, what does ActiveRecord::Base#save do?', {})
+    expect(result.success).toBe(true)
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('https://ollama.com/api/chat')
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer key-for-free2')
+  })
+
+  it('reports authenticated provider status when Ollama credentials are configured and reachable', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/api/version')) {
+        return new Response(JSON.stringify({ version: '0.6.0' }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ status: 'ok' }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const agent = buildAgent({
+      ollamaHost: 'https://ollama.com',
+      ollamaApiKey: 'test-key',
+    })
+    const status = await agent.getProviderStatus()
+    expect(status.state).toBe('authenticated')
+  })
+
   it('calls OpenAI with a Bearer token when provider is openai, parsing the same OpenAI-compatible response shape', async () => {
     // RailsAgent's openai and ollama branches both go through the same
     // callOpenAiCompatible parser (see src/agent/RailsAgent.ts) — the recorded

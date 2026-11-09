@@ -75,11 +75,14 @@ export interface RailsAgentConfig {
   ollamaKeepAlive?: string
   ollamaRepeatPenalty?: number
   ollamaMinP?: number
+  ollamaApiKey?: string
+  ollamaCredentials?: Record<string, { apiKey: string; baseUrl?: string; headers?: Record<string, string> }>
+  ollamaModelBindings?: Record<string, string | string[]>
+  ollamaDefaultCredential?: string
   /**
    * Async getter for the provider's API key (backed by vscode.SecretStorage — see
-   * extension.ts's `railsforge.setAiApiKey` command). Only consulted for cloud
-   * providers; Ollama never needs a key. A cloud provider without a configured key
-   * fails `run()` with a clear message instead of sending an unauthenticated request.
+   * extension.ts's `railsforge.setAiApiKey` command). Consulted for cloud providers
+   * and Ollama Cloud.
    */
   getApiKey?: () => Promise<string | undefined>
   /**
@@ -291,26 +294,38 @@ export class RailsAgent {
     return this.callOllama(systemPrompt, prompt)
   }
 
+  private async createOllamaClient(): Promise<OllamaClient> {
+    const key = this.config.ollamaApiKey || (this.config.provider === 'ollama' ? await this.config.getApiKey?.() : undefined)
+    const hasCreds = this.config.ollamaCredentials && Object.keys(this.config.ollamaCredentials).length > 0
+    return new OllamaClient({
+      baseUrl: this.config.ollamaHost,
+      ...(key ? { apiKey: key } : {}),
+      ...(hasCreds ? {
+        credentials: this.config.ollamaCredentials,
+        modelBindings: this.config.ollamaModelBindings,
+        defaultCredential: this.config.ollamaDefaultCredential || undefined,
+      } : {}),
+      ...(this.config.log
+        ? {
+          logger: {
+            debug: m => this.log('trace', `[Ollama] ${m}`),
+            info: m => this.log('trace', `[Ollama] ${m}`),
+            warn: m => this.log('trace', `[Ollama] ${m}`),
+            error: m => this.log('trace', `[Ollama] ${m}`),
+          },
+          middleware: [async (ctx) => {
+            const res = await ctx.next()
+            this.log('trace', `[Ollama] ${ctx.request.method} ${ctx.request.url} -> ${res.status}\n  request: ${truncate(safeJson(ctx.request.body), 8000)}\n  response: ${truncate(safeJson(res.body), 8000)}`)
+            return res
+          }],
+        }
+        : {}),
+    })
+  }
+
   private async callOllama(systemPrompt: string, prompt: string): Promise<{ success: boolean; response: string }> {
     try {
-      const client = new OllamaClient({
-        baseUrl: this.config.ollamaHost,
-        ...(this.config.log
-          ? {
-            logger: {
-              debug: m => this.log('trace', `[Ollama] ${m}`),
-              info: m => this.log('trace', `[Ollama] ${m}`),
-              warn: m => this.log('trace', `[Ollama] ${m}`),
-              error: m => this.log('trace', `[Ollama] ${m}`),
-            },
-            middleware: [async (ctx) => {
-              const res = await ctx.next()
-              this.log('trace', `[Ollama] ${ctx.request.method} ${ctx.request.url} -> ${res.status}\n  request: ${truncate(safeJson(ctx.request.body), 8000)}\n  response: ${truncate(safeJson(res.body), 8000)}`)
-              return res
-            }],
-          }
-          : {}),
-      })
+      const client = await this.createOllamaClient()
       const chatRes = await client.chat({
         model: this.config.model,
         messages: [
@@ -340,7 +355,7 @@ export class RailsAgent {
 
       return { success: true, response: text }
     } catch (err) {
-      return { success: false, response: `Failed to connect to local Ollama at ${this.config.ollamaHost}: ${String(err)}` }
+      return { success: false, response: `Failed to connect to Ollama at ${this.config.ollamaHost}: ${String(err)}` }
     }
   }
 
@@ -681,10 +696,12 @@ private buildFixRetryInstruction(code: string, diagnosticMessage: string, previo
 
     if (provider === 'ollama') {
       try {
-        const client = new OllamaClient({ baseUrl: this.config.ollamaHost })
+        const client = await this.createOllamaClient()
         const checks = await client.healthCheck()
-        return checks.some(c => c.reachable)
-          ? { state: 'reachable' }
+        const reachable = checks.some(c => c.reachable)
+        const hasAuth = Boolean(this.config.ollamaApiKey || (await this.config.getApiKey?.()) || (this.config.ollamaCredentials && Object.keys(this.config.ollamaCredentials).length > 0))
+        return reachable
+          ? { state: hasAuth ? 'authenticated' : 'reachable' }
           : { state: 'offline', detail: 'Ollama server not reachable' }
       } catch (err) {
         return { state: 'offline', detail: err instanceof Error ? err.message : String(err) }
