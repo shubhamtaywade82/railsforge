@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { CompleteFn, LoopTool, SyntaxFn, describeTools, extractRubyBlocks, parseToolCall, runAgentLoop } from '../src/agent/AgentLoop'
+import { CompleteFn, LoopTool, SyntaxFn, VerifierFn, describeTools, extractRubyBlocks, parseToolCall, runAgentLoop } from '../src/agent/AgentLoop'
 
 const tool = (name: string, run: LoopTool['run'] = async () => `result of ${name}`, inputSchema: z.ZodRawShape = { model: z.string().optional() }): LoopTool => ({ name, description: `Does ${name}. More detail here.`, inputSchema, run })
 const call = (name: string, args: object = {}): string => `Let me check.\n\`\`\`tool\n${JSON.stringify({ name, arguments: args })}\n\`\`\``
@@ -184,5 +184,34 @@ describe('verification', () => {
     const result = await runAgentLoop({ system: 'S', prompt: 'P', complete: p.complete, tools: [], syntax: async () => ({ status: 'error', message: 'bad' }), options: { maxRepairs: 0 } })
     expect(p.calls).toHaveLength(1)
     expect(result.response).toContain('Syntax check failed')
+  })
+
+  it('runs semantic verifier when syntax passes and accepts valid responses', async () => {
+    const verifier: VerifierFn = async () => ({ ok: true })
+    const p = provider([answer('class User; end')])
+    const result = await runAgentLoop({ system: 'S', prompt: 'P', complete: p.complete, tools: [], syntax: ok, verifier })
+    expect(p.calls).toHaveLength(1)
+    expect(result.verification?.verifierIssues).toBeUndefined()
+  })
+
+  it('triggers a repair round when verifier detects issues and resolves them', async () => {
+    const verifier: VerifierFn = async ans => (ans.includes('good') ? { ok: true } : { ok: false, issues: ['Missing good method'] })
+    const p = provider([answer('def bad; end'), answer('def good; end')])
+    const result = await runAgentLoop({ system: 'S', prompt: 'P', complete: p.complete, tools: [], syntax: ok, verifier })
+    expect(p.calls).toHaveLength(2)
+    expect(p.calls[1].user).toContain('## Issues found during verification')
+    expect(p.calls[1].user).toContain('Missing good method')
+    expect(result.verification).toMatchObject({ repaired: true, verifierIssues: undefined })
+    expect(result.response).toContain('def good; end')
+  })
+
+  it('reports remaining verifier issues if repair cannot resolve them', async () => {
+    const verifier: VerifierFn = async () => ({ ok: false, issues: ['Failing spec: expected 200 got 500'] })
+    const p = provider([answer('def broken; end'), answer('def still_broken; end')])
+    const result = await runAgentLoop({ system: 'S', prompt: 'P', complete: p.complete, tools: [], syntax: ok, verifier })
+    expect(p.calls).toHaveLength(2)
+    expect(result.verification?.verifierIssues).toEqual(['Failing spec: expected 200 got 500'])
+    expect(result.response).toContain('⚠️ **Verification issues**:')
+    expect(result.response).toContain('Failing spec: expected 200 got 500')
   })
 })
