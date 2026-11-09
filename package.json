@@ -24,6 +24,7 @@
       "description": "In Restricted Mode RailsForge is read-only: navigation, schema/routes, the semantic graph, the pattern catalog, virtual documents and AI chat work, but nothing that runs project code does (RuboCop, Bundler, Rails, rake, test runners, debugging, terminals, rails runner). Settings that choose which program or server RailsForge talks to are ignored from the workspace until it is trusted.",
       "restrictedConfigurations": [
         "railsForge.ollama.host",
+        "railsForge.refactoring.aiHints",
         "railsForge.ai.provider",
         "railsForge.ai.openai.baseUrl",
         "railsForge.apidock.baseUrl",
@@ -496,6 +497,24 @@
           "default": false,
           "description": "Automatically re-run Steep in the background on Ruby file save when railsForge.types.steepEnabled is true. Debounced (like brakeman.scanOnSave) since Steep checks the whole configured target, not just the saved file."
         },
+        "railsForge.refactoring.aiHints": {
+          "type": "string",
+          "enum": [
+            "off",
+            "on-save"
+          ],
+          "enumDescriptions": [
+            "Only analyse when you run RailsForge: Suggest Refactorings.",
+            "After you save a Ruby file, ask the AI about the one scope whose code changed and has no hint yet. Sends that scope and related files to the configured AI provider. One request per save at most."
+          ],
+          "default": "off",
+          "description": "Background AI hints. Off by default because it sends code to your AI provider without a request from you. Observed hints appear in the CodeLens and the lightbulb until the code in their scope changes."
+        },
+        "railsForge.refactoring.codeLens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show refactoring opportunities above classes, methods and N+1 loops. Computed locally from the code (no AI call); only medium and high confidence findings are shown. The AI runs only when you choose RailsForge: Suggest Refactorings."
+        },
         "railsForge.skills.enabled": {
           "type": "boolean",
           "default": true,
@@ -746,6 +765,16 @@
       {
         "command": "railsforge.refactorSelection",
         "title": "RailsForge: Refactor Selection (Design Patterns)",
+        "category": "RailsForge"
+      },
+      {
+        "command": "railsforge.suggestRefactorings",
+        "title": "RailsForge: Suggest Refactorings (AI)",
+        "category": "RailsForge"
+      },
+      {
+        "command": "railsforge.reviewAiHints",
+        "title": "RailsForge: Review AI Hints (observed)",
         "category": "RailsForge"
       },
       {
@@ -1120,6 +1149,11 @@
           "command": "railsforge.refactorSelection",
           "when": "editorHasSelection && resourceLangId == ruby",
           "group": "1_refactor@3"
+        },
+        {
+          "command": "railsforge.suggestRefactorings",
+          "when": "resourceLangId == ruby",
+          "group": "1_refactor@4"
         },
         {
           "command": "railsforge.goToSpec",

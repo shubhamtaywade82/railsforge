@@ -73,6 +73,17 @@ import { RelatedHoverProvider } from './graph/RelatedHoverProvider'
 import { FormObjectExtractor } from './refactor/FormObjectExtractor'
 import { ValueObjectExtractor } from './refactor/ValueObjectExtractor'
 import { RefactoringMenuProvider } from './refactor/RefactoringMenuProvider'
+import { RubyAstParser } from './indexer/RubyAstParser'
+import { RefactoringEngine } from './refactoring-intelligence/core/RefactoringEngine'
+import { RefactoringAdvisor } from './refactoring-intelligence/core/RefactoringAdvisor'
+import { TargetResolver } from './refactoring-intelligence/core/ScopeResolver'
+import { RefactoringCommand, REVIEW_AI_HINTS_COMMAND, SUGGEST_REFACTORINGS_COMMAND } from './refactoring-intelligence/vscode/RefactoringCommand'
+import { BackgroundHints } from './refactoring-intelligence/vscode/BackgroundHints'
+import { ObservationSnapshot, ObservationStore } from './refactoring-intelligence/core/ObservationStore'
+import type { ScopeRef } from './refactoring-intelligence/core/types'
+import { relativeTo, vsCodeSourceReader } from './refactoring-intelligence/vscode/workspacePaths'
+import { RefactoringCodeActionProvider } from './providers/RefactoringCodeActionProvider'
+import { RefactoringCodeLensProvider } from './providers/RefactoringCodeLensProvider'
 import { RailsAgent, AiFixProposal, RailsAgentConfig } from './agent/RailsAgent'
 import { applyUnifiedHunks, parseUnifiedDiff } from './patch/UnifiedDiff'
 import { RailsChatParticipant } from './chat/RailsChatParticipant'
@@ -116,7 +127,7 @@ import { parseVersion, bumpVersion, replaceVersionInContent, VersionBumpPart } f
 import { SpeculativeFixCache } from './agent/SpeculativeFixCache'
 import { Logger } from './util/Logger'
 import { diffLines, filterFixHunks, applyHunks } from './patch/LineDiff'
-import { rubySyntaxError } from './util/RubySyntax'
+import { checkRubySyntax, rubySyntaxError } from './util/RubySyntax'
 import { handleWorkspaceAutoOptimization, optimizeRailsWorkspace } from './workspace/WorkspaceOptimizer'
 import {
   ProviderRegistry,
@@ -906,6 +917,82 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
 
   providerRegistry.activate()
   context.subscriptions.push(providerRegistry)
+
+  // 7c. Refactoring Intelligence. Deterministic findings drive the CodeLens and the lightbulb, and never
+  //     call a model. The AI is reached only through the explicit command, which reviews measured
+  //     findings and, on a further request, writes a diff that is shown and approved before it is applied.
+  if (activeProject.root) {
+    const root = activeProject.root
+    const pathOf = (uri: vscode.Uri) => relativeTo(root, uri.fsPath)
+    const refactorEngine = new RefactoringEngine(new RubyAstParser(), {
+      schemaTables: () => schemaIndexer.getAllTables().map(table => ({ name: table.name, columns: [...table.columns.keys()] })),
+      principleFindings: rel => semanticIndexAdapter.violationsFor(rel).map(v => ({
+        id: v.id,
+        title: v.title,
+        message: v.message,
+        line: v.line,
+        endLine: v.endLine,
+        severity: v.severity,
+      })),
+      isProjectType: name => semanticIndexAdapter.findDefiningFiles(name).length > 0,
+    })
+    const refactorTargets = new TargetResolver()
+    const refactorAdvisor = new RefactoringAdvisor({
+      agent,
+      index: semanticIndexAdapter,
+      files: vsCodeSourceReader(root),
+      catalog: patternCatalogAdapter,
+      checkSyntax: code => checkRubySyntax(code),
+      log: message => Logger.debug(message),
+    })
+    // AI hints survive a window reload: the observations are kept in the workspace state, per scope.
+    // Per project root: the same relative path in two folders must never share an observation.
+    const observationsKey = `railsforge.refactoring.observations.v2:${root}`
+    const observations = new ObservationStore(context.workspaceState.get<ObservationSnapshot>(observationsKey))
+    const persistObservations = observations.onDidChange(() => {
+      void context.workspaceState.update(observationsKey, observations.snapshot())
+    })
+    const refactorCommand = new RefactoringCommand({
+      engine: refactorEngine,
+      advisor: refactorAdvisor,
+      resolver: refactorTargets,
+      editProvider: sharedEditProvider,
+      observations,
+      projectRoot: () => root,
+    })
+    const aiHintsOnSave = () => vscode.workspace.getConfiguration('railsForge').get<string>('refactoring.aiHints', 'off') === 'on-save'
+    const refactorBackground = new BackgroundHints({ engine: refactorEngine, advisor: refactorAdvisor, observations, pathOf, enabled: aiHintsOnSave })
+    const fingerprint = (path: string, content: string, scope: ScopeRef) => refactorAdvisor.fingerprint(path, content, scope)
+    const lensProvider = new RefactoringCodeLensProvider({
+      engine: refactorEngine,
+      observations,
+      fingerprint,
+      pathOf,
+      enabled: () => vscode.workspace.getConfiguration('railsForge').get<boolean>('refactoring.codeLens', true),
+    })
+    const refreshLenses = observations.onDidChange(() => lensProvider.refresh())
+    const selector = { language: 'ruby', scheme: 'file' }
+    context.subscriptions.push(
+      { dispose: persistObservations },
+      { dispose: refreshLenses },
+      refactorBackground,
+      vscode.languages.registerCodeActionsProvider(
+        selector,
+        new RefactoringCodeActionProvider({ engine: refactorEngine, resolver: refactorTargets, observations, fingerprint, pathOf }),
+        { providedCodeActionKinds: RefactoringCodeActionProvider.providedCodeActionKinds },
+      ),
+      vscode.languages.registerCodeLensProvider(selector, lensProvider),
+      vscode.workspace.onDidSaveTextDocument(doc => refactorBackground.onDidSave(doc)),
+      vscode.commands.registerCommand(
+        SUGGEST_REFACTORINGS_COMMAND,
+        (uri?: vscode.Uri, range?: vscode.Range | vscode.Selection) => refactorCommand.run(uri, range),
+      ),
+      vscode.commands.registerCommand(
+        REVIEW_AI_HINTS_COMMAND,
+        (uri?: vscode.Uri, range?: vscode.Range | vscode.Selection) => refactorCommand.reviewObserved(uri, range),
+      ),
+    )
+  }
 
   // 7b. File watchers - migrated from direct vscode.workspace.createFileSystemWatcher
   //     calls to providerRegistry.workspaceFs.createWatcher(). The watch* helper

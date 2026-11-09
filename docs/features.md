@@ -333,6 +333,14 @@ Select code in the editor and extract it to the right Rails pattern — in a **s
 
 **Refactoring Menu:** `RailsForge: Refactor Selection (Design Patterns)` opens a Quick Pick of all applicable extractors for the current selection.
 
+**Refactoring Intelligence** (`railsforge.suggestRefactorings`, source [`refactoring-intelligence/`](src/refactoring-intelligence/), reference [`docs/refactoring-intelligence.md`](docs/refactoring-intelligence.md)): deterministic analyzers find candidates in classes, methods and Rails code; design techniques are offered only when their validators pass; the AI decides on measured findings on request. A CodeLens and a lightbulb show medium and high confidence findings without any AI call. The AI-assisted flow:
+
+1. **Suggest** returns structured suggestions (pattern, principle, impact, rationale, files). Nothing is written.
+2. **Plan**, on the pick, asks for a unified diff over the listed files. The diff is applied to the current editor buffers; a hunk whose context no longer matches, or a file outside `app/`, `lib/`, `spec/` and `test/`, is rejected. Each changed file must parse as Ruby when `ruby` is installed.
+3. **Apply** shows each change as a native diff and asks for modal confirmation. The change is re-checked against the buffers first, and then applied as one `WorkspaceEdit`.
+
+A rejected answer gets one corrective retry that carries the reason. Limits (`ADVISOR_LIMITS` in `types.ts`) keep prompts within a local model's default context. Code is sent to whichever provider `railsForge.ai.provider` selects, the same as the chat agent. For a local Ollama model, raise `railsForge.ollama.numCtx` if a file is too large to apply in one pass.
+
 ---
 
 ### F-09 Living Pattern Catalog
