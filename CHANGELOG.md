@@ -22,6 +22,11 @@
 - **A server stopped by a cancellation is reported as stopped.** It was marked failed, and its tools were withheld for 30 seconds, even though nothing had gone wrong.
 
 ### Added
+- **Structured results: seven tools.** `find_similar_pattern`, `get_example_file` and `suggest_learning_resource` join the list tools. Their text is unchanged.
+- **MCP hints on every native tool.** Reads are declared read-only and idempotent. Project code is declared destructive. The hints follow the tool's risk.
+- **Cancelling `list_rake_tasks` stops its process.** Before, a cancelled listing kept its process running, and when the process timed out the next command candidate was started. A cancelled call now stops the process at once, and starts nothing else.
+- **Ruby's private `initialize` is not listed as a public method.** The pattern indexer excluded `private` and `protected` sections, but not the methods Ruby makes private by default.
+- **A lookup that finds nothing is an error.** `find_similar_pattern` and `get_example_file` report `NOT_FOUND`, and an unreadable example reports `UNREADABLE`. Before, these answers were successful text.
 - **Structured results from the standalone MCP server.** `list_routes`, `list_patterns`, `list_skills` and `list_rake_tasks` return `structuredContent` as well as the text they always returned. The structure is checked against a declared output schema on every call. Other tools are still text only.
 - **Coded errors from the standalone MCP server.** A failed call is `isError`, with its code in `_meta.railsforge.code`: for example `EXECUTION_DISABLED`, `INDEX_UNAVAILABLE` and `SKILLS_UNAVAILABLE`. A cancellation from the client stops the tool, and is reported as `CANCELLED`.
 - **Claude Code acceptance.** `scripts/acceptance/claude-code-mcp.mjs` registers the standalone server with the installed Claude Code, runs two sessions, and removes the registration. The result is in `docs/mcp-compatibility-matrix.md`.

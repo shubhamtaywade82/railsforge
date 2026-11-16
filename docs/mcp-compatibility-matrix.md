@@ -25,9 +25,11 @@ Last run: 2026-11-16 (branch `ccr-e6365557-nfj29y`, Claude Code 2.1.325, VS Code
 | Chat Stop control | Yes | Yes: `test/RailsChatViewProvider.test.ts`, `test/ChatStopEndToEnd.test.ts`, and the provider cancellation tests | Not applicable | No: the Stop button has not been clicked in a running window |
 | Language-model tools inside VS Code (`railsforge_*`) | Yes | Yes: `test/LanguageModelTools.test.ts`, through the shared definitions | Not applicable | No |
 
-## Structured results and error codes (standalone server)
+## Structured results, hints and error codes (standalone server)
 
 A tool that declares an output schema returns the same data twice: as text, unchanged from earlier versions, and as `structuredContent`. Clients validate `structuredContent` against the schema the server declares. A result that does not match its declaration is an error with code `OUTPUT_CONTRACT`, not a success.
+
+Every native tool declares MCP hints derived from its risk: a static or cached read (R0, R1) is `readOnlyHint` and `idempotentHint`, and project code (R2) is `destructiveHint`.
 
 A failed call is `isError: true`, its message is the text, and its stable code is in `_meta.railsforge.code`.
 
@@ -37,13 +39,26 @@ A failed call is `isError: true`, its message is the text, and its stable code i
 | `list_patterns` | List | `patterns` |
 | `list_skills` | Object | `source`, `count`, `skills` |
 | `list_rake_tasks` | List | `tasks` |
+| `find_similar_pattern` | List | `similar` |
+| `get_example_file` | Object | `filePath`, `name`, `content` |
+| `suggest_learning_resource` | Object | `book`, `chapter`, `note` |
 | `get_dependencies`, `find_duplicate_methods` | Needs the persistent index | Not yet structured. Without the index: `INDEX_UNAVAILABLE` |
 | `list_skills`, `route_skills` | Needs the skills pack | Without the pack: `SKILLS_UNAVAILABLE` |
 | The other tools | Text | Not yet structured |
 
-Codes emitted by the standalone server: `EXECUTION_DISABLED` (project code in an untrusted workspace), `APPROVAL_REQUIRED` (an R3 call with no approval), `INDEX_UNAVAILABLE`, `SKILLS_UNAVAILABLE`, `OUTPUT_CONTRACT`, `CANCELLED`, and `TIMEOUT`, which external servers use.
+A lookup that finds nothing is `NOT_FOUND`, and a file that cannot be read is `UNREADABLE`. Before this batch those answers were successful text.
+
+Codes emitted by the standalone server: `EXECUTION_DISABLED` (project code in an untrusted workspace), `APPROVAL_REQUIRED` (an R3 call with no approval), `INDEX_UNAVAILABLE`, `SKILLS_UNAVAILABLE`, `NOT_FOUND`, `UNREADABLE`, `OUTPUT_CONTRACT`, and `CANCELLED`. `TIMEOUT` is reserved for external servers.
+
+**Cancellation.** A client that cancels a call stops the work. `list_rake_tasks` is the one native tool that runs a process, and the independent client (`test/McpCancellation.test.ts`) checks that the process stops at once, that the next candidate command does not start, that no process is left, and that the server still answers afterwards. The quality tools and the Ruby tools also run processes, and are not yet checked this way.
 
 Two things come from the SDK, not from RailsForge. An unknown tool name, or arguments that fail the input schema, arrive as an error result whose text names the JSON-RPC code (`-32602`). A closed transport is a client-side failure that throws, so it can be told apart from a tool error.
+
+## Known gaps
+
+- Most native tools still return text only (21 of 28). Their structured forms need output schemas, and some need an index, a Ruby runtime or the network to verify.
+- Cancellation is tested for `list_rake_tasks` only.
+- The indexer's Ruby visibility is fixed for `initialize` and its copy hooks. Class-level `initialize` is kept, as a public singleton method.
 
 ## Nexum acceptance (manual)
 
