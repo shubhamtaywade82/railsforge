@@ -31,10 +31,17 @@ describe('exposeTools', () => {
     expect(problems).toEqual([expect.stringContaining('"drop_table", which rails does not provide')])
   })
 
-  it('does not offer a tool whose input schema is not an object', () => {
+  it('does not offer a tool whose input schema is not an object schema', () => {
     const { tools, problems } = exposeTools('rails', listed, ['no_schema'])
     expect(tools).toEqual([])
-    expect(problems).toEqual([expect.stringContaining('no object input schema')])
+    expect(problems).toEqual([expect.stringContaining('its input schema is not supported')])
+  })
+
+  it('does not offer a tool that uses a schema keyword the validator cannot enforce, and does not weaken it', () => {
+    const withRef: RemoteToolDescriptor[] = [{ name: 'lookup', inputSchema: { type: 'object', properties: { id: { $ref: '#/x' } } } }]
+    const { tools, problems } = exposeTools('rails', withRef, ['lookup'])
+    expect(tools).toEqual([])
+    expect(problems[0]).toContain('unsupported keyword "$ref"')
   })
 
   it('does not offer a tool whose exposed name the agent cannot use', () => {
@@ -66,12 +73,12 @@ describe('checkArguments', () => {
   })
 
   it('names every missing required argument', () => {
-    expect(checkArguments({ required: ['a', 'b'] }, {})).toEqual({ ok: false, message: 'missing required arguments: a, b.' })
+    expect(checkArguments({ type: 'object', required: ['a', 'b'] }, {})).toEqual({ ok: false, message: 'a: is required; b: is required' })
   })
 
   it('rejects a value of the wrong JSON type', () => {
-    expect(checkArguments(schema, { model: 'Order', limit: 2.5 })).toEqual({ ok: false, message: 'argument "limit" must be integer.' })
-    expect(checkArguments(schema, { model: 7 })).toEqual({ ok: false, message: 'argument "model" must be string.' })
+    expect(checkArguments(schema, { model: 'Order', limit: 2.5 })).toEqual({ ok: false, message: 'limit: expected integer' })
+    expect(checkArguments(schema, { model: 7 })).toEqual({ ok: false, message: 'model: expected string' })
   })
 
   it('rejects arguments that are not an object', () => {
@@ -79,8 +86,10 @@ describe('checkArguments', () => {
     expect(checkArguments(schema, null as never).ok).toBe(false)
   })
 
-  it('leaves an unknown property type to the server rather than guessing', () => {
-    expect(checkArguments({ properties: { x: { type: 'date' } } }, { x: 'today' }).ok).toBe(true)
+  it('refuses to check against a schema it cannot enforce, rather than passing the arguments', () => {
+    const result = checkArguments({ type: 'object', properties: { x: { type: 'date' } } }, { x: 'today' })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {expect(result.message).toContain('input schema is not supported')}
   })
 })
 
@@ -99,7 +108,7 @@ describe('externalLoopTool', () => {
     const tool = externalLoopTool(exposed, root, { callRemote: async () => 'ok', isTrusted: () => true })
     expect(tool.name).toBe('rails__get_schema')
     expect(tool.jsonSchema).toBe(exposed.jsonSchema)
-    expect(tool.checkArgs?.({ limit: 1 })).toEqual({ ok: false, message: 'missing required argument: model.' })
+    expect(tool.checkArgs?.({ limit: 1 })).toEqual({ ok: false, message: 'model: is required' })
   })
 
   it('runs the remote tool when the workspace is trusted and returns its text', async () => {
