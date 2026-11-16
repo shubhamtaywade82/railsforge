@@ -25,7 +25,8 @@ const TASK_LINE = /^rake\s+(\S+)\s*#\s?(.*)$/
 
 export function parseRakeTaskList(stdout: string): RakeTask[] {
   const tasks: RakeTask[] = []
-  for (const line of stdout.split('\n')) {
+  // Windows writes CRLF line endings, so a trailing carriage return must not stay on the line and break the match.
+  for (const line of stdout.split(/\r?\n/)) {
     const match = TASK_LINE.exec(line)
     if (!match) {continue}
     const [, name, description] = match

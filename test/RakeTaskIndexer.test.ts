@@ -46,6 +46,11 @@ describe('parseRakeTaskList', () => {
     ])
   })
 
+  it('parses the same tasks from Windows CRLF output, with no carriage return left in a description', () => {
+    expect(parseRakeTaskList(REAL_RAKE_T_OUTPUT.replace(/\n/g, '\r\n'))).toEqual(parseRakeTaskList(REAL_RAKE_T_OUTPUT))
+    expect(parseRakeTaskList('rake db:migrate  # Migrate\r\n')).toEqual([{ name: 'db:migrate', namespace: 'db', description: 'Migrate' }])
+  })
+
   it('ignores non-task lines and blank lines', () => {
     const tasks = parseRakeTaskList('\nsome warning to stderr-like noise\nrake about  # desc\n\n')
     expect(tasks).toEqual([{ name: 'about', namespace: null, description: 'desc' }])

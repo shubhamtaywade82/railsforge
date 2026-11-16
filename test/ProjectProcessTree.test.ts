@@ -110,6 +110,17 @@ describe('stopping a batch shim', () => {
 })
 
 describe('a project tool outside Windows', () => {
+  // The launch depends on which tools the host has on PATH, and a Windows runner has Ruby's batch shims. An empty PATH
+  // leaves the command as given, so the expectation holds on every host.
+  let savedPath: string | undefined
+  beforeEach(() => {
+    savedPath = process.env.PATH
+    process.env.PATH = ''
+  })
+  afterEach(() => {
+    if (savedPath === undefined) {delete process.env.PATH} else {process.env.PATH = savedPath}
+  })
+
   it('is started as given, with its options passed through unchanged', async () => {
     const controller = new AbortController()
     vi.mocked(execFile).mockImplementationOnce(((_file: string, _args: string[], _options: unknown, cb: Callback) => {

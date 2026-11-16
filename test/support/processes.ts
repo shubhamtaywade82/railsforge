@@ -5,7 +5,8 @@ import { spawnSync } from 'child_process'
 export function countProcessesMentioning(dir: string): number | null {
   if (process.platform === 'win32') {
     const quoted = dir.replace(/'/g, "''")
-    const script = `@(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains('${quoted}') }).Count`
+    // The script itself contains the directory, so the PowerShell process would match its own command line: $PID excludes it.
+    const script = `@(Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.Contains('${quoted}') }).Count`
     const result = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', windowsHide: true })
     if (result.error || result.status !== 0) {return null}
     const count = Number.parseInt(String(result.stdout).trim(), 10)
