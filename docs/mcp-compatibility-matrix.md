@@ -19,7 +19,7 @@ Last run: 2026-11-16 (branch `ccr-e6365557-nfj29y`, Claude Code 2.1.325, VS Code
 | Standalone server, stdio, read by **Claude Code 2.1.325** | Yes | Manual: `scripts/acceptance/claude-code-mcp.mjs` (needs a signed-in Claude Code and a model call) | Yes, run 2026-11-16: the session discovered and called `list_routes`, answered from its result, and got the error results for an unbuilt index and an untrusted project-code call | No |
 | Standalone server read by **Cursor** | Not specific to Cursor (the server is a generic stdio server) | No | **Not run**: Cursor is not installed in this environment | No |
 | Standalone server read by **GitHub Copilot** | Not specific to Copilot | No | **Not run**: Copilot is not installed in this environment | No |
-| Standalone server read by **Nexum** (its MCP v2 client, adapter and trust policy) | Not specific to Nexum | Yes, as a manual acceptance: `scripts/acceptance/nexum-mcp.mjs --nexum <checkout>` | **Verified on Nexum's fix branch**, `fix/mcp-trust-cancel-errors` at `30a7d9e`: 12 of 12 requirements pass. Nexum's default branch `010c709` fails three of them (9 of 12) until the branch is merged. See the Nexum section below | No |
+| Standalone server read by **Nexum** (its MCP v2 client, adapter and trust policy) | Not specific to Nexum | Yes, as a manual acceptance: `scripts/acceptance/nexum-mcp.mjs --nexum <checkout>` | **Verified on Nexum's default branch**, `main` at `4eb83db` (PR #66 merged): 12 of 12 requirements pass. Before the merge, `010c709` failed three of them (9 of 12). See the Nexum section below | No |
 | External MCP gateway: RailsForge as the **client** of external servers | Yes | Yes: `test/ExternalGatewayAcceptance.test.ts`, `test/ExternalCancellation.test.ts`, `test/ExternalGovernance.test.ts`, `test/ExternalSchemaCompatibility.test.ts` | Against the fixture server (`test/fixtures/mcp/echo-server.mjs`) only. The live third-party check (`ask-ruby-harness-mcp`) is blocked until it is authorized | No |
 | Approval prompt (a Quick Pick) | Yes | Yes: unit tests with a fake Quick Pick, and `test-host/suite/approval.host.ts` | Not applicable | **Editor verified** in the Extension Host, on VS Code 1.146 and 1.96, driving the real Quick Pick with the editor's own keys. Not yet in an installed user session |
 | Chat Stop control | Yes | Yes: `test/RailsChatViewProvider.test.ts`, `test/ChatStopEndToEnd.test.ts`, and the provider cancellation tests | Not applicable | No: the Stop button has not been clicked in a running window |
@@ -64,27 +64,27 @@ Two things come from the SDK, not from RailsForge. An unknown tool name, or argu
 
 `scripts/acceptance/nexum-mcp.mjs` imports Nexum's compiled MCP adapter and trust policy from a checkout's `dist/`, connects them to RailsForge's built server, and checks each requirement. The script never changes the Nexum checkout, so build Nexum first (`npx tsc -p tsconfig.json`).
 
-Last run: RailsForge `26b4506`, against two Nexum revisions, each from its own clean checkout.
+Last run: RailsForge `26b4506` for the `010c709` and `30a7d9e` columns, and RailsForge `29880a6` for the `4eb83db` column. Each Nexum revision was compiled from its own clean checkout.
 
-| Requirement | Nexum `010c709` (default branch) | Nexum `30a7d9e` (fix branch) |
-| --- | --- | --- |
-| Nexum discovers RailsForge's declared tools, each with an object input schema | Pass (28 tools) | Pass (28 tools) |
-| A call to `list_routes` returns its structured result to the agent | Pass | Pass |
-| `INDEX_UNAVAILABLE` is preserved as a tool error, with its code | Pass (`_meta.railsforge.code`) | Pass (`_meta.railsforge.code`) |
-| The reason for that error reaches the agent in the error message | **Fail**: N1 | Pass |
-| An unapproved server is refused with the trust reason | Pass | Pass |
-| An unapproved server is not started | **Fail**: N2 | Pass |
-| An allow list offers exactly the tools it names | Pass | Pass |
-| A risk ceiling denies tools above it | Pass | Pass |
-| Project code does not run without RailsForge's grant, and the refusal names its code | Pass (`EXECUTION_DISABLED`) | Pass (`EXECUTION_DISABLED`) |
-| An aborted call returns to the agent promptly, as cancelled | Pass | Pass |
-| The server observes the cancellation, so its work stops | **Fail**: N3 | Pass |
-| Closing the connection leaves no server process behind | Pass | Pass |
-| **Result** | **9 of 12** | **12 of 12** |
-| Informational: Nexum does not lower a tool's risk from the server's own hints | Pass (0 of 28 below `high`) | Pass (0 of 28 below `high`) |
-| Informational: the SDK's own signal option reaches the server | Pass | Pass |
+| Requirement | Nexum `010c709` (before the fix) | Nexum `30a7d9e` (fix branch) | Nexum `4eb83db` (`main`, after PR #66) |
+| --- | --- | --- | --- |
+| Nexum discovers RailsForge's declared tools, each with an object input schema | Pass (28 tools) | Pass (28 tools) | Pass (28 tools) |
+| A call to `list_routes` returns its structured result to the agent | Pass | Pass | Pass |
+| `INDEX_UNAVAILABLE` is preserved as a tool error, with its code | Pass (`_meta.railsforge.code`) | Pass (`_meta.railsforge.code`) | Pass (`_meta.railsforge.code`) |
+| The reason for that error reaches the agent in the error message | **Fail**: N1 | Pass | Pass |
+| An unapproved server is refused with the trust reason | Pass | Pass | Pass |
+| An unapproved server is not started | **Fail**: N2 | Pass | Pass |
+| An allow list offers exactly the tools it names | Pass | Pass | Pass |
+| A risk ceiling denies tools above it | Pass | Pass | Pass |
+| Project code does not run without RailsForge's grant, and the refusal names its code | Pass (`EXECUTION_DISABLED`) | Pass (`EXECUTION_DISABLED`) | Pass (`EXECUTION_DISABLED`) |
+| An aborted call returns to the agent promptly, as cancelled | Pass | Pass | Pass |
+| The server observes the cancellation, so its work stops | **Fail**: N3 | Pass | Pass |
+| Closing the connection leaves no server process behind | Pass | Pass | Pass |
+| **Result** | **9 of 12** | **12 of 12** | **12 of 12** |
+| Informational: Nexum does not lower a tool's risk from the server's own hints | Pass (0 of 28 below `high`) | Pass (0 of 28 below `high`) | Pass (0 of 28 below `high`) |
+| Informational: the SDK's own signal option reaches the server | Pass | Pass | Pass |
 
-**Findings in Nexum.** All four are in Nexum, and none is compensated for in RailsForge. The fixes are source changes on `fix/mcp-trust-cancel-errors`, which is pushed to `shubhamtaywade82/nexum` and not merged into its default branch.
+**Findings in Nexum.** All four are in Nexum, and none is compensated for in RailsForge. The fixes are source changes, merged into Nexum's `main` as `4eb83db` by `shubhamtaywade82/nexum#66`.
 
 - **N1: the error message drops the server's reason.** Fixed in `4bcdf69`. `src/mcp/adapter/mcp-tool-adapter.ts` now builds the message from the server's text content and keeps `_meta`.
 - **N2: a server is spawned before the trust decision.** Fixed in `7163478`. `connectMcpServerTools` decides on the fingerprint before it connects, so a denied or unapproved server runs no code and lists no tools. The fingerprint is unchanged, so existing approvals still match.
