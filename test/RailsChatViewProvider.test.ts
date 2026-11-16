@@ -122,7 +122,7 @@ describe('the chat stop control', () => {
 
   it('the webview script parses, so a typo in the stop wiring cannot break the whole chat', async () => {
     const h = setUp(async () => ({ success: true, response: 'ok' }))
-    const scripts = [...h.view.webview.html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match => match[1])
+    const scripts = [...h.view.webview.html.matchAll(/<script>([\s\S]*?)<\/script>/gi)].map(match => match[1])
     expect(scripts.length).toBeGreaterThan(0)
     for (const script of scripts) {
       expect(() => new Function(script)).not.toThrow()
