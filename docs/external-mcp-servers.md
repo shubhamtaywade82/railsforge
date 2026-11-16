@@ -41,6 +41,42 @@ An entry with any problem is left out and reported in the test command. An unkno
 - **Audited.** Every call is written to `.railsforge/mcp/audit.jsonl` with the tool name and the **argument names**, never the values.
 - **Output.** Only text content reaches the agent. Images and other content are named as omitted. Long results are clipped as the agent's other tools are.
 
+## Example: ask-ruby-harness-mcp
+
+The gem's own README (version 0.2.1) describes a stdio server started with no arguments and served from the project's working directory. That is the shape the configuration above uses:
+
+```json
+"railsForge.mcp.servers": [
+  {
+    "id": "ask-ruby",
+    "command": "ask-ruby-harness-mcp",
+    "allowTools": ["read_model", "schema_graph", "read_log"]
+  }
+]
+```
+
+The server provides six tools. Offer only the ones you need:
+
+| Tool | Notes |
+| :--- | :--- |
+| `read_model`, `schema_graph`, `read_log` | Read-only. A sensible default. |
+| `run_tests` | Runs the project's test suite, so it is refused in an untrusted workspace. |
+| `query_database` | Reads your database. Use a read-only connection, and never a production one. |
+| `run_command` | Runs arbitrary shell commands. Do not offer it. |
+
+This example comes from the README. It has not been run from RailsForge in this build. To check it in your environment, run the live test in the next section, or use **RailsForge: Test External MCP Servers**.
+
+## Live check (opt-in)
+
+`test/ExternalMcpLive.test.ts` starts a real server and checks that it reaches `ready` in the project root, that it provides the tools you allow, and that `run_command` is not offered. It is skipped unless `RAILSFORGE_LIVE_MCP_COMMAND` is set, so CI never installs or starts third-party code:
+
+```bash
+RAILSFORGE_LIVE_MCP_COMMAND=ask-ruby-harness-mcp \
+RAILSFORGE_LIVE_MCP_ROOT=/path/to/a/ruby/project \
+RAILSFORGE_LIVE_MCP_ALLOW=read_model,schema_graph,read_log \
+npx vitest run test/ExternalMcpLive.test.ts
+```
+
 ## Checking a server
 
 Run **RailsForge: Test External MCP Servers**. It opens a report with each server's state, the tools it offers, and any configuration problems. Use it to choose names for `allowTools`.
