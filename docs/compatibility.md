@@ -9,6 +9,7 @@ Run **RailsForge: Diagnose Environment** to see how your own machine measures up
 | Requirement | Value |
 | --- | --- |
 | VS Code | `^1.96.0` (engines floor) — tested on 1.96.0 (Linux) and the latest stable (Linux, Windows, macOS) |
+| Standalone MCP server, independent client | Verified by an MCP client in its own process, using the official MCP SDK client and nothing from RailsForge: initialize, tool discovery and input schemas, `get_schema` and `list_routes` against a Rails fixture, invalid-argument and unknown-tool errors, and clean shutdown (`test/McpInterop.test.ts`). Not verified: Claude Code, Cursor, Copilot or Nexum as the client |
 | Cursor / VSCodium / other forks | Not tested; the extension only uses stable VS Code APIs, so they should work when built on VS Code ≥ 1.96 |
 | Remote (SSH, WSL, Dev Containers) | Native modules load on the remote host, so the **remote** OS/arch must be in the table below |
 | Workspace Trust | Runs in Restricted Mode as a read-only tier: navigation, schema/routes, the semantic graph, patterns, virtual documents and AI chat work; RuboCop, Bundler, rake, rails, tests, debugging, terminals, `rails runner` and tasks are off until the workspace is trusted. Verified by `pnpm run test:restricted` (real VS Code, fake tools that must never run) |

@@ -16,10 +16,14 @@
 - **Refused tools say why.** An untrusted workspace used to make `list_rake_tasks` report "No Rake tasks found". It now reports that the tool did not run and why.
 
 ### Fixed
+- **Routes written with single quotes are listed.** `get 'health', to: 'health#show'` was silently dropped by `list_routes`, which read only double-quoted targets.
+- **A language-model answer is never used after its request was cancelled or timed out.** A stream that ends quietly after cancellation now throws, instead of returning its partial text as the answer.
 - **The chat sidebar works.** Its script had not parsed since 677a025. The HTML is a TypeScript template literal, so `'\n'`, `\s` and `\'…\'` inside it were rewritten before the browser read them, and the whole script failed with a SyntaxError. The send button and every other control were inert. A test now parses the script.
 - **A server stopped by a cancellation is reported as stopped.** It was marked failed, and its tools were withheld for 30 seconds, even though nothing had gone wrong.
 
 ### Added
+- **Pydantic's nullable `anyOf` is supported.** An optional field that pydantic writes as `anyOf: [<type>, {"type": "null"}]` is offered to the agent, and its constraints are enforced. Any other `anyOf` is still refused, with the reason.
+- **The approval prompt closes when its request stops.** It is a Quick Pick instead of a modal message, so a Stop, or a timeout, hides it. A late answer never runs a stopped call.
 - **Stop in the chat.** While a request runs, Stop appears beside Send. It ends the model request (OpenAI-compatible, Anthropic, Ollama and the VS Code language model), any external tool and its process. The answer is reported as cancelled. A second request is refused until the first has finished.
 - **Optional developer tools.** RailsForge detects seven optional MCP tools (`rails-mcp-server`, `ruby-console-mcp`, ActionMCP, `ask-rails-harness-mcp`, `ask-ruby-harness-mcp`, `debug-mcp`, `@ruby-mcp/gems-mcp`). Enable a tool in `railsForge.adapters.enabled` and RailsForge asks, once per session, to install it when it is missing. The install command is typed into a RailsForge terminal for you to review and press Enter on; in an untrusted workspace it can only be copied. `RailsForge: Optional Tools Status` and `RailsForge: Install Optional Tool…` show and install tools on demand. Project gems are read from `Gemfile.lock` without running code. See `docs/optional-tools.md`.
 - **Optional tools for the agent.** A tool that is enabled in `railsForge.adapters.enabled`, listed in `railsForge.adapters.agentExecution`, and installed globally is offered to the agent as an MCP server, in trusted workspaces only. Only `debug-mcp` qualifies so far, because its README states the stdio transport and start command. Project installs are not offered, and the server starts without a working directory.
