@@ -65,6 +65,11 @@ export interface RailsAgentConfig {
   /** Base URL for OpenAI-compatible endpoints (OpenAI, OpenRouter, self-hosted vLLM/oss models). */
   openaiBaseUrl?: string
   anthropicModel?: string
+  /**
+   * Where Anthropic requests are sent. Not a user setting: extension.ts leaves it unset, so the API key only ever goes to
+   * Anthropic's endpoint. It exists so a test can point the real request path at a local server.
+   */
+  anthropicEndpoint?: string
   /** Shared sampling/token knobs; applied to whichever provider is active. */
   temperature?: number
   maxTokens?: number
@@ -450,7 +455,7 @@ export class RailsAgent {
         temperature: this.config.temperature ?? 0.2,
       }
       this.log('trace', `[Anthropic] request: ${truncate(safeJson(payload), 8000)}`)
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch(this.config.anthropicEndpoint ?? 'https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

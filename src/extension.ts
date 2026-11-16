@@ -60,6 +60,7 @@ import { FactoryBotResolver } from './testing/FactoryBotResolver'
 import { RailsArchitectureTreeProvider } from './views/RailsArchitectureTreeProvider'
 import { PatternCatalogTreeProvider, PatternItem } from './views/PatternCatalogTreeProvider'
 import { createLoopTools } from './agent/LoopTools'
+import { requestViaVsCodeLm } from './agent/VsCodeLmRequest'
 import { isWorkspaceTrusted, setBlockedListener, setTrustProvider } from './workspace/Trust'
 import { collectDiagnostics } from './diagnostics/collect'
 import { renderDiagnosticsDoc } from './diagnostics/Diagnostics'
@@ -417,7 +418,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
       if (!projectRoot) {return ''}
       return buildSemanticContext(semanticContexts.get(projectRoot).getSemanticGraph(), { filePath: fileName, prompt, maxChars: 3500 })
     },
-    vscodeLmRequest: (system, prompt, signal) => requestViaVsCodeLm(system, prompt, readConfig().aiVscodeLmFamily, readConfig().aiTimeoutMs, signal),
+    vscodeLmRequest: (system, prompt, signal) => requestViaVsCodeLm({ selectModel: selectVsCodeLmModel }, system, prompt, readConfig().aiVscodeLmFamily, readConfig().aiTimeoutMs, signal),
     vscodeLmStatus: () => vscodeLmStatus(readConfig().aiVscodeLmFamily),
     log: (level: 'debug' | 'trace' | 'warn', message: string) => {
       if (level === 'debug') { Logger.debug(message) }
@@ -1465,32 +1466,6 @@ async function selectVsCodeLmModel(family: string): Promise<vscode.LanguageModel
 }
 
 /** One system+user request through VS Code's Language Model API (the user is asked for consent on first use). */
-async function requestViaVsCodeLm(system: string, prompt: string, family: string, timeoutMs: number, signal?: AbortSignal): Promise<string> {
-  const model = await selectVsCodeLmModel(family)
-  if (!model) {
-    throw new Error(family
-      ? `No VS Code language model matches family "${family}". Install/sign in to a model provider or change railsForge.ai.vscodeLm.family.`
-      : 'No VS Code language model is available. Sign in to Copilot or install a Language Model provider extension.')
-  }
-  const source = new vscode.CancellationTokenSource()
-  const timer = setTimeout(() => source.cancel(), timeoutMs)
-  // A cancelled operation cancels the editor's request too, so the model stops generating.
-  const onAbort = (): void => source.cancel()
-  if (signal?.aborted) {source.cancel()} else {signal?.addEventListener('abort', onAbort, { once: true })}
-  try {
-    // The Language Model API has no system role: fold the system prompt into the first user message.
-    const messages = [vscode.LanguageModelChatMessage.User(`${system}\n\n---\n\n${prompt}`)]
-    const response = await model.sendRequest(messages, { justification: 'RailsForge needs a model to answer your Rails question.' }, source.token)
-    let text = ''
-    for await (const chunk of response.text) {text += chunk}
-    return text
-  } finally {
-    clearTimeout(timer)
-    signal?.removeEventListener('abort', onAbort)
-    source.dispose()
-  }
-}
-
 async function vscodeLmStatus(family: string): Promise<{ state: 'authenticated' | 'error'; detail?: string }> {
   try {
     const model = await selectVsCodeLmModel(family)

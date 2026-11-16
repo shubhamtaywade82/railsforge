@@ -79,4 +79,25 @@ describe('stopping a request ends the HTTP request', () => {
     expect(Date.now() - started).toBeLessThan(5_000)
     await vi.waitFor(() => expect(server?.closed()).toBeGreaterThanOrEqual(1))
   }, 20_000)
+
+  it('Anthropic: the request is aborted, the agent reports it cancelled, and the connection is dropped', async () => {
+    server = await silentServer()
+    const agent = new RailsAgent(new SchemaIndexer(), new RoutesIndexer(), {
+      provider: 'anthropic',
+      anthropicModel: 'claude-test',
+      anthropicEndpoint: `${server.url}/v1/messages`,
+      model: 'unused',
+      ollamaHost: 'http://127.0.0.1:1',
+      getApiKey: async () => 'test-key',
+    })
+    const controller = new AbortController()
+    setTimeout(() => controller.abort(), 300)
+
+    const started = Date.now()
+    const result = await agent.run('Explain the order model.', { fileContent: '', fileName: '', selection: '', signal: controller.signal } as never)
+
+    expect(result).toMatchObject({ success: false, response: 'Cancelled.' })
+    expect(Date.now() - started).toBeLessThan(5_000)
+    await vi.waitFor(() => expect(server?.closed()).toBeGreaterThanOrEqual(1))
+  }, 20_000)
 })
