@@ -2,6 +2,16 @@
 
 RailsForge can let its own agent use tools from other MCP servers. You list the servers in your **user** settings. RailsForge starts each one, lists its tools, and offers the tools you allow. This is separate from the optional tools in [optional-tools.md](optional-tools.md), which are installed and detected by RailsForge. Here you name any server and its command yourself.
 
+## Status
+
+What has been verified, and what has not:
+
+- **Verified with real processes.** A stdio server started through the MCP SDK client, with the project root as its working directory. Its tools are listed and called, its errors are reported, and its exit is handled. RailsForge's agent loop discovers an external tool and calls it, and cannot reach one that is not allowed (`test/ExternalMcpStdio.test.ts`, `test/ExternalAgentLoop.test.ts`).
+- **Verified in VS Code.** The configuration rules and the editor path, on VS Code 1.146 and 1.96 (`test-host/suite/editor.host.ts`).
+- **Not yet verified.** A real third-party server, such as `ask-ruby-harness-mcp`. Run the opt-in live check (see below) before relying on one. Also not verified: that Cursor, Claude Code or Copilot connect to RailsForge and call its tools, and that a debugger can be attached and controlled through `debug-mcp`.
+
+`.cursor/mcp.json` is not read by RailsForge. Adding a server there makes it available to Cursor, not to RailsForge's agent. Use `railsForge.mcp.servers` for RailsForge's agent.
+
 ## Configuration
 
 Add entries to `railsForge.mcp.servers` in your user `settings.json`:
