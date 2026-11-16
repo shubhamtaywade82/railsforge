@@ -115,16 +115,17 @@ describe('externalLoopTool', () => {
     const callRemote = vi.fn(async () => 'the schema')
     const tool = externalLoopTool(exposed, root, { callRemote, isTrusted: () => true })
     await expect(tool.run({ model: 'Order' })).resolves.toBe('the schema')
-    expect(callRemote).toHaveBeenCalledWith(exposed, root, { model: 'Order' })
+    expect(callRemote).toHaveBeenCalledWith(exposed, root, { model: 'Order' }, undefined)
   })
 
   it('refuses without starting the remote tool in an untrusted workspace, and says why', async () => {
     const callRemote = vi.fn(async () => 'should not run')
     const tool = externalLoopTool(exposed, root, { callRemote, isTrusted: () => false })
-    const text = await tool.run({ model: 'Order' })
+    await expect(tool.run({ model: 'Order' })).rejects.toMatchObject({
+      code: 'WORKSPACE_UNTRUSTED',
+      message: expect.stringContaining('disabled in Restricted Mode'),
+    })
     expect(callRemote).not.toHaveBeenCalled()
-    expect(text).toContain('rails__get_schema was not run')
-    expect(text).toContain('disabled in Restricted Mode')
   })
 
   it('throws when the remote tool fails, so the loop reports a failed step', async () => {

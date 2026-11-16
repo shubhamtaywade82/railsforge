@@ -195,7 +195,7 @@ describe('ExternalServerManager: calls', () => {
     h.manager.configure([spec()])
     await h.manager.toolsFor('/project', true)
     await expect(h.manager.callTool('rails', '/project', 'get_schema', { model: 'Order' })).resolves.toBe('ran get_schema')
-    expect(h.clients[0].callTool).toHaveBeenCalledWith('get_schema', { model: 'Order' }, expect.any(Number))
+    expect(h.clients[0].callTool).toHaveBeenCalledWith('get_schema', { model: 'Order' }, expect.any(Number), undefined)
   })
 
   it('refuses to call a tool the session did not expose, even when the server has it', async () => {

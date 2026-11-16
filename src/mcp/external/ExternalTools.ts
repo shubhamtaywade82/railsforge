@@ -12,7 +12,9 @@
  */
 
 import type { LoopTool } from '../../agent/AgentLoop'
-import { InvocableTool, invokeTool } from '../policy/ToolInvocation'
+import { ApprovalPort, InvocableTool, ToolCallError, invokeTool } from '../policy/ToolInvocation'
+import { LoopToolError } from '../../agent/AgentLoop'
+import { ExternalCallError } from './ExternalServerManager'
 import { SchemaNode, compileObjectSchema, validateValue } from './JsonSchemaSubset'
 
 /** The most tools one server may offer. A larger list would crowd the agent's prompt and hide the useful tools. */
@@ -91,20 +93,37 @@ export function exposeTools(serverId: string, listed: readonly RemoteToolDescrip
 
 export interface ExternalToolDeps {
   /** Calls the remote tool in the session for `root` and resolves with the text the server returned. */
-  callRemote(tool: ExposedExternalTool, root: string, args: Record<string, unknown>): Promise<string>
+  callRemote(tool: ExposedExternalTool, root: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<string>
   /** Read on every call, so a change in workspace trust applies at once. */
   isTrusted(): boolean
+  /** Asks the user for each R3 call. Without it an R3 call is refused. */
+  approval?: ApprovalPort
   warn?(message: string): void
 }
 
 export type ArgCheck = { ok: true; args: Record<string, unknown> } | { ok: false; message: string }
 
-/** Builds the loop tool the agent calls. Argument checks are JSON Schema basics; the server validates the rest. */
+/**
+ * Builds the loop tool the agent calls. Every call goes through invokeTool: arguments are validated first, the policy
+ * and the per-call approval apply, and the outcome is audited. A failure is reported to the loop with its code.
+ */
 export function externalLoopTool(tool: ExposedExternalTool, root: string, deps: ExternalToolDeps): LoopTool {
   const definition: InvocableTool<{ workspaceRoot: string }> = {
     name: tool.exposedName,
     risk: 'R2',
-    handler: async (_ctx, input) => deps.callRemote(tool, root, input),
+    description: `${tool.description} (${tool.serverId}: ${tool.remoteName})`,
+    validate: input => {
+      const result = validateValue(tool.schema, input)
+      return result.ok ? undefined : result.errors.join('; ')
+    },
+    handler: async (_ctx, input, signal) => {
+      try {
+        return await deps.callRemote(tool, root, input, signal)
+      } catch (err) {
+        if (err instanceof ExternalCallError) {throw new ToolCallError(err.code, err.message)}
+        throw err
+      }
+    },
   }
   return {
     name: tool.exposedName,
@@ -112,16 +131,16 @@ export function externalLoopTool(tool: ExposedExternalTool, root: string, deps: 
     inputSchema: {},
     jsonSchema: tool.jsonSchema,
     checkArgs: args => checkWithSchema(tool.schema, args),
-    run: async args => {
+    run: async (args, signal) => {
       const result = await invokeTool(definition, { workspaceRoot: root }, args, {
         source: 'host',
         isTrusted: deps.isTrusted,
         warn: deps.warn,
+        approval: deps.approval,
+        signal,
       })
       if (result.ok) {return result.text}
-      // A refusal is text the loop can adapt to. A failure keeps the thrown-error behaviour the loop already has.
-      if (result.code === 'TOOL_FAILED') {throw new Error(result.message)}
-      return result.message
+      throw new LoopToolError(result.code, result.message)
     },
   }
 }

@@ -26,8 +26,11 @@ export interface ExternalTransport {
 export interface ExternalClient {
   connect(transport: ExternalTransport): Promise<void>
   listTools(): Promise<RemoteToolDescriptor[]>
-  /** `text` joins the server's text content. `isError` is the server's own report that the call failed. */
-  callTool(name: string, args: Record<string, unknown>, timeoutMs: number): Promise<{ text: string; isError: boolean }>
+  /**
+   * `text` joins the server's text content. `isError` is the server's own report that the call failed. Rejects with an
+   * ExternalCallError when the call is cancelled (the signal aborts), times out, or the process goes away.
+   */
+  callTool(name: string, args: Record<string, unknown>, timeoutMs: number, signal?: AbortSignal): Promise<{ text: string; isError: boolean }>
   close(): Promise<void>
 }
 
@@ -39,6 +42,14 @@ export interface TransportLaunch {
 }
 
 export type LogLevel = 'info' | 'warn' | 'debug'
+
+/** A failed call, with the reason in `code`. The gateway reports the code to the agent unchanged. */
+export class ExternalCallError extends Error {
+  constructor(readonly code: 'CANCELLED' | 'TIMEOUT' | 'SERVER_ERROR' | 'SERVER_EXITED' | 'NOT_CONNECTED', message: string) {
+    super(message)
+    this.name = 'ExternalCallError'
+  }
+}
 
 export interface ExternalServerManagerDeps {
   createClient(): Promise<ExternalClient>
@@ -62,7 +73,8 @@ interface Session {
   spec: ExternalServerSpec
   root: string
   fingerprint: string
-  state: 'connecting' | 'ready' | 'failed'
+  /** 'stopped': its process was stopped after a cancelled call, and a later call may start it again. */
+  state: 'connecting' | 'ready' | 'failed' | 'stopped'
   client?: ExternalClient
   transport?: ExternalTransport
   tools: ExposedExternalTool[]
@@ -71,6 +83,8 @@ interface Session {
   failedAt?: number
   pending?: Promise<void>
   closed: boolean
+  /** Calls currently waiting on this process. */
+  inFlight: number
 }
 
 const DEFAULT_CONNECT_TIMEOUT_MS = 15_000
@@ -80,6 +94,8 @@ const DEFAULT_RETRY_BACKOFF_MS = 30_000
 export class ExternalServerManager {
   private specs = new Map<string, ExternalServerSpec>()
   private readonly sessions = new Map<string, Session>()
+  /** Stops still in progress. dispose() waits for them, so a process has exited before shutdown returns. */
+  private readonly teardowns = new Set<Promise<void>>()
   private readonly now: () => number
   private readonly connectTimeoutMs: number
   private readonly callTimeoutMs: number
@@ -105,10 +121,12 @@ export class ExternalServerManager {
   }
 
   /** The tools the agent may use for `root`. Starts a server only when the workspace is trusted and the server is enabled. */
-  async toolsFor(root: string, trusted: boolean): Promise<ExposedExternalTool[]> {
-    if (!trusted) {return []}
+  async toolsFor(root: string, trusted: boolean, signal?: AbortSignal): Promise<ExposedExternalTool[]> {
+    if (!trusted || signal?.aborted) {return []}
     const enabled = [...this.specs.values()].filter(spec => spec.enabled)
-    const perServer = await Promise.all(enabled.map(spec => this.ensureReady(spec, root)))
+    // A caller that cancels stops waiting. A connection already under way is kept for the next caller, so it is not
+    // started again.
+    const perServer = await Promise.all(enabled.map(spec => untilAborted(this.ensureReady(spec, root), signal, [])))
     return perServer.flat()
   }
 
@@ -126,24 +144,54 @@ export class ExternalServerManager {
     }))
   }
 
-  /** Calls one exposed tool on the session for `root`. Refuses a tool the session did not expose. */
-  async callTool(serverId: string, root: string, remoteName: string, args: Record<string, unknown>): Promise<string> {
-    const session = this.sessions.get(sessionKey(serverId, root))
+  /**
+   * Calls one exposed tool on the session for `root`. Refuses a tool the session did not expose.
+   *
+   * Cancellation: the signal is sent to the server as an MCP cancellation. If this was the only call in flight, the
+   * process is stopped too, since nothing else depends on it, and the next call starts a fresh one. A timeout stops the
+   * process and holds it back for the backoff, because its state is unknown. A server error keeps the process.
+   */
+  async callTool(serverId: string, root: string, remoteName: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<string> {
+    const key = sessionKey(serverId, root)
+    let session = this.sessions.get(key)
+    if (session?.state === 'stopped') {
+      // Only a process that a cancellation stopped is started again here. Discovery (toolsFor) is what checks trust and
+      // starts a process for the first time, so a call never starts one from nothing.
+      const spec = this.specs.get(serverId)
+      if (spec?.enabled) {await this.ensureReady(spec, root)}
+      session = this.sessions.get(key)
+    }
     if (!session || session.state !== 'ready' || !session.client) {
-      throw new Error(`${serverId} is not connected${session?.failure ? `: ${session.failure}` : ''}.`)
+      throw new ExternalCallError('NOT_CONNECTED', `${serverId} is not connected${session?.failure ? `: ${session.failure}` : ''}.`)
     }
     if (!session.tools.some(tool => tool.remoteName === remoteName)) {
-      throw new Error(`${serverId} does not expose "${remoteName}".`)
+      throw new ExternalCallError('SERVER_ERROR', `${serverId} does not expose "${remoteName}".`)
     }
-    const result = await session.client.callTool(remoteName, args, this.callTimeoutMs)
-    if (result.isError) {throw new Error(result.text || `${serverId} reported an error.`)}
+    if (signal?.aborted) {throw new ExternalCallError('CANCELLED', `${serverId} call was cancelled before it started.`)}
+
+    session.inFlight++
+    let result: { text: string; isError: boolean }
+    try {
+      result = await session.client.callTool(remoteName, args, this.callTimeoutMs, signal)
+    } catch (err) {
+      session.inFlight--
+      const error = err instanceof ExternalCallError ? err : new ExternalCallError('SERVER_ERROR', describe(err))
+      if (error.code === 'CANCELLED' && session.inFlight === 0) {
+        this.stopSession(session)
+      } else if (error.code === 'TIMEOUT') {
+        this.fail(session, `a call to ${remoteName} timed out`)
+      }
+      throw error
+    }
+    session.inFlight--
+    if (result.isError) {throw new ExternalCallError('SERVER_ERROR', result.text || `${serverId} reported an error.`)}
     return result.text
   }
 
   /** Closes every process. Safe to call more than once. */
   async dispose(): Promise<void> {
     const closing = [...this.sessions.keys()].map(key => this.closeSession(key))
-    await Promise.all(closing)
+    await Promise.all([...closing, ...this.teardowns])
   }
 
   private async ensureReady(spec: ExternalServerSpec, root: string): Promise<ExposedExternalTool[]> {
@@ -164,6 +212,7 @@ export class ExternalServerManager {
       tools: [],
       problems: [],
       closed: false,
+      inFlight: 0,
     }
     this.sessions.set(key, session)
     session.pending = this.connect(session)
@@ -197,6 +246,14 @@ export class ExternalServerManager {
     }
   }
 
+  /** Stops the process of a session whose only call was cancelled. The entry stays, so the next call can start it again. */
+  private stopSession(session: Session): void {
+    if (session.closed || session.state === 'stopped') {return}
+    session.state = 'stopped'
+    session.failure = 'stopped after a cancelled call'
+    void this.teardown(session)
+  }
+
   private fail(session: Session, reason: string): void {
     if (session.state === 'failed' || session.closed) {return}
     session.state = 'failed'
@@ -219,17 +276,22 @@ export class ExternalServerManager {
     return this.teardown(session)
   }
 
-  private async teardown(session: Session): Promise<void> {
+  private teardown(session: Session): Promise<void> {
     const client = session.client
     const transport = session.transport
     session.client = undefined
     session.transport = undefined
     session.tools = []
-    try {
-      if (client) {await client.close()} else if (transport) {await transport.close()}
-    } catch (err) {
-      this.deps.log?.('debug', `[mcp:${session.spec.id}] close: ${describe(err)}`)
-    }
+    const stopping = (async (): Promise<void> => {
+      try {
+        if (client) {await client.close()} else if (transport) {await transport.close()}
+      } catch (err) {
+        this.deps.log?.('debug', `[mcp:${session.spec.id}] close: ${describe(err)}`)
+      }
+    })()
+    this.teardowns.add(stopping)
+    void stopping.finally(() => this.teardowns.delete(stopping))
+    return stopping
   }
 }
 
@@ -252,6 +314,20 @@ function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<
     timer = setTimeout(() => reject(new Error(`${what} timed out after ${ms} ms`)), ms)
   })
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+}
+
+/** Resolves with `fallback` if the signal aborts first. The underlying promise is left to finish on its own. */
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal | undefined, fallback: T): Promise<T> {
+  if (!signal) {return promise}
+  if (signal.aborted) {return Promise.resolve(fallback)}
+  return new Promise<T>(resolve => {
+    const onAbort = (): void => resolve(fallback)
+    signal.addEventListener('abort', onAbort, { once: true })
+    promise.then(
+      value => { signal.removeEventListener('abort', onAbort); resolve(value) },
+      () => { signal.removeEventListener('abort', onAbort); resolve(fallback) },
+    )
+  })
 }
 
 function describe(err: unknown): string {

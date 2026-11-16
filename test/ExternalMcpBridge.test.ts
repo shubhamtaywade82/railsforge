@@ -4,6 +4,9 @@ import * as os from 'os'
 import * as path from 'path'
 import { ExternalMcpBridge } from '../src/mcp/external/ExternalMcpBridge'
 import { ExternalServerManager } from '../src/mcp/external/ExternalServerManager'
+import { compileObjectSchema } from '../src/mcp/external/JsonSchemaSubset'
+
+const SCHEMA = (compileObjectSchema({ type: 'object', properties: {} }) as { ok: true; root: unknown }).root
 
 function fakeManager() {
   return {
@@ -14,6 +17,7 @@ function fakeManager() {
       exposedName: 'rails__get_schema',
       description: 'Gets the schema.',
       jsonSchema: { type: 'object', properties: {} },
+      schema: SCHEMA,
     }]),
     statusFor: vi.fn(async () => []),
     callTool: vi.fn(async () => 'remote text'),
@@ -50,9 +54,9 @@ describe('ExternalMcpBridge', () => {
       const manager = fakeManager()
       const bridge = new ExternalMcpBridge(manager as unknown as ExternalServerManager, () => true, () => undefined)
       const [tool] = await bridge.loopToolsFor(root)
-      expect(manager.toolsFor).toHaveBeenCalledWith(root, true)
+      expect(manager.toolsFor.mock.calls[0].slice(0, 2)).toEqual([root, true])
       await expect(tool.run({ model: 'Order' })).resolves.toBe('remote text')
-      expect(manager.callTool).toHaveBeenCalledWith('rails', root, 'get_schema', { model: 'Order' })
+      expect(manager.callTool).toHaveBeenCalledWith('rails', root, 'get_schema', { model: 'Order' }, undefined)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
@@ -62,7 +66,7 @@ describe('ExternalMcpBridge', () => {
     const manager = fakeManager()
     const bridge = new ExternalMcpBridge(manager as unknown as ExternalServerManager, () => true, () => undefined)
     const [tool] = await bridge.loopToolsFor('/does/not/exist')
-    await expect(tool.run({ model: 'Order' })).resolves.toContain('audit record could not be written')
+    await expect(tool.run({ model: 'Order' })).rejects.toMatchObject({ code: 'AUDIT_UNAVAILABLE', message: expect.stringContaining('audit record could not be written') })
     expect(manager.callTool).not.toHaveBeenCalled()
   })
 
@@ -80,6 +84,6 @@ describe('ExternalMcpBridge', () => {
     manager.toolsFor.mockResolvedValueOnce([])
     const bridge = new ExternalMcpBridge(manager as unknown as ExternalServerManager, () => false, () => undefined)
     await expect(bridge.loopToolsFor('/project')).resolves.toEqual([])
-    expect(manager.toolsFor).toHaveBeenCalledWith('/project', false)
+    expect(manager.toolsFor.mock.calls[0].slice(0, 2)).toEqual(['/project', false])
   })
 })

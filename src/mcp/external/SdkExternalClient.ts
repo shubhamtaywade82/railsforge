@@ -12,6 +12,7 @@
  * vscode-free.
  */
 
+import { ExternalCallError } from './ExternalServerManager'
 import type { ExternalClient, ExternalServerManagerDeps, ExternalTransport, TransportLaunch } from './ExternalServerManager'
 import type { RemoteToolDescriptor } from './ExternalTools'
 
@@ -27,7 +28,7 @@ export interface SdkFactoryOptions {
 interface SdkClientLike {
   connect(transport: unknown): Promise<void>
   listTools(): Promise<{ tools: unknown[] }>
-  callTool(params: { name: string; arguments: Record<string, unknown> }, resultSchema: undefined, options: { timeout: number }): Promise<unknown>
+  callTool(params: { name: string; arguments: Record<string, unknown> }, resultSchema: undefined, options: { timeout: number; signal?: AbortSignal }): Promise<unknown>
   close(): Promise<void>
 }
 
@@ -102,14 +103,29 @@ class SdkClientAdapter implements ExternalClient {
     return listed.tools as RemoteToolDescriptor[]
   }
 
-  async callTool(name: string, args: Record<string, unknown>, timeoutMs: number): Promise<{ text: string; isError: boolean }> {
-    const result = await this.client.callTool({ name, arguments: args }, undefined, { timeout: timeoutMs }) as { content?: unknown; isError?: unknown }
-    return { text: textOf(result.content), isError: result.isError === true }
+  async callTool(name: string, args: Record<string, unknown>, timeoutMs: number, signal?: AbortSignal): Promise<{ text: string; isError: boolean }> {
+    try {
+      // The SDK sends an MCP cancellation to the server when the signal aborts, and rejects the request locally.
+      const result = await this.client.callTool({ name, arguments: args }, undefined, { timeout: timeoutMs, signal }) as { content?: unknown; isError?: unknown }
+      return { text: textOf(result.content), isError: result.isError === true }
+    } catch (err) {
+      throw classifyCallError(err, signal)
+    }
   }
 
   close(): Promise<void> {
     return this.client.close()
   }
+}
+
+/** Turns an SDK failure into the manager's codes. A cancelled signal wins over whatever the SDK reported. */
+export function classifyCallError(err: unknown, signal?: AbortSignal): ExternalCallError {
+  const message = err instanceof Error ? err.message : String(err)
+  if (signal?.aborted) {return new ExternalCallError('CANCELLED', 'The call was cancelled.')}
+  const code = (err as { code?: unknown } | null)?.code
+  if (code === -32001 || /timed out|timeout/i.test(message)) {return new ExternalCallError('TIMEOUT', message)}
+  if (/closed|exited|not connected|transport/i.test(message)) {return new ExternalCallError('SERVER_EXITED', message)}
+  return new ExternalCallError('SERVER_ERROR', message)
 }
 
 /** Joins the text blocks of a tool result. Other content (images, resources) is named, not passed through. */

@@ -12,6 +12,7 @@ import type { LoopTool } from '../../agent/AgentLoop'
 import { ExternalServerProblem, ExternalServerSpec, parseExternalServers } from './ExternalServerConfig'
 import { ExternalServerManager, ServerStatus } from './ExternalServerManager'
 import { externalLoopTool } from './ExternalTools'
+import type { ApprovalPort } from '../policy/ToolInvocation'
 
 export class ExternalMcpBridge {
   private problems: ExternalServerProblem[] = []
@@ -22,6 +23,7 @@ export class ExternalMcpBridge {
     private readonly manager: ExternalServerManager,
     private readonly isTrusted: () => boolean,
     private readonly log: (message: string) => void,
+    private readonly approval?: ApprovalPort,
   ) {}
 
   /** Re-reads the user's setting. Invalid entries are logged and left out; the valid ones are applied. */
@@ -50,12 +52,13 @@ export class ExternalMcpBridge {
    * The external tools the agent may call for `root`, as loop tools. Empty in an untrusted workspace. A failure here
    * leaves the agent with its built-in tools rather than failing the request.
    */
-  async loopToolsFor(root: string): Promise<LoopTool[]> {
+  async loopToolsFor(root: string, signal?: AbortSignal): Promise<LoopTool[]> {
     try {
-      const tools = await this.manager.toolsFor(root, this.isTrusted())
+      const tools = await this.manager.toolsFor(root, this.isTrusted(), signal)
       return tools.map(tool => externalLoopTool(tool, root, {
-        callRemote: (exposed, projectRoot, args) => this.manager.callTool(exposed.serverId, projectRoot, exposed.remoteName, args),
+        callRemote: (exposed, projectRoot, args, callSignal) => this.manager.callTool(exposed.serverId, projectRoot, exposed.remoteName, args, callSignal),
         isTrusted: this.isTrusted,
+        approval: this.approval,
         warn: message => this.log(message),
       }))
     } catch (err) {

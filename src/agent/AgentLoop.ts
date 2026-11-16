@@ -19,7 +19,16 @@ export interface LoopTool {
    */
   jsonSchema?: Record<string, unknown>
   checkArgs?(args: Record<string, unknown>): ArgCheck
-  run(args: Record<string, unknown>): Promise<string>
+  /** Runs the tool. The signal is aborted when the operation is cancelled; the tool should stop and reject. */
+  run(args: Record<string, unknown>, signal?: AbortSignal): Promise<string>
+}
+
+/** A tool failure with a code the model can act on (for example APPROVAL_DENIED or TIMEOUT). */
+export class LoopToolError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message)
+    this.name = 'LoopToolError'
+  }
 }
 
 export type CompleteFn = (system: string, user: string) => Promise<{ success: boolean; response: string }>
@@ -35,13 +44,15 @@ export interface AgentLoopOptions {
   maxBlocksChecked?: number
 }
 
-export type StopReason = 'final' | 'max-steps' | 'budget' | 'repeat' | 'provider-error'
+export type StopReason = 'final' | 'max-steps' | 'budget' | 'repeat' | 'provider-error' | 'cancelled'
 
 export interface ToolStep {
   tool: string
   args: Record<string, unknown>
   ok: boolean
   chars: number
+  /** Set when the tool failed with a code, so the outcome is structured and not only text. */
+  code?: string
 }
 
 export interface Verification {
@@ -65,6 +76,8 @@ export interface AgentLoopInput {
   prompt: string
   complete: CompleteFn
   tools: readonly LoopTool[]
+  /** Cancels the operation: the running tool is cancelled and the loop stops with stopped: 'cancelled'. */
+  signal?: AbortSignal
   syntax?: SyntaxFn
   verifier?: VerifierFn
   options?: AgentLoopOptions
@@ -127,15 +140,22 @@ function plainAnswer(text: string): string {
 
 const clip = (text: string, max: number): string => (text.length <= max ? text : `${text.slice(0, max)}\n…[truncated ${text.length - max} characters]`)
 
-async function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+async function withTimeout<T>(promise: Promise<T>, ms: number, what: string, signal?: AbortSignal): Promise<T> {
   let timer: NodeJS.Timeout | undefined
+  let onAbort: (() => void) | undefined
   try {
     return await Promise.race([
       promise,
       new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${what} timed out after ${ms}ms`)), ms) }),
+      new Promise<never>((_, reject) => {
+        if (!signal) {return}
+        onAbort = () => reject(new LoopToolError('CANCELLED', `${what} was cancelled`))
+        if (signal.aborted) {onAbort()} else {signal.addEventListener('abort', onAbort, { once: true })}
+      }),
     ])
   } finally {
     clearTimeout(timer)
+    if (signal && onAbort) {signal.removeEventListener('abort', onAbort)}
   }
 }
 
@@ -196,17 +216,27 @@ function typeLabel(prop: { type?: unknown; enum?: unknown[] }): string {
   return typeof prop.type === 'string' ? prop.type : 'any'
 }
 
-async function executeTool(tool: LoopTool, args: Record<string, unknown>, timeoutMs: number, maxChars: number): Promise<{ step: ToolStep; text: string }> {
+async function executeTool(tool: LoopTool, args: Record<string, unknown>, timeoutMs: number, maxChars: number, signal?: AbortSignal): Promise<{ step: ToolStep; text: string }> {
   let text: string
   let ok = true
+  let code: string | undefined
   try {
-    text = await withTimeout(tool.run(args), timeoutMs, tool.name)
+    // The signal is passed only when there is one, so a tool called without cancellation sees the same call as before.
+    text = await withTimeout(signal ? tool.run(args, signal) : tool.run(args), timeoutMs, tool.name, signal)
   } catch (err) {
     ok = false
-    text = `Error running ${tool.name}: ${err instanceof Error ? err.message : String(err)}`
+    code = codeOf(err)
+    text = `Error running ${tool.name}${code ? ` [${code}]` : ''}: ${err instanceof Error ? err.message : String(err)}`
   }
   const clipped = clip(text, maxChars)
-  return { step: { tool: tool.name, args, ok, chars: clipped.length }, text: clipped }
+  const step: ToolStep = { tool: tool.name, args, ok, chars: clipped.length }
+  if (code) {step.code = code}
+  return { step, text: clipped }
+}
+
+function codeOf(err: unknown): string | undefined {
+  const code = (err as { code?: unknown } | null)?.code
+  return typeof code === 'string' && code.length > 0 ? code : undefined
 }
 
 export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopResult> {
@@ -230,7 +260,10 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopResu
 
   const user = (extra?: string): string => [input.prompt, ...(transcript.length ? ['', '## Tool results so far', ...transcript] : []), ...(extra ? ['', extra] : [])].join('\n')
 
+  const cancelled = (): AgentLoopResult => ({ success: false, response: 'Cancelled.', steps, stopped: 'cancelled' })
+
   for (let turn = 0; ; turn++) {
+    if (input.signal?.aborted) {return cancelled()}
     const reply = await complete(system, user())
     if (!reply.success) { return { success: false, response: reply.response, steps, stopped: 'provider-error' } }
     const call = tools.length > 0 ? parseToolCall(reply.response) : null
@@ -273,9 +306,10 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopResu
       continue
     }
 
-    const { step, text } = await executeTool(tool, checked.args, opts.toolTimeoutMs, opts.maxResultChars)
+    const { step, text } = await executeTool(tool, checked.args, opts.toolTimeoutMs, opts.maxResultChars, input.signal)
     toolChars += text.length
     steps.push(step)
+    if (input.signal?.aborted) {return cancelled()}
     log?.(`[agent-loop] ${tool.name} -> ${text.length} chars${step.ok ? '' : ' (error)'}`)
     transcript.push(`### ${tool.name}(${JSON.stringify(checked.args)})\n${text}`)
   }
