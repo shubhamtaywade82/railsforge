@@ -65,7 +65,14 @@ describe('external servers offered to the editor\'s own agent, in a real Extensi
       this.skip()
     }
     await config().update(SETTING, [{ id: 'ask-ruby', command: 'node', args: ['--version'], exposeToEditor: true }], vscode.ConfigurationTarget.Global)
-    await until(() => api.editorExternalDefinitions().length === 2)
+    try {
+      await until(() => api.editorExternalDefinitions().length === 2)
+    } catch {
+      // Report the state, not just the timeout: which value the user setting has and what the editor is offered.
+      assert.fail(`expected 2 definitions; offered=${JSON.stringify(api.editorExternalDefinitions())}; `
+        + `user value=${JSON.stringify(config().inspect('mcp.servers')?.globalValue)}; trusted=${vscode.workspace.isTrusted}; `
+        + `folders=${JSON.stringify(vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath))}`)
+    }
     const definitions = api.editorExternalDefinitions()
     assert.deepStrictEqual(
       definitions.map(d => ({ label: d.label, command: d.command, cwd: d.cwd })).sort((a, b) => a.label.localeCompare(b.label)),
