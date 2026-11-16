@@ -131,3 +131,57 @@ end
     expect(pattern.publicMethods).toContain('call')
   })
 })
+
+describe('ProjectPatternIndexer: methods Ruby makes private by default are not public', () => {
+  it('leaves out initialize and its copy hooks, which are private in every class', () => {
+    const indexer = new ProjectPatternIndexer()
+    indexer.indexFile('/repo/app/services/create_order_service.rb', `
+class CreateOrderService
+  def initialize(customer)
+    @customer = customer
+  end
+
+  def initialize_copy(source)
+    @customer = source.customer
+  end
+
+  def call
+    true
+  end
+end
+`)
+    expect(indexer.getPatternsByType('service')[0].publicMethods).toEqual(['call'])
+  })
+
+  it('keeps a class-level initialize, which is an ordinary public singleton method', () => {
+    const indexer = new ProjectPatternIndexer()
+    indexer.indexFile('/repo/app/services/factory_service.rb', `
+class FactoryService
+  def self.initialize
+    new
+  end
+
+  def call
+    true
+  end
+end
+`)
+    expect(indexer.getPatternsByType('service')[0].publicMethods).toEqual(['initialize', 'call'])
+  })
+
+  it('does not depend on the visibility keyword to exclude initialize', () => {
+    const indexer = new ProjectPatternIndexer()
+    indexer.indexFile('/repo/app/services/private_service.rb', `
+class PrivateService
+  private
+
+  def initialize
+  end
+
+  def helper
+  end
+end
+`)
+    expect(indexer.getPatternsByType('service')[0].publicMethods).toEqual([])
+  })
+})

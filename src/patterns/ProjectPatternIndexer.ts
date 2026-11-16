@@ -29,6 +29,9 @@ const DIR_TYPE_MAP: Array<{ segment: string; type: PatternType }> = [
   { segment: '/concerns/', type: 'concern' },
 ]
 
+/** Instance methods Ruby makes private by default (Object#initialize and its copy hooks, respond_to_missing?). */
+const ALWAYS_PRIVATE_METHODS: ReadonlySet<string> = new Set(['initialize', 'initialize_copy', 'initialize_clone', 'initialize_dup', 'respond_to_missing?'])
+
 export class ProjectPatternIndexer {
   private patterns: Map<string, IndexedPattern> = new Map()
 
@@ -154,7 +157,9 @@ export class ProjectPatternIndexer {
         const defMatch = /^def\s+(?:self\.)?([a-zA-Z0-9_?!=]+)/.exec(trimmed)
         if (defMatch) {
           const isEndlessMethod = /\)\s*=(?!=|>)/.test(trimmed) || /^def\s+\S+\s*=(?!=|>)/.test(trimmed)
-          if (!sawPrivate) {methods.push(defMatch[1])}
+          // Ruby makes these instance methods private whatever the enclosing visibility keyword says.
+          const alwaysPrivate = !/^def\s+self\./.test(trimmed) && ALWAYS_PRIVATE_METHODS.has(defMatch[1])
+          if (!sawPrivate && !alwaysPrivate) {methods.push(defMatch[1])}
           if (!isEndlessMethod) {depth++}
           continue
         }
