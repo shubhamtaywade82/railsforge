@@ -25,7 +25,14 @@ const client = new Client({ name: 'interop-check', version: '1.0.0' })
 async function call(name, args) {
   try {
     const result = await client.callTool({ name, arguments: args })
-    return { ok: true, isError: result.isError === true, text: result.content?.[0]?.text ?? null, content: result.content ?? [] }
+    return {
+      ok: true,
+      isError: result.isError === true,
+      text: result.content?.[0]?.text ?? null,
+      content: result.content ?? [],
+      structured: result.structuredContent ?? null,
+      meta: result._meta ?? null,
+    }
   } catch (err) {
     return { ok: false, code: err?.code ?? null, message: String(err?.message ?? err) }
   }
@@ -45,10 +52,17 @@ try {
   report.unknownTool = await call('no_such_tool', {})
   report.healthRoute = await call('list_routes', { filter: 'health' })
   report.servedAfterErrors = await call('list_routes', { filter: 'orders' })
+  report.listPatterns = await call('list_patterns', { type: 'service' })
+  report.listSkills = await call('list_skills', {})
+  report.untrustedRake = await call('list_rake_tasks', {})
+  report.noIndex = await call('get_dependencies', { name: 'Order' })
+  // A transport that is closed is a transport failure: the call must not look like a tool result.
+  await transport.close()
+  report.afterTransportClosed = await call('list_routes', { filter: 'orders' })
 } catch (err) {
   report.errors.push(String(err?.stack ?? err))
 } finally {
-  await client.close()
+  try { await client.close() } catch { /* already closed above */ }
   const started = Date.now()
   while (!serverClosed && Date.now() - started < 5000) {
     await new Promise(resolve => setTimeout(resolve, 20))

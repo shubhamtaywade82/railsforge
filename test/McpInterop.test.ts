@@ -24,6 +24,8 @@ interface CallReport {
   text?: string | null
   code?: number | null
   message?: string
+  structured?: Record<string, unknown> | null
+  meta?: { railsforge?: { code?: string } } | null
 }
 
 interface Report {
@@ -37,6 +39,11 @@ interface Report {
   unknownTool: CallReport
   healthRoute: CallReport
   servedAfterErrors: CallReport
+  listPatterns: CallReport
+  listSkills: CallReport
+  untrustedRake: CallReport
+  noIndex: CallReport
+  afterTransportClosed: CallReport
   serverClosedAfterClose: boolean
   serverStderr: string
 }
@@ -127,5 +134,42 @@ describe('an independent MCP client, in its own process, against RailsForge\'s s
     expect(bundle).not.toMatch(/require\(["']vscode["']\)/)
     const client = fs.readFileSync(CLIENT, 'utf8')
     expect(client).not.toMatch(/from ['"]\.\.?\/(\.\.\/)*src\//)
+  })
+  it('list_patterns returns structured data that the SDK client validated against its declared output schema', () => {
+    const call = report.listPatterns
+    expect(call.ok).toBe(true)
+    expect(call.isError).toBe(false)
+    expect(call.structured).toMatchObject({ patterns: expect.arrayContaining([expect.objectContaining({ name: 'CreateOrderService', type: 'service' })]) })
+  })
+
+  it('the text and the structured value of a list are the same data', () => {
+    const routes = JSON.parse(report.listRoutesOrders.text ?? 'null') as unknown
+    expect(report.listRoutesOrders.structured).toEqual({ routes })
+  })
+
+  it('list_skills returns the count and the list, consistent with each other', () => {
+    const call = report.listSkills
+    expect(call.ok).toBe(true)
+    expect(call.isError).toBe(false)
+    const data = call.structured as { count: number; skills: unknown[]; source: string | null }
+    expect(data.skills.length).toBe(data.count)
+    expect(data.count).toBeGreaterThan(0)
+  })
+
+  it('project code refused in an untrusted workspace is an error with its code in _meta, and the server keeps serving', () => {
+    expect(report.untrustedRake.isError).toBe(true)
+    expect(report.untrustedRake.meta?.railsforge?.code).toBe('EXECUTION_DISABLED')
+    expect(report.untrustedRake.structured ?? null).toBeNull()
+    expect(report.servedAfterErrors.isError).toBe(false)
+  })
+
+  it('a tool whose index is not built is an error with INDEX_UNAVAILABLE, not a text answer', () => {
+    expect(report.noIndex.isError).toBe(true)
+    expect(report.noIndex.meta?.railsforge?.code).toBe('INDEX_UNAVAILABLE')
+  })
+
+  it('a call after the transport is closed fails as a transport failure, not as a tool result', () => {
+    expect(report.afterTransportClosed.ok).toBe(false)
+    expect(report.afterTransportClosed.message).toBeTruthy()
   })
 })
