@@ -22,6 +22,11 @@
 - **A server stopped by a cancellation is reported as stopped.** It was marked failed, and its tools were withheld for 30 seconds, even though nothing had gone wrong.
 
 ### Added
+- **Structured results from the standalone MCP server.** `list_routes`, `list_patterns`, `list_skills` and `list_rake_tasks` return `structuredContent` as well as the text they always returned. The structure is checked against a declared output schema on every call. Other tools are still text only.
+- **Coded errors from the standalone MCP server.** A failed call is `isError`, with its code in `_meta.railsforge.code`: for example `EXECUTION_DISABLED`, `INDEX_UNAVAILABLE` and `SKILLS_UNAVAILABLE`. A cancellation from the client stops the tool, and is reported as `CANCELLED`.
+- **Claude Code acceptance.** `scripts/acceptance/claude-code-mcp.mjs` registers the standalone server with the installed Claude Code, runs two sessions, and removes the registration. The result is in `docs/mcp-compatibility-matrix.md`.
+- **Compatibility matrix.** `docs/mcp-compatibility-matrix.md` records each integration as implemented, automated, interoperability verified, or production verified, with the evidence for each.
+
 - **Pydantic's nullable `anyOf` is supported.** An optional field that pydantic writes as `anyOf: [<type>, {"type": "null"}]` is offered to the agent, and its constraints are enforced. Any other `anyOf` is still refused, with the reason.
 - **The approval prompt closes when its request stops.** It is a Quick Pick instead of a modal message, so a Stop, or a timeout, hides it. A late answer never runs a stopped call.
 - **Stop in the chat.** While a request runs, Stop appears beside Send. It ends the model request (OpenAI-compatible, Anthropic, Ollama and the VS Code language model), any external tool and its process. The answer is reported as cancelled. A second request is refused until the first has finished.
