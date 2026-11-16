@@ -444,6 +444,68 @@
           "description": "Whether 'RailsForge: Export Cursor Rules & Register MCP Server' also registers the RailsForge MCP server (in .cursor/mcp.json). When false, that command still writes .cursor/rules/railsforge.mdc but skips MCP server registration. The MCP server itself always runs over stdio, started on demand by the MCP client (Cursor/Claude Code) — there is no in-editor 'server process' to start/stop or a port to configure.",
           "scope": "machine-overridable"
         },
+        "railsForge.mcp.servers": {
+          "type": "array",
+          "default": [],
+          "scope": "application",
+          "markdownDescription": "External **stdio** MCP servers the RailsForge agent may use, such as `rails-ai-context` or `ask-rails-harness-mcp`. Each server is started in the project root. **Only user settings are read here:** a workspace `.vscode/settings.json` cannot start a process. Nothing is offered to the agent unless its tool is listed in `allowTools`. Run **RailsForge: Test External MCP Servers** to see what each server provides. Secrets are not stored here; `env` values are plain text.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "command"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{0,31}$",
+                "description": "Short unique name, for example \"rails-ai-context\". It prefixes the tool names the agent sees."
+              },
+              "enabled": {
+                "type": "boolean",
+                "default": true,
+                "description": "Set to false to keep the entry without starting the server."
+              },
+              "transport": {
+                "type": "string",
+                "enum": [
+                  "stdio"
+                ],
+                "default": "stdio",
+                "description": "Only \"stdio\" is supported for now."
+              },
+              "command": {
+                "type": "string",
+                "description": "The executable to start, for example \"bundle\" or the full path to a global tool."
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": [],
+                "description": "Arguments passed to the command, for example [\"exec\", \"ask-rails-harness-mcp\"]."
+              },
+              "env": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "default": {},
+                "description": "Extra environment variables for the server process, in addition to the usual ones. Values are stored in plain text."
+              },
+              "allowTools": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": [],
+                "description": "Names of the server's tools that the agent may call. Tools not listed here are never offered."
+              }
+            }
+          }
+        },
         "railsForge.apiDocs.enabled": {
           "type": "boolean",
           "default": true,

@@ -7,10 +7,18 @@
 import { z } from 'zod'
 import { SyntaxCheck } from '../util/RubySyntax'
 
+export type ArgCheck = { ok: true; args: Record<string, unknown> } | { ok: false; message: string }
+
 export interface LoopTool {
   name: string
   description: string
   inputSchema: z.ZodRawShape
+  /**
+   * Set by tools whose schema comes from an outside server (an external MCP tool). The schema is shown to the model
+   * and the arguments are checked with `checkArgs` instead of zod.
+   */
+  jsonSchema?: Record<string, unknown>
+  checkArgs?(args: Record<string, unknown>): ArgCheck
   run(args: Record<string, unknown>): Promise<string>
 }
 
@@ -95,8 +103,8 @@ export function parseToolCall(text: string): ParsedToolCall | { error: string } 
 export function describeTools(tools: readonly LoopTool[]): string {
   if (tools.length === 0) {return ''}
   const lines = tools.map(t => {
-    const json = z.toJSONSchema(z.object(t.inputSchema)) as { properties?: Record<string, { type?: string; enum?: unknown[] }>; required?: string[] }
-    const props = Object.entries(json.properties ?? {}).map(([k, v]) => `${k}${(json.required ?? []).includes(k) ? '' : '?'}: ${v.enum ? v.enum.join('|') : v.type ?? 'any'}`)
+    const json = (t.jsonSchema ?? z.toJSONSchema(z.object(t.inputSchema))) as { properties?: Record<string, { type?: unknown; enum?: unknown[] }>; required?: string[] }
+    const props = Object.entries(json.properties ?? {}).map(([k, v]) => `${k}${(json.required ?? []).includes(k) ? '' : '?'}: ${typeLabel(v)}`)
     return `- ${t.name}(${props.join(', ')}) — ${t.description.split(/(?<=\.)\s/)[0]}`
   })
   return [
@@ -174,6 +182,20 @@ function formatIssues(v: Verification): string {
   return (v.verifierIssues ?? []).map(i => `- ${i}`).join('\n')
 }
 
+function checkToolArgs(tool: LoopTool, args: Record<string, unknown>): ArgCheck {
+  if (tool.checkArgs) {return tool.checkArgs(args)}
+  const parsed = z.object(tool.inputSchema).safeParse(args)
+  if (parsed.success) {return { ok: true, args: parsed.data as Record<string, unknown> }}
+  return { ok: false, message: parsed.error.issues.map(i => `${i.path.join('.') || 'arguments'}: ${i.message}`).join('; ') }
+}
+
+/** A short label for one property in the tool list shown to the model. */
+function typeLabel(prop: { type?: unknown; enum?: unknown[] }): string {
+  if (prop.enum) {return prop.enum.join('|')}
+  if (Array.isArray(prop.type)) {return prop.type.join('|')}
+  return typeof prop.type === 'string' ? prop.type : 'any'
+}
+
 async function executeTool(tool: LoopTool, args: Record<string, unknown>, timeoutMs: number, maxChars: number): Promise<{ step: ToolStep; text: string }> {
   let text: string
   let ok = true
@@ -244,18 +266,18 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopResu
     }
     seen.add(key)
 
-    const parsed = z.object(tool.inputSchema).safeParse(call.args)
-    if (!parsed.success) {
-      transcript.push(`(system) Invalid arguments for ${tool.name}: ${parsed.error.issues.map(i => `${i.path.join('.') || 'arguments'}: ${i.message}`).join('; ')}`)
+    const checked = checkToolArgs(tool, call.args)
+    if (!checked.ok) {
+      transcript.push(`(system) Invalid arguments for ${tool.name}: ${checked.message}`)
       steps.push({ tool: tool.name, args: call.args, ok: false, chars: 0 })
       continue
     }
 
-    const { step, text } = await executeTool(tool, parsed.data as Record<string, unknown>, opts.toolTimeoutMs, opts.maxResultChars)
+    const { step, text } = await executeTool(tool, checked.args, opts.toolTimeoutMs, opts.maxResultChars)
     toolChars += text.length
     steps.push(step)
     log?.(`[agent-loop] ${tool.name} -> ${text.length} chars${step.ok ? '' : ' (error)'}`)
-    transcript.push(`### ${tool.name}(${JSON.stringify(parsed.data)})\n${text}`)
+    transcript.push(`### ${tool.name}(${JSON.stringify(checked.args)})\n${text}`)
   }
 
   let verification = (input.syntax || input.verifier)
