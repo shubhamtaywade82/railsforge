@@ -11,6 +11,7 @@ import { OllamaClient } from '@nemesis-oss/ollama-sdk'
 import { parseUnifiedDiff } from '../patch/UnifiedDiff'
 import { LoopTool, runAgentLoop } from './AgentLoop'
 import { checkRubySyntax } from '../util/RubySyntax'
+import { anySignal } from '../util/CancellationSignal'
 
 /** True when `text` carries unified-diff markers, even if it failed to parse as one. */
 function looksLikeDiff(text: string): boolean {
@@ -90,7 +91,8 @@ export interface RailsAgentConfig {
    * (`vscode.lm.selectChatModels` / `model.sendRequest`) and resolves with the full text.
    * Injected by the extension so this class stays free of a `vscode` import.
    */
-  vscodeLmRequest?: (systemPrompt: string, prompt: string) => Promise<string>
+  /** Asks the VS Code language model. The signal, when given, cancels the request. */
+  vscodeLmRequest?: (systemPrompt: string, prompt: string, signal?: AbortSignal) => Promise<string>
   /** 'vscode-lm' only: reports whether a usable model is available. */
   vscodeLmStatus?: () => Promise<ProviderStatus>
   vscodeLmFamily?: string
@@ -211,7 +213,8 @@ export class RailsAgent {
       const systemPrompt = context.isolatedSystemPrompt ?? ISOLATED_SYSTEM_PROMPT
       const provider = this.config.provider ?? 'ollama'
       this.log('debug', `[AI] ${provider} isolated request: model=${this.modelFor(provider)}, prompt=${prompt.length} chars`)
-      const { success, response } = await this.chatCompletion(systemPrompt, prompt)
+      const { success, response } = await this.chatCompletion(systemPrompt, prompt, context.signal)
+      if (context.signal?.aborted) {return { success: false, response: 'Cancelled.', iterations: 0 }}
       return { success, response, iterations: success ? 1 : 0 }
     }
     context = await this.enrich(prompt, context)
@@ -230,7 +233,7 @@ export class RailsAgent {
         system: systemPrompt,
         signal: context.signal,
         prompt,
-        complete: (system, user) => this.chatCompletion(system, user),
+        complete: (system, user, signal) => this.chatCompletion(system, user, signal),
         tools,
         syntax: loop.verifySyntax ? code => checkRubySyntax(code) : undefined,
         options: { maxSteps: loop.maxSteps },
@@ -240,7 +243,8 @@ export class RailsAgent {
       return { success: result.success, response: result.response, iterations: result.steps.length + 1 }
     }
 
-    const { success, response } = await this.chatCompletion(systemPrompt, prompt)
+    const { success, response } = await this.chatCompletion(systemPrompt, prompt, context.signal)
+    if (context.signal?.aborted) {return { success: false, response: 'Cancelled.', iterations: 0 }}
     this.log('debug', `[AI] ${provider} response in ${Date.now() - startedAt}ms (${response.length} chars): ${truncate(response, 4000)}`)
     return { success, response, iterations: success ? 1 : 0 }
   }
@@ -256,7 +260,7 @@ export class RailsAgent {
     this.config.log?.(level, message)
   }
 
-  private async chatCompletion(systemPrompt: string, prompt: string): Promise<{ success: boolean; response: string }> {
+  private async chatCompletion(systemPrompt: string, prompt: string, signal?: AbortSignal): Promise<{ success: boolean; response: string }> {
     const provider = this.config.provider ?? 'ollama'
 
     if (provider === 'vscode-lm') {
@@ -264,7 +268,7 @@ export class RailsAgent {
         return { success: false, response: 'The VS Code Language Model API is not available in this editor. Switch railsForge.ai.provider to ollama/openai/anthropic.' }
       }
       try {
-        return { success: true, response: await this.config.vscodeLmRequest(systemPrompt, prompt) }
+        return { success: true, response: await this.config.vscodeLmRequest(systemPrompt, prompt, signal) }
       } catch (err) {
         return { success: false, response: `VS Code language model error: ${err instanceof Error ? err.message : String(err)}` }
       }
@@ -273,7 +277,7 @@ export class RailsAgent {
     if (provider === 'anthropic') {
       const apiKey = await this.config.getApiKey?.()
       if (!apiKey) {return this.missingApiKeyResult('Anthropic')}
-      return this.callAnthropic(systemPrompt, prompt, this.config.anthropicModel ?? 'claude-sonnet-4-5', apiKey)
+      return this.callAnthropic(systemPrompt, prompt, this.config.anthropicModel ?? 'claude-sonnet-4-5', apiKey, signal)
     }
 
     if (provider === 'openai') {
@@ -292,17 +296,23 @@ export class RailsAgent {
         prompt,
         apiKey,
         'OpenAI',
+        signal,
       )
     }
 
-    return this.callOllama(systemPrompt, prompt)
+    return this.callOllama(systemPrompt, prompt, signal)
   }
 
-  private async createOllamaClient(): Promise<OllamaClient> {
+  /**
+   * A client for one request. The client's public chat call takes no signal, so the signal is attached at the fetch the
+   * client makes: aborting it aborts the HTTP request, not just the wait for it.
+   */
+  private async createOllamaClient(signal?: AbortSignal): Promise<OllamaClient> {
     const key = this.config.ollamaApiKey || (this.config.provider === 'ollama' ? await this.config.getApiKey?.() : undefined)
     const hasCreds = this.config.ollamaCredentials && Object.keys(this.config.ollamaCredentials).length > 0
     return new OllamaClient({
       baseUrl: this.config.ollamaHost,
+      ...(signal ? { fetch: (input, init) => globalThis.fetch(input, { ...init, signal: anySignal(init?.signal ?? undefined, signal) }) } : {}),
       ...(key ? { apiKey: key } : {}),
       ...(hasCreds ? {
         credentials: this.config.ollamaCredentials,
@@ -327,9 +337,9 @@ export class RailsAgent {
     })
   }
 
-  private async callOllama(systemPrompt: string, prompt: string): Promise<{ success: boolean; response: string }> {
+  private async callOllama(systemPrompt: string, prompt: string, signal?: AbortSignal): Promise<{ success: boolean; response: string }> {
     try {
-      const client = await this.createOllamaClient()
+      const client = await this.createOllamaClient(signal)
       const chatRes = await client.chat({
         model: this.config.model,
         messages: [
@@ -378,6 +388,7 @@ export class RailsAgent {
     prompt: string,
     apiKey: string | undefined,
     connectionLabel: string,
+    signal?: AbortSignal,
   ): Promise<{ success: boolean; response: string }> {
     try {
       const payload = {
@@ -399,7 +410,7 @@ export class RailsAgent {
           ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(this.config.timeoutMs ?? 120000),
+        signal: anySignal(signal, AbortSignal.timeout(this.config.timeoutMs ?? 120000)),
       })
 
       if (!res.ok) {
@@ -425,6 +436,7 @@ export class RailsAgent {
     prompt: string,
     model: string,
     apiKey: string,
+    signal?: AbortSignal,
   ): Promise<{ success: boolean; response: string }> {
     try {
       const payload = {
@@ -446,7 +458,7 @@ export class RailsAgent {
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(this.config.timeoutMs ?? 120000),
+        signal: anySignal(signal, AbortSignal.timeout(this.config.timeoutMs ?? 120000)),
       })
 
       if (!res.ok) {

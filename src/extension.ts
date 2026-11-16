@@ -417,7 +417,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
       if (!projectRoot) {return ''}
       return buildSemanticContext(semanticContexts.get(projectRoot).getSemanticGraph(), { filePath: fileName, prompt, maxChars: 3500 })
     },
-    vscodeLmRequest: (system, prompt) => requestViaVsCodeLm(system, prompt, readConfig().aiVscodeLmFamily, readConfig().aiTimeoutMs),
+    vscodeLmRequest: (system, prompt, signal) => requestViaVsCodeLm(system, prompt, readConfig().aiVscodeLmFamily, readConfig().aiTimeoutMs, signal),
     vscodeLmStatus: () => vscodeLmStatus(readConfig().aiVscodeLmFamily),
     log: (level: 'debug' | 'trace' | 'warn', message: string) => {
       if (level === 'debug') { Logger.debug(message) }
@@ -1465,7 +1465,7 @@ async function selectVsCodeLmModel(family: string): Promise<vscode.LanguageModel
 }
 
 /** One system+user request through VS Code's Language Model API (the user is asked for consent on first use). */
-async function requestViaVsCodeLm(system: string, prompt: string, family: string, timeoutMs: number): Promise<string> {
+async function requestViaVsCodeLm(system: string, prompt: string, family: string, timeoutMs: number, signal?: AbortSignal): Promise<string> {
   const model = await selectVsCodeLmModel(family)
   if (!model) {
     throw new Error(family
@@ -1474,6 +1474,9 @@ async function requestViaVsCodeLm(system: string, prompt: string, family: string
   }
   const source = new vscode.CancellationTokenSource()
   const timer = setTimeout(() => source.cancel(), timeoutMs)
+  // A cancelled operation cancels the editor's request too, so the model stops generating.
+  const onAbort = (): void => source.cancel()
+  if (signal?.aborted) {source.cancel()} else {signal?.addEventListener('abort', onAbort, { once: true })}
   try {
     // The Language Model API has no system role: fold the system prompt into the first user message.
     const messages = [vscode.LanguageModelChatMessage.User(`${system}\n\n---\n\n${prompt}`)]
@@ -1483,6 +1486,7 @@ async function requestViaVsCodeLm(system: string, prompt: string, family: string
     return text
   } finally {
     clearTimeout(timer)
+    signal?.removeEventListener('abort', onAbort)
     source.dispose()
   }
 }

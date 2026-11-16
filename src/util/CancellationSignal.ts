@@ -20,3 +20,20 @@ export function signalFromCancellation(token: CancellationLike): AbortSignal {
   }
   return controller.signal
 }
+
+/**
+ * One AbortSignal that aborts as soon as any of the given signals does. Undefined entries are ignored, and an entry that
+ * is already aborted gives an aborted signal. Used to add a request timeout to a caller's cancellation.
+ */
+export function anySignal(...signals: Array<AbortSignal | undefined>): AbortSignal {
+  const controller = new AbortController()
+  for (const signal of signals) {
+    if (!signal) {continue}
+    if (signal.aborted) {
+      controller.abort(signal.reason)
+      break
+    }
+    signal.addEventListener('abort', () => controller.abort(signal.reason), { once: true })
+  }
+  return controller.signal
+}
