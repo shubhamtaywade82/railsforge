@@ -109,7 +109,7 @@ export interface RailsAgentConfig {
    * (see LoopTools.ts). Injected so this class stays free of fs/vscode.
    */
   /** May be asynchronous: external MCP tools need their server connected before the model can be shown them. */
-  loopTools?: (workspaceRoot: string | undefined) => LoopTool[] | Promise<LoopTool[]>
+  loopTools?: (workspaceRoot: string | undefined, signal?: AbortSignal) => LoopTool[] | Promise<LoopTool[]>
   toolLoop?: ToolLoopSettings
   /**
    * Host-provided logging callback (wired in extension.ts to the RailsForge
@@ -133,6 +133,8 @@ export interface RailsAgentContext {
   fileName?: string
   selection?: string
   workspaceRoot?: string
+  /** Cancels the operation: a running tool is cancelled, and the tool loop stops. */
+  signal?: AbortSignal
   /** Chat slash command (`optimize`, `fix`, ...) that produced this request, if any. */
   command?: string
   /** Filled by RailsAgent.run() from config.semanticContext. */
@@ -222,10 +224,11 @@ export class RailsAgent {
     // Bounded tool loop + Ruby syntax verification for ordinary requests. Fix flows need a bare
     // diff/snippet back, so they keep the single-completion path.
     const loop = this.config.toolLoop
-    const tools = !context.isFix && loop?.enabled ? await this.config.loopTools?.(context.workspaceRoot) ?? [] : []
+    const tools = !context.isFix && loop?.enabled ? await this.config.loopTools?.(context.workspaceRoot, context.signal) ?? [] : []
     if (!context.isFix && loop?.enabled && (tools.length > 0 || loop.verifySyntax)) {
       const result = await runAgentLoop({
         system: systemPrompt,
+        signal: context.signal,
         prompt,
         complete: (system, user) => this.chatCompletion(system, user),
         tools,

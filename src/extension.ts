@@ -393,10 +393,10 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     getApiKey: async () => context.secrets.get(aiApiKeySecretKey(readConfig().aiProvider)),
     vscodeLmFamily: cfg.aiVscodeLmFamily,
     toolLoop: { enabled: cfg.agentToolLoop, maxSteps: cfg.agentMaxToolSteps, verifySyntax: cfg.agentVerifySyntax },
-    loopTools: async root => {
+    loopTools: async (root, signal) => {
       if (!root) {return []}
       const builtIn = createLoopTools(semanticContexts.get(root))
-      return readConfig().mcpEnabled ? [...builtIn, ...await externalMcp.loopToolsFor(root)] : builtIn
+      return readConfig().mcpEnabled ? [...builtIn, ...await externalMcp.loopToolsFor(root, signal)] : builtIn
     },
     skillContext: ({ prompt, command, fileName, workspaceRoot: root, diagnosticMessage }) => {
       const settings = readConfig()
