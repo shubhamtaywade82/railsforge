@@ -69,7 +69,9 @@ describe('external servers offered to the editor\'s own agent, in a real Extensi
       await until(() => api.editorExternalDefinitions().length === 2)
     } catch {
       // Report the state, not just the timeout: which value the user setting has and what the editor is offered.
-      assert.fail(`expected 2 definitions; offered=${JSON.stringify(api.editorExternalDefinitions())}; `
+      const lm = (vscode as unknown as { lm?: { registerMcpServerDefinitionProvider?: unknown } }).lm
+      assert.fail(`expected 2 definitions; gate=${hostOffersEditorDefinitions()}; version=${vscode.version}; `
+        + `lmFunction=${typeof lm?.registerMcpServerDefinitionProvider}; offered=${JSON.stringify(api.editorExternalDefinitions())}; `
         + `user value=${JSON.stringify(config().inspect('mcp.servers')?.globalValue)}; trusted=${vscode.workspace.isTrusted}; `
         + `folders=${JSON.stringify(vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath))}`)
     }
