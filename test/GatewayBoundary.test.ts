@@ -20,7 +20,8 @@ function callSites(pattern: RegExp): Array<{ file: string; line: string }> {
   for (const file of sourceFiles(SRC)) {
     for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
       if (line.trim().startsWith('*') || line.trim().startsWith('//')) {continue}
-      if (pattern.test(line)) {sites.push({ file: path.relative(SRC, file), line: line.trim() })}
+      // Allow-lists use forward slashes on every platform; path.relative uses the platform separator (a backslash on Windows).
+      if (pattern.test(line)) {sites.push({ file: path.relative(SRC, file).split(path.sep).join('/'), line: line.trim() })}
     }
   }
   return sites

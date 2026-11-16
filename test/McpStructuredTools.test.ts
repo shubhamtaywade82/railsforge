@@ -122,7 +122,7 @@ describe('find_similar_pattern', () => {
 describe('get_example_file', () => {
   it('returns the example\'s path, name and content as structured data', async () => {
     const out = structuredOf(await tool('get_example_file').handler(ctx, { pattern_type: 'service' }))
-    expect(out.data).toMatchObject({ name: expect.stringMatching(/^(CreateOrderService|CancelOrderService)$/), filePath: expect.stringContaining('app/services/'), content: expect.stringContaining('class ') })
+    expect(out.data).toMatchObject({ name: expect.stringMatching(/^(CreateOrderService|CancelOrderService)$/), filePath: expect.stringMatching(/app[\\/]services[\\/]/), content: expect.stringContaining('class ') })
     expect(declared('get_example_file').safeParse(out.data).success).toBe(true)
   })
 
