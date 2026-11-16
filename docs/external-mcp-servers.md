@@ -27,6 +27,7 @@ Add entries to `railsForge.mcp.servers` in your user `settings.json`:
 | `allowTools` | no | The tool names the agent may call. **Nothing is offered unless it is listed here.** |
 | `enabled` | no | `false` keeps the entry without starting the server. The default is `true`. |
 | `transport` | no | Only `"stdio"` is supported. |
+| `exposeToEditor` | no | `true` also offers the server to the editor's own agent (Copilot, Cursor). The default is `false`. See below. |
 
 An entry with any problem is left out and reported in the test command. An unknown key is a problem, so a typo in `allowTools` cannot silently expose nothing.
 
@@ -38,7 +39,7 @@ An entry with any problem is left out and reported in the test command. An unkno
 - **Project root.** Each server starts with the project root as its working directory. In a multi-root workspace, each project gets its own process.
 - **Started on demand.** A server starts the first time the agent may use one, not at activation. A server that fails or exits is not retried for 30 seconds. Connecting and listing time out after 15 seconds; a single call times out after 60 seconds.
 - **Clean environment.** The process gets the usual system variables plus only your `env` values, not the extension host's full environment.
-- **Audited.** Every call is written to `.railsforge/mcp/audit.jsonl` with the tool name and the **argument names**, never the values.
+- **Audited.** Every call RailsForge's own agent makes is written to `.railsforge/mcp/audit.jsonl` with the tool name and the **argument names**, never the values. The editor path below is not audited by RailsForge.
 - **Output.** Only text content reaches the agent. Images and other content are named as omitted. Long results are clipped as the agent's other tools are.
 
 ## Example: ask-ruby-harness-mcp
@@ -77,6 +78,20 @@ RAILSFORGE_LIVE_MCP_ALLOW=read_model,schema_graph,read_log \
 npx vitest run test/ExternalMcpLive.test.ts
 ```
 
+## Offering a server to the editor's agent
+
+Set `"exposeToEditor": true` to also offer a server to the editor's own agent (Copilot, Cursor). The editor then starts the server itself, in each project folder, and lists its tools in its own tool picker.
+
+This path has different guarantees, and you should accept them knowingly:
+
+- **`allowTools` does not apply.** The editor cannot be told which tools to hide, so every tool the server provides reaches the editor's agent.
+- **RailsForge does not audit it.** The editor's own approval and logging apply instead. RailsForge's audit trail covers only its own agent.
+- **Trusted workspaces only.** Nothing is offered in a Restricted Mode workspace.
+- **User settings only**, as for RailsForge's own agent. A repository cannot offer a server to the editor through its settings.
+- **Needs VS Code 1.105 or later.** Earlier versions cannot set a server's working directory, so RailsForge offers none of its servers to the editor there, and logs the reason. The version gate was checked against VS Code's shipped bundles. The extension API cannot ask a host at runtime whether it honours the directory.
+
+A server can be offered both ways. Then two processes run for it: one for RailsForge's own agent and one started by the editor.
+
 ## Checking a server
 
 Run **RailsForge: Test External MCP Servers**. It opens a report with each server's state, the tools it offers, and any configuration problems. Use it to choose names for `allowTools`.
@@ -86,4 +101,3 @@ Run **RailsForge: Test External MCP Servers**. It opens a report with each serve
 - HTTP servers, and OAuth. Remote services such as Sentry and GitHub need these.
 - Secret storage. `env` values are plain text in your settings file, so keep secrets out of it until secret storage is added.
 - Per-call approval. Tools that run project code are refused in untrusted workspaces, but they are not individually confirmed.
-- Exposing external servers to other editor agents such as Copilot. Only RailsForge's own agent uses them here.
