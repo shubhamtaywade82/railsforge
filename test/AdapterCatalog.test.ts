@@ -40,7 +40,7 @@ describe('optional tool catalog', () => {
 
   it('states the caveats the READMEs and package metadata raise', () => {
     expect(adapterById('actionmcp')?.notes.join(' ')).toContain('STDIO')
-    expect(adapterById('gems-mcp')?.notes.join(' ')).toContain('Gemfile edits')
+    expect(adapterById('gems-mcp')?.notes.join(' ')).toContain('It does not run bundle install')
     expect(adapterById('debug-mcp')?.notes.join(' ')).toContain('no authentication')
   })
 

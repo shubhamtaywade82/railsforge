@@ -14,7 +14,7 @@ Two scopes exist. A **tool environment** install is a global gem or npm package,
 | `ask-rails-harness-mcp` | RubyGems | **project** | `bundle add ask-rails-harness-mcp` | arbitrary execution (includes a generic `run_command` tool) | Ruby 3.2.0+ (RubyGems, latest 0.2.9) |
 | `ask-ruby-harness-mcp` | RubyGems | tool environment | `gem install ask-ruby-harness-mcp` | unverified | Ruby 3.2.0+ (RubyGems, latest 0.2.1) |
 | `debug-mcp` | RubyGems | tool environment (recommended), or project (optional) | `gem install debug-mcp`, or `bundle add debug-mcp --group development` | arbitrary execution (`evaluate_code` runs Ruby in the paused process) | Ruby 3.2.0+ (RubyGems, latest 0.4.0, README) |
-| `@ruby-mcp/gems-mcp` | npm | tool environment | `npm install -g @ruby-mcp/gems-mcp` | project code (its README lists Gemfile edits) | Node 18.0.0+ (npm engines) |
+| `@ruby-mcp/gems-mcp` | npm | tool environment | `npm install -g @ruby-mcp/gems-mcp` | Gemfile and gemspec edits; no `bundle install` | Node 18.0.0+ (npm engines) |
 
 Each tool's notes, including the caveats its README raises, are shown in the RailsForge details view. The catalog is `src/adapters/AdapterCatalog.ts`, and every requirement names its source.
 

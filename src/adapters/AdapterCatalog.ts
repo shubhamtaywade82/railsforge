@@ -187,7 +187,7 @@ export const ADAPTERS: readonly AdapterEntry[] = [
       { label: 'Install the npm package globally', scope: 'tool-environment', steps: ['npm install -g @ruby-mcp/gems-mcp'] },
     ],
     notes: [
-      'Its README lists Gemfile edits and bundle install operations. Review any change it proposes before accepting it.',
+      'Its README lists searches and Gemfile and gemspec edits (pin, unpin, add). It does not run bundle install, so resolving and installing gems stay with you. Review any edit it proposes before accepting it.',
       'The npm metadata names github.com/ruby-mcp/ruby-mcp, but the README clone command names fugufish/ruby-mcp. Check the source before you trust either.',
       'Its README names no executable and no transport, so RailsForge does not launch it. Read the npm bin field and the source first.',
     ],
