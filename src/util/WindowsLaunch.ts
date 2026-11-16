@@ -7,6 +7,7 @@
  * therefore rewritten to go through cmd.exe, with the arguments passed verbatim. Elsewhere the command runs as it is.
  */
 
+import * as fs from 'fs'
 import * as path from 'path'
 
 export interface ToolLaunch {
@@ -25,6 +26,24 @@ export interface LaunchEnv {
   /** The command interpreter that runs batch shims. */
   comSpec: string
   exists(file: string): boolean
+}
+
+/**
+ * The launch environment of this process. The platform, environment and file check are parameters, so the mapping can be
+ * tested on any host. Windows variable names are read as given: process.env on Windows is case-insensitive already.
+ */
+export function currentLaunchEnv(
+  platform: NodeJS.Platform = process.platform,
+  environment: NodeJS.ProcessEnv = process.env,
+  exists: (file: string) => boolean = file => fs.existsSync(file),
+): LaunchEnv {
+  return {
+    platform,
+    pathValue: environment.PATH ?? '',
+    pathext: environment.PATHEXT ?? '.COM;.EXE;.BAT;.CMD',
+    comSpec: environment.ComSpec ?? 'cmd.exe',
+    exists,
+  }
 }
 
 const BATCH_EXTENSIONS = new Set(['.cmd', '.bat'])

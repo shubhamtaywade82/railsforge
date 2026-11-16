@@ -19,6 +19,10 @@ function provider(replies: string[]): { complete: CompleteFn; calls: Array<{ sys
 }
 
 describe('parseToolCall', () => {
+  it('reads a call in a json block that opens the reply, as well as the tool block', () => {
+    expect(parseToolCall('```json\n{"name": "list_routes", "arguments": {"filter": "orders"}}\n```')).toEqual({ name: 'list_routes', args: { filter: 'orders' } })
+  })
+
   it('parses a fenced tool call and defaults arguments to {}', () => {
     expect(parseToolCall(call('get_schema', { model: 'Order' }))).toEqual({ name: 'get_schema', args: { model: 'Order' } })
     expect(parseToolCall('```tool\n{"name":"list_routes"}\n```')).toEqual({ name: 'list_routes', args: {} })

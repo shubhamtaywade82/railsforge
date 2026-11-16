@@ -1,7 +1,7 @@
 // How a project tool is resolved to the file that runs. These run on every platform: the Windows cases pass a Windows
 // environment and a fake file system, so they are checked here as well as on the Windows CI job.
 import { describe, it, expect } from 'vitest'
-import { LaunchEnv, resolveToolLaunch } from '../src/util/WindowsLaunch'
+import { LaunchEnv, currentLaunchEnv, resolveToolLaunch } from '../src/util/WindowsLaunch'
 
 const COMSPEC = 'C:\\Windows\\System32\\cmd.exe'
 
@@ -69,6 +69,30 @@ describe('resolveToolLaunch on Windows', () => {
   it('refuses a batch file whose own path cannot be quoted', () => {
     const dir = 'C:\\100%\\bin'
     expect(() => resolveToolLaunch('rake', ['-T'], windowsEnv([`${dir}\\rake.cmd`], { pathValue: dir }))).toThrow(/cannot quote it safely/)
+  })
+})
+
+describe('currentLaunchEnv', () => {
+  it('reads PATH, PATHEXT and ComSpec from the environment, and uses the Windows defaults for the two that are missing', () => {
+    expect(currentLaunchEnv('win32', { PATH: 'C:\\Ruby33\\bin' }, () => false)).toEqual({
+      platform: 'win32',
+      pathValue: 'C:\\Ruby33\\bin',
+      pathext: '.COM;.EXE;.BAT;.CMD',
+      comSpec: 'cmd.exe',
+      exists: expect.any(Function),
+    })
+  })
+
+  it('uses the variables it is given, and the file check it is given', () => {
+    const env = currentLaunchEnv('win32', { PATH: 'X', PATHEXT: '.EXE', ComSpec: 'C:\\cmd.exe' }, () => true)
+    expect(env).toMatchObject({ pathext: '.EXE', comSpec: 'C:\\cmd.exe' })
+    expect(env.exists('anything')).toBe(true)
+  })
+
+  it('checks the file system by default', () => {
+    const env = currentLaunchEnv('linux', {})
+    expect(env.exists(__filename)).toBe(true)
+    expect(env.exists(`${__filename}.missing`)).toBe(false)
   })
 })
 

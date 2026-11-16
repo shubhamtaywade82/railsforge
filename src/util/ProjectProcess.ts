@@ -4,11 +4,10 @@
  * future call site cannot forget the Restricted Mode gate (a test fails if another file imports child_process).
  */
 
-import * as fs from 'fs'
 import { execFile, spawn, spawnSync } from 'child_process'
 import { promisify } from 'util'
 import { assertTrusted } from '../workspace/Trust'
-import { LaunchEnv, ToolLaunch, resolveToolLaunch } from './WindowsLaunch'
+import { ToolLaunch, currentLaunchEnv, resolveToolLaunch } from './WindowsLaunch'
 
 const rawExecFile = promisify(execFile)
 
@@ -43,15 +42,20 @@ export interface ToolRunResult {
 export function runProjectTool(command: string, args: readonly string[], options: ToolRunOptions = {}): Promise<ToolRunResult> {
   try {
     assertTrusted(command)
-    const launch = resolveToolLaunch(command, args, windowsLaunchEnv())
-    if (launch.viaCmd) {return runThroughCmd(launch, options)}
+    const launch = resolveToolLaunch(command, args, currentLaunchEnv())
+    if (launch.viaCmd) {return runToolLaunch(launch, options)}
     return rawExecFile(launch.file, launch.args, { cwd: options.cwd, maxBuffer: options.maxBuffer, timeout: options.timeout, signal: options.signal })
   } catch (err) {
     return Promise.reject(err)
   }
 }
 
-function runThroughCmd(launch: ToolLaunch, options: ToolRunOptions): Promise<ToolRunResult> {
+/**
+ * Runs a resolved launch and resolves with its output. Exported so that the cancel and timeout paths can be exercised on
+ * any host: `platform` decides only whether the process tree is stopped with taskkill, and the tests pass `'win32'` to
+ * reach that branch on Linux as well.
+ */
+export function runToolLaunch(launch: ToolLaunch, options: ToolRunOptions, platform: NodeJS.Platform = process.platform): Promise<ToolRunResult> {
   const { signal } = options
   return new Promise<ToolRunResult>((resolve, reject) => {
     if (signal?.aborted) {
@@ -64,7 +68,7 @@ function runThroughCmd(launch: ToolLaunch, options: ToolRunOptions): Promise<Too
     const stop = (reason: 'abort' | 'timeout'): void => {
       stoppedBy = reason
       // Tree first: once cmd.exe has exited, its children can no longer be found from it.
-      if (child.pid !== undefined) {killProcessTree(child.pid)}
+      if (child.pid !== undefined) {killProcessTree(child.pid, platform)}
       child.kill()
     }
     const onAbort = (): void => stop('abort')
@@ -87,8 +91,8 @@ function runThroughCmd(launch: ToolLaunch, options: ToolRunOptions): Promise<Too
 }
 
 /** Stops a process and everything it started. On Windows, `taskkill /T` follows the tree from the given pid. */
-function killProcessTree(pid: number): void {
-  if (process.platform === 'win32') {
+function killProcessTree(pid: number, platform: NodeJS.Platform): void {
+  if (platform === 'win32') {
     // Exit status is ignored: the process may have ended already, which is what we wanted.
     spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' })
   }
@@ -96,16 +100,6 @@ function killProcessTree(pid: number): void {
 
 function abortError(): Error {
   return Object.assign(new Error('The operation was aborted'), { name: 'AbortError' })
-}
-
-function windowsLaunchEnv(): LaunchEnv {
-  return {
-    platform: process.platform,
-    pathValue: process.env.PATH ?? '',
-    pathext: process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD',
-    comSpec: process.env.ComSpec ?? 'cmd.exe',
-    exists: file => fs.existsSync(file),
-  }
 }
 
 /** `spawn`, refused in untrusted workspaces (keeps spawn's stdio-dependent return types). */
