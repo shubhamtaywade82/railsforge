@@ -7,9 +7,9 @@ RailsForge can let its own agent use tools from other MCP servers. You list the 
 What has been verified, and what has not:
 
 - **Verified with real processes.** A stdio server started through the MCP SDK client, with the project root as its working directory. Its tools are listed and called, its errors are reported, and its exit is handled (`test/ExternalMcpStdio.test.ts`).
-- **Verified through the gateway.** RailsForge's agent discovers an external tool and calls it. An R3 call runs only with approval for that call. Denied and malformed calls never reach the server. Cancelling an operation, from the chat stop button included, stops the running tool and its process. A crash ends one tool and not the loop. The approval, audit and cancellation claims are checked against the server's own record (`test/ExternalGatewayAcceptance.test.ts`, `test/ExternalCancellation.test.ts`). A static test keeps every external call on this path (`test/GatewayBoundary.test.ts`).
+- **Verified through the gateway.** RailsForge's agent discovers an external tool and calls it. An R3 call runs only with approval for that call. Denied and malformed calls never reach the server. Cancelling an operation stops the running tool and its process. The chat's Stop button, pressed while an external tool runs, is tested end to end with the real view, agent and server process (`test/ChatStopEndToEnd.test.ts`). A crash ends one tool and not the loop. The approval, audit and cancellation claims are checked against the server's own record (`test/ExternalGatewayAcceptance.test.ts`, `test/ExternalCancellation.test.ts`). A static test keeps every external call on this path (`test/GatewayBoundary.test.ts`).
 - **Verified in VS Code.** The configuration rules and the editor path, on VS Code 1.146 and 1.96 (`test-host/suite/editor.host.ts`).
-- **Not yet verified.** A real third-party server, such as `ask-ruby-harness-mcp`. Run the opt-in live check (see below) before relying on one. Also not verified: that Cursor, Claude Code or Copilot connect to RailsForge and call its tools, and that a debugger can be attached and controlled through `debug-mcp`. The chat view has no stop control in this build, so its requests cannot be cancelled.
+- **Not yet verified.** A real third-party server, such as `ask-ruby-harness-mcp`. Run the opt-in live check (see below) before relying on one. Also not verified: that Cursor, Claude Code or Copilot connect to RailsForge and call its tools, and that a debugger can be attached and controlled through `debug-mcp`. The chat's Stop button and the approval prompt are tested against a mocked VS Code API, not clicked in a running editor.
 
 `.cursor/mcp.json` is not read by RailsForge. Adding a server there makes it available to Cursor, not to RailsForge's agent. Use `railsForge.mcp.servers` for RailsForge's agent.
 
@@ -47,9 +47,9 @@ An entry with any problem is left out and reported in the test command. An unkno
 
 - **User settings only.** The setting has application scope, and RailsForge reads the user value only. A repository's `.vscode/settings.json` cannot start a process through it.
 - **Default deny.** A server's tools are offered only when named in `allowTools`. The server's own hints, such as `readOnlyHint`, grant nothing.
-- **Approval for each risky call.** An allowed tool is `R3` unless you declare it `R2`, so each call asks you first. The prompt shows the tool, the workspace, the operation and the arguments. Only "Allow once" runs the call, and the next call asks again.
-- **Strict arguments.** Arguments are checked against the server's schema before anything runs. A schema using a keyword the validator cannot enforce (such as `$ref`, `oneOf` or `format`) makes the tool unavailable, with the reason, rather than being checked more loosely.
-- **Cancellation.** Cancelling an operation sends the MCP cancellation to the server. If that was the only call on the process, the process is stopped too, and the next call starts it again. A timeout stops the process and holds it back for 30 seconds, because its state is unknown.
+- **Approval for each risky call.** An allowed tool is `R3` unless you declare it `R2`, so each call asks you first. The prompt shows the tool, the workspace, the operation and the arguments. Only "Allow once" runs the call, and the next call asks again. If you stop the request while the prompt is open, the prompt stays on screen until you answer it; the call is denied either way.
+- **Strict arguments.** Arguments are checked against the server's schema before anything runs. A schema using a keyword the validator cannot enforce (such as `$ref`, `oneOf`, `anyOf`, `allOf` or `format`) makes the tool unavailable, with the reason, rather than being checked more loosely. Python servers built on pydantic often declare an optional field as `anyOf` with `null`, so a tool with such a field is unavailable in this version. Nullable types written as `"type": ["string", "null"]`, enums, nested objects, bounds, and the `$schema`, `title`, `description` and `default` annotations are supported.
+- **Cancellation.** Stopping a request (the chat's Stop button, or cancelling an operation) ends the model request, sends the MCP cancellation to the server, and ends the tool call. If that was the only call on the process, the process is stopped too. A stopped process is shown as `stopped` and starts again on the next call; the status report does not start it. A timeout stops the process and holds it back for 30 seconds, because its state is unknown.
 - **Failures carry codes.** The agent sees a failed tool as a step with its code (for example `APPROVAL_DENIED`, `TIMEOUT` or `SERVER_EXITED`), not only as text.
 - **Trusted workspaces only.** In a Restricted Mode workspace nothing starts, and no external tool is offered to the agent.
 - **Project root.** Each server starts with the project root as its working directory. In a multi-root workspace, each project gets its own process.
@@ -110,7 +110,7 @@ A server can be offered both ways. Then two processes run for it: one for RailsF
 
 ## Checking a server
 
-Run **RailsForge: Test External MCP Servers**. It opens a report with each server's state, the tools it offers, and any configuration problems. Use it to choose names for `allowTools`.
+Run **RailsForge: Test External MCP Servers**. It opens a report with each server's state, the tools it offers, and any configuration problems. Use it to choose names for `allowTools`. Each server is `starting`, `running`, `stopping`, `stopped` or `failed`, or `disabled` or `untrusted` when its configuration or the workspace keeps it from starting. A failed server is not retried for 30 seconds, and the report gives its reason.
 
 ## Not in this version
 
