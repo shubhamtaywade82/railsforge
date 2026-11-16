@@ -99,7 +99,7 @@ export const ADAPTERS: readonly AdapterEntry[] = [
   {
     id: 'actionmcp',
     label: 'ActionMCP',
-    package: { kind: 'ruby-gem', name: 'actionmcp', executable: null },
+    package: { kind: 'ruby-gem', name: 'actionmcp', executable: 'actionmcp_cli' },
     summary: 'Lets an application expose its own operations as MCP tools, over HTTP.',
     minimumRuby: '3.4.8',
     minimumNode: null,
@@ -143,7 +143,7 @@ export const ADAPTERS: readonly AdapterEntry[] = [
   {
     id: 'ask-ruby-harness-mcp',
     label: 'ask-ruby-harness-mcp',
-    package: { kind: 'ruby-gem', name: 'ask-ruby-harness-mcp', executable: null },
+    package: { kind: 'ruby-gem', name: 'ask-ruby-harness-mcp', executable: 'ask-ruby-harness-mcp' },
     summary: 'Ruby project tooling over MCP, usable in any Ruby project. Its tools are not verified here.',
     minimumRuby: '3.2.0',
     minimumNode: null,
@@ -178,7 +178,7 @@ export const ADAPTERS: readonly AdapterEntry[] = [
   {
     id: 'gems-mcp',
     label: '@ruby-mcp/gems-mcp',
-    package: { kind: 'npm', name: '@ruby-mcp/gems-mcp', executable: null },
+    package: { kind: 'npm', name: '@ruby-mcp/gems-mcp', executable: 'gems-mcp' },
     summary: 'RubyGems.org lookups, gem versions, and Gemfile and gemspec parsing.',
     minimumRuby: null,
     minimumNode: '18.0.0',

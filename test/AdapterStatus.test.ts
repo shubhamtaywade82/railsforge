@@ -79,7 +79,16 @@ describe('launchSpecFor', () => {
 
   it('returns nothing for a tool that is not installed, or whose executable is not known', () => {
     expect(launchSpecFor(debug, { kind: 'missing' }, root)).toBeUndefined()
-    expect(launchSpecFor(adapterById('ask-ruby-harness-mcp')!, { kind: 'installed', where: 'global' }, root)).toBeUndefined()
+    const ask = adapterById('ask-ruby-harness-mcp')!
+    const unknown = { ...ask, package: { ...ask.package, executable: null } }
+    expect(launchSpecFor(unknown, { kind: 'installed', where: 'global' }, root)).toBeUndefined()
+  })
+
+  it('uses the executable each package declares, once verified', () => {
+    expect(launchSpecFor(adapterById('ask-ruby-harness-mcp')!, { kind: 'installed', where: 'global' }, root))
+      .toEqual({ command: 'ask-ruby-harness-mcp', args: [], cwd: root })
+    expect(adapterById('gems-mcp')!.package.executable).toBe('gems-mcp')
+    expect(adapterById('actionmcp')!.package.executable).toBe('actionmcp_cli')
   })
 })
 

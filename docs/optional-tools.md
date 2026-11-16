@@ -58,8 +58,11 @@ Not offered yet, because the README does not verify the start path:
 
 - `rails-mcp-server`: its README gives stdio as the default and `rails-mcp-server` as the command. Its tools find projects through its own configuration (`projects.yml`), not through the working directory, and that behaviour is not verified here.
 - `ruby-console-mcp`: its README states the stdio transport only in the architecture diagram.
-- `@ruby-mcp/gems-mcp`: its README names no executable and no transport.
-- `ask-rails-harness-mcp`: its RubyGems page shows no README, so the executable, the transport and the `run_command` tool are unconfirmed.
-- `ask-ruby-harness-mcp` and ActionMCP: no executable is known, and ActionMCP's README says it does not support STDIO.
+- `@ruby-mcp/gems-mcp`: its npm package declares the bin `gems-mcp` (registry metadata, 0.3.0). Its README gives no transport, so it is not offered to the agent.
+- `ask-rails-harness-mcp`: its RubyGems page shows no README, so the transport and the `run_command` tool are unconfirmed. The gem declares the executable `ask-rails-harness-mcp` (0.2.9).
+- `ask-ruby-harness-mcp`: the gem declares the executable `ask-ruby-harness-mcp` (0.2.1). Its README lists six tools, but the stdio transport is not confirmed in this build, so it is not offered to the agent.
+- ActionMCP: the gem declares `actionmcp_cli` (0.203.0), and its README says it does not support STDIO, so it is not offered to the agent.
+
+To give the agent a server from this list or any other, use the user-level setting in [external-mcp-servers.md](external-mcp-servers.md). That route starts the server only in a trusted workspace and offers only the tools you name.
 
 What this does not cover: any trust or confirmation that VS Code adds for MCP servers and tool calls applies on top of these rules. This build did not verify it, because the Extension Host tests run only in CI. A tool installed after the window opened may not appear to the agent until a `railsForge.adapters` setting changes or the window reloads.
