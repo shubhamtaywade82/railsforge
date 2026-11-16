@@ -149,7 +149,9 @@ try {
   // Informational: the adapter documents risk as inferred from MCP annotations. RailsForge declares no annotations, and the
   // code ignores them, so every tool is classed high unless the user overrides it.
   const lowered = rf.tools.filter(tool => tool.security.risk !== 'high').length
-  record('info-risk-inference', 'INFORMATIONAL: Nexum classes read-only tools below high risk, from the server\'s declared hints', lowered > 0, `${lowered} of ${rf.tools.length} tools below high`)
+  // RailsForge declares readOnlyHint on its R0/R1 tools, so a Nexum that inferred risk from hints would lower them here.
+  // Nexum's documented behaviour (N4) is that a server's annotations never set risk: nothing may fall below high.
+  record('info-risk-inference', 'INFORMATIONAL: Nexum does not lower a tool\'s risk from the server\'s own read-only hints', lowered === 0, `${lowered} of ${rf.tools.length} tools below high`)
 
   // Informational: whether the SDK's own signal option, used directly, reaches the server.
   const runInfo = `cancel-sdk-${process.pid}`
