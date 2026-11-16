@@ -1,0 +1,4 @@
+# A minimal Rails project for the interoperability test. RailsForge reads db/schema.rb and config/routes.rb statically;
+# nothing here is installed or run.
+source 'https://rubygems.org'
+gem 'rails', '~> 7.1'
