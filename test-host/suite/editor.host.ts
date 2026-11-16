@@ -34,9 +34,14 @@ describe('external servers offered to the editor\'s own agent, in a real Extensi
   })
 
   afterEach(async () => {
-    // Leave the profile as it was: no servers at either level.
+    // Leave the profile as it was. The setting is application-scoped, so VS Code refuses a workspace-level write;
+    // that refusal is expected, and the workspace reset is best-effort for that reason.
     await config().update(SETTING, undefined, vscode.ConfigurationTarget.Global)
-    await config().update(SETTING, undefined, vscode.ConfigurationTarget.Workspace)
+    try {
+      await config().update(SETTING, undefined, vscode.ConfigurationTarget.Workspace)
+    } catch {
+      // expected: this setting cannot be written at workspace level
+    }
   })
 
   it('offers nothing to the editor until a server is opted in at user level', () => {
