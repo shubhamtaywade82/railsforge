@@ -13,14 +13,6 @@ const [serverBundle, projectRoot] = process.argv.slice(2)
 const fakeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rf-cancel-fake-'))
 const exists = name => fs.existsSync(path.join(fakeDir, name))
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
-const unsafeJsCharMap = {
-  '<': '\\u003C',
-  '>': '\\u003E',
-  '/': '\\u002F',
-  '\u2028': '\\u2028',
-  '\u2029': '\\u2029',
-}
-const escapeUnsafeJsLiteral = str => str.replace(/[<>/\u2028\u2029]/g, ch => unsafeJsCharMap[ch])
 const until = async (predicate, ms) => {
   const start = Date.now()
   while (Date.now() - start < ms) {
@@ -50,9 +42,11 @@ function countProcesses(dir) {
 if (process.platform === 'win32') {
   // Windows runs batch files and executables only. The stand-in bundle is a batch file that starts a node loop; cancelling
   // must stop both, and both carry the fake directory in their command lines.
+  // The heartbeat path comes in as an argument, so no path is written into the generated script's source.
   fs.writeFileSync(path.join(fakeDir, 'loop.mjs'), [
     "import * as fs from 'node:fs'",
-    `const beat = () => fs.writeFileSync(${escapeUnsafeJsLiteral(JSON.stringify(path.join(fakeDir, 'bundle-heartbeat')))}, String(Date.now()))`,
+    'const heartbeat = process.argv[2]',
+    'const beat = () => fs.writeFileSync(heartbeat, String(Date.now()))',
     'beat()',
     'setInterval(beat, 100)',
     '',
@@ -61,7 +55,7 @@ if (process.platform === 'win32') {
     '@echo off',
     `echo started > "${path.join(fakeDir, 'bundle-started')}"`,
     `if exist "${path.join(fakeDir, 'quick')}" exit /b 1`,
-    `"${process.execPath}" "${path.join(fakeDir, 'loop.mjs')}"`,
+    `"${process.execPath}" "${path.join(fakeDir, 'loop.mjs')}" "${path.join(fakeDir, 'bundle-heartbeat')}"`,
     '',
   ].join('\r\n'))
   fs.writeFileSync(path.join(fakeDir, 'rake.cmd'), [

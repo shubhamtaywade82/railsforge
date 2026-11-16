@@ -6,7 +6,8 @@ import { runToolLaunch } from '../src/util/ProjectProcess'
 import { ToolLaunch } from '../src/util/WindowsLaunch'
 
 const node = (script: string): ToolLaunch => ({ file: process.execPath, args: ['-e', script], viaCmd: true })
-const LONG_RUN = 'setTimeout(() => {}, 20000)'
+// No spaces: a batch-shim launch passes its arguments verbatim, so on Windows a space would split the script.
+const LONG_RUN = 'setTimeout(()=>{},20000)'
 
 describe('runToolLaunch', () => {
   it('resolves with the output of a run that succeeds', async () => {
