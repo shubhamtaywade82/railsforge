@@ -46,7 +46,6 @@ describe('compileObjectSchema: what is rejected, rather than silently weakened',
   it.each([
     ['$ref', { type: 'object', properties: { a: { $ref: '#/$defs/a' } } }],
     ['oneOf', { type: 'object', properties: { a: { oneOf: [{ type: 'string' }, { type: 'number' }] } } }],
-    ['anyOf', { type: 'object', properties: { a: { anyOf: [{ type: 'string' }] } } }],
     ['allOf', { type: 'object', allOf: [{ required: ['a'] }] }],
     ['not', { type: 'object', properties: { a: { not: { type: 'string' } } } }],
     ['if', { type: 'object', if: { properties: { a: { const: 1 } } }, then: { required: ['b'] } }],
@@ -54,6 +53,7 @@ describe('compileObjectSchema: what is rejected, rather than silently weakened',
     ['format', { type: 'object', properties: { email: { type: 'string', format: 'email' } } }],
     ['prefixItems', { type: 'object', properties: { pair: { type: 'array', prefixItems: [{ type: 'string' }] } } }],
     ['futureKeyword', { type: 'object', properties: { a: { type: 'string', futureKeyword: true } } }],
+    ['format', { type: 'object', properties: { a: { anyOf: [{ type: 'string', format: 'uri' }, { type: 'null' }] } } }],
   ])('rejects the %s keyword', (keyword, schema) => {
     const result = compileObjectSchema(schema)
     expect(result.ok).toBe(false)
@@ -150,5 +150,102 @@ describe('validateValue: what is enforced', () => {
     const schema = { type: 'object', properties: { pick: { enum: [{ a: 1 }, [1, 2]] }, fixed: { const: 'yes' } } }
     expect(validate(schema, { pick: { a: 1 }, fixed: 'yes' })).toEqual({ ok: true })
     expect(validate(schema, { pick: [1, 2, 3], fixed: 'no' })).toEqual({ ok: false, errors: ['pick: must be one of {"a":1}, [1,2]', 'fixed: must be "yes"'] })
+  })
+})
+
+// The one anyOf form supported: a typed schema beside {"type": "null"}, which is what pydantic writes for Optional[T].
+const nullable = (inner: Record<string, unknown>) => ({ anyOf: [inner, { type: 'null' }] })
+
+describe('the nullable anyOf form (pydantic Optional[T])', () => {
+  const schemaWith = (property: unknown, required: string[] = []) => ({ type: 'object', properties: { value: property }, required })
+
+  it('accepts null and a valid string for a nullable string, and rejects an invalid value', () => {
+    const schema = compile(schemaWith(nullable({ type: 'string' })))
+    expect(validateValue(schema, { value: null }).ok).toBe(true)
+    expect(validateValue(schema, { value: 'order' }).ok).toBe(true)
+    expect(validateValue(schema, { value: 42 }).ok).toBe(false)
+  })
+
+  it('keeps the string constraints of the typed branch: null passes, a string that breaks a bound does not', () => {
+    const schema = compile(schemaWith(nullable({ type: 'string', minLength: 2, maxLength: 4 })))
+    expect(validateValue(schema, { value: null }).ok).toBe(true)
+    expect(validateValue(schema, { value: 'ok' }).ok).toBe(true)
+    expect(validateValue(schema, { value: 'a' }).ok).toBe(false)
+    expect(validateValue(schema, { value: 'toolong' }).ok).toBe(false)
+  })
+
+  it('accepts null and a valid integer for a nullable integer, and rejects a fraction', () => {
+    const schema = compile(schemaWith(nullable({ type: 'integer', minimum: 1 })))
+    expect(validateValue(schema, { value: null }).ok).toBe(true)
+    expect(validateValue(schema, { value: 7 }).ok).toBe(true)
+    expect(validateValue(schema, { value: 2.5 }).ok).toBe(false)
+    expect(validateValue(schema, { value: 0 }).ok).toBe(false)
+  })
+
+  it('keeps a required nullable property required: an absent key is refused, a present null is accepted', () => {
+    const schema = compile(schemaWith(nullable({ type: 'string' }), ['value']))
+    expect(validateValue(schema, {})).toEqual({ ok: false, errors: ['value: is required'] })
+    expect(validateValue(schema, { value: null }).ok).toBe(true)
+  })
+
+  it('keeps an optional nullable property optional: it may be absent', () => {
+    const schema = compile(schemaWith(nullable({ type: 'string' })))
+    expect(validateValue(schema, {}).ok).toBe(true)
+  })
+
+  it('works on a nested object property, and inside an array', () => {
+    const nested = compile({
+      type: 'object',
+      properties: { filter: { type: 'object', properties: { column: nullable({ type: 'string' }) }, required: ['column'] } },
+    })
+    expect(validateValue(nested, { filter: { column: null } }).ok).toBe(true)
+    expect(validateValue(nested, { filter: { column: 3 } }).ok).toBe(false)
+
+    const items = compile({ type: 'object', properties: { ids: { type: 'array', items: nullable({ type: 'integer' }) } } })
+    expect(validateValue(items, { ids: [1, null, 3] }).ok).toBe(true)
+    expect(validateValue(items, { ids: ['x'] }).ok).toBe(false)
+  })
+
+  it('accepts annotations beside the anyOf, which do not change validity', () => {
+    const schema = compile(schemaWith({ title: 'Note', description: 'A note', default: null, ...nullable({ type: 'string' }) }))
+    expect(validateValue(schema, { value: null }).ok).toBe(true)
+  })
+
+  it('a null is accepted only where the form allows it: a non-nullable property still refuses null', () => {
+    const schema = compile(schemaWith({ type: 'string' }))
+    expect(validateValue(schema, { value: null }).ok).toBe(false)
+  })
+})
+
+describe('anyOf in any other shape stays refused, with the reason', () => {
+  const refused: Array<[string, unknown]> = [
+    ['a single branch', { anyOf: [{ type: 'string' }] }],
+    ['three branches', { anyOf: [{ type: 'string' }, { type: 'integer' }, { type: 'null' }] }],
+    ['two typed branches and no null', { anyOf: [{ type: 'string' }, { type: 'integer' }] }],
+    ['a null-only pair', { anyOf: [{ type: 'null' }, { type: 'null' }] }],
+    ['a null branch that carries a constraint', { anyOf: [{ type: 'string' }, { type: 'null', minLength: 1 }] }],
+    ['a typed branch with no type', { anyOf: [{}, { type: 'null' }] }],
+    ['a validation keyword beside the anyOf', { type: 'string', anyOf: [{ type: 'string' }, { type: 'null' }] }],
+    ['a nested nullable form', { anyOf: [{ anyOf: [{ type: 'string' }, { type: 'null' }] }, { type: 'null' }] }],
+  ]
+  it.each(refused)('refuses %s, and says it is anyOf that is refused', (_label, inner) => {
+    const result = compileObjectSchema({ type: 'object', properties: { value: inner } })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {expect(result.problems.join(' ')).toContain('anyOf')}
+  })
+
+  it('a nullable root is refused: tool arguments are always an object', () => {
+    const result = compileObjectSchema({ anyOf: [{ type: 'object', properties: {} }, { type: 'null' }] })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {expect(result.problems.join(' ')).toContain('cannot be nullable')}
+  })
+
+  it.each([
+    ['oneOf', { oneOf: [{ type: 'string' }, { type: 'integer' }] }],
+    ['$ref', { $ref: '#/$defs/Filter' }],
+  ])('the %s keyword remains refused even beside a nullable form', (keyword, extra) => {
+    const result = compileObjectSchema({ type: 'object', properties: { value: { ...nullable({ type: 'string' }), ...extra } } })
+    expect(result.ok).toBe(false)
+    if (!result.ok) {expect(result.problems.join(' ')).toContain(`"${keyword}"`)}
   })
 })

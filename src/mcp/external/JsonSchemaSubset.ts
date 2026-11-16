@@ -13,9 +13,14 @@
  * Annotation keywords, which do not change validity, are accepted and ignored: title, description, default, examples,
  * $schema, $comment, deprecated, readOnly, writeOnly.
  *
- * Rejected: $ref, anyOf, oneOf, allOf, not, if/then/else, patternProperties, propertyNames, dependentRequired,
- * dependentSchemas, unevaluatedProperties, prefixItems, contains, format, and any keyword not listed above. Boolean
- * schemas are rejected too.
+ * One form of anyOf is supported, and only this one: the nullable value that Python's pydantic writes for an optional
+ * field, exactly two branches, one a typed schema and the other {"type": "null"}, with no validation keyword beside
+ * it. The value is valid when it is null, or when the typed branch accepts it, with that branch's own constraints.
+ * Any other anyOf is rejected.
+ *
+ * Rejected: $ref, oneOf, allOf, not, if/then/else, patternProperties, propertyNames, dependentRequired,
+ * dependentSchemas, unevaluatedProperties, prefixItems, contains, format, every anyOf other than the nullable form,
+ * and any keyword not listed above. Boolean schemas are rejected too.
  *
  * vscode-free.
  */
@@ -31,6 +36,8 @@ const SUPPORTED: ReadonlySet<string> = new Set([
 
 /** One compiled schema node. Only what validation needs is kept. */
 export interface SchemaNode {
+  /** Set for the nullable anyOf form: null is valid, and any other value must satisfy the rest of this node. */
+  nullable?: boolean
   types?: JsonType[]
   properties: Record<string, SchemaNode>
   required: string[]
@@ -61,6 +68,7 @@ export function compileObjectSchema(schema: unknown): CompileResult {
   if (!root.types || root.types.length !== 1 || root.types[0] !== 'object') {
     problems.push('the root schema must declare "type": "object"')
   }
+  if (root.nullable) {problems.push('the root schema cannot be nullable: tool arguments are always an object')}
   return problems.length > 0 ? { ok: false, problems } : { ok: true, root }
 }
 
@@ -79,8 +87,11 @@ function compileNode(schema: unknown, path: string, problems: string[]): SchemaN
   }
   const before = problems.length
   for (const key of Object.keys(schema)) {
-    if (ANNOTATIONS.has(key) || SUPPORTED.has(key)) {continue}
+    if (ANNOTATIONS.has(key) || SUPPORTED.has(key) || key === 'anyOf') {continue}
     problems.push(`${where} uses the unsupported keyword "${key}"`)
+  }
+  if ('anyOf' in schema) {
+    return compileNullable(schema, path, problems)
   }
   const node: SchemaNode = { properties: {}, required: [], additionalProperties: true, hasConst: false }
 
@@ -162,6 +173,48 @@ function compileNode(schema: unknown, path: string, problems: string[]): SchemaN
   return problems.length > before ? undefined : node
 }
 
+/**
+ * The nullable form only: `anyOf: [<typed schema>, {"type": "null"}]`, with no validation keyword beside the anyOf.
+ * Annotations (title, description, default) may sit beside it. Anything else is refused with the reason, and never
+ * compiled into a looser schema.
+ */
+function compileNullable(schema: Record<string, unknown>, path: string, problems: string[]): SchemaNode | undefined {
+  const where = path || 'the root schema'
+  const before = problems.length
+  const beside = Object.keys(schema).filter(key => key !== 'anyOf' && SUPPORTED.has(key))
+  if (beside.length > 0) {
+    problems.push(`${where} uses "anyOf" together with ${beside.map(key => `"${key}"`).join(', ')}; only the nullable form is supported (anyOf with a typed schema and {"type": "null"}), with no other validation keyword beside it`)
+    return undefined
+  }
+  const branches = nullableBranches(schema.anyOf)
+  if (!branches) {
+    problems.push(`${where} uses "anyOf", which is supported only as the nullable form: exactly two branches, a typed schema and {"type": "null"}`)
+    return undefined
+  }
+  const inner = compileNode(branches.typed, path, problems)
+  if (!inner) {return undefined}
+  if (!inner.types || inner.types.length === 0 || inner.types.includes('null')) {
+    problems.push(`${where} uses "anyOf", and its typed branch does not declare a non-null "type"`)
+    return undefined
+  }
+  if (inner.nullable) {
+    problems.push(`${where} uses "anyOf" nested inside a nullable "anyOf"; only one level is supported`)
+    return undefined
+  }
+  return problems.length > before ? undefined : { ...inner, nullable: true }
+}
+
+/** The typed branch of a nullable form, or undefined when the anyOf is not exactly that shape. */
+function nullableBranches(anyOf: unknown): { typed: unknown } | undefined {
+  if (!Array.isArray(anyOf) || anyOf.length !== 2) {return undefined}
+  const isNullBranch = (branch: unknown): boolean =>
+    isPlainObject(branch) && branch.type === 'null' && Object.keys(branch).every(key => key === 'type' || ANNOTATIONS.has(key))
+  const [first, second] = anyOf
+  if (isNullBranch(second) && !isNullBranch(first)) {return { typed: first }}
+  if (isNullBranch(first) && !isNullBranch(second)) {return { typed: second }}
+  return undefined
+}
+
 function numberKeyword(schema: Record<string, unknown>, key: string, where: string, problems: string[]): number | undefined {
   if (schema[key] === undefined) {return undefined}
   if (typeof schema[key] !== 'number' || !Number.isFinite(schema[key])) {
@@ -183,6 +236,7 @@ function countKeyword(schema: Record<string, unknown>, key: string, where: strin
 
 function check(node: SchemaNode, value: unknown, path: string, errors: string[]): void {
   const label = path || 'arguments'
+  if (node.nullable && value === null) {return}
   if (node.types && !node.types.some(type => matchesType(value, type))) {
     errors.push(`${label}: expected ${node.types.join(' or ')}`)
     return

@@ -41,12 +41,16 @@ const accepted: Array<[string, Record<string, unknown>]> = [
   }],
   ['a tool that takes no arguments', { type: 'object', properties: {} }],
   ['an empty required list', { type: 'object', properties: { q: { type: 'string' } }, required: [] }],
+  ['an optional field pydantic writes as anyOf with null (the one supported anyOf form)', {
+    type: 'object',
+    properties: { note: { anyOf: [{ type: 'string', maxLength: 40 }, { type: 'null' }], default: null, title: 'Note' } },
+  }],
 ]
 
 const rejected: Array<[string, Record<string, unknown>, string]> = [
-  ['an optional field pydantic writes as anyOf with null', {
+  ['an anyOf between two typed schemas, which carries no null to mean', {
     type: 'object',
-    properties: { note: { anyOf: [{ type: 'string' }, { type: 'null' }] } },
+    properties: { note: { anyOf: [{ type: 'string' }, { type: 'integer' }] } },
   }, 'anyOf'],
   ['a nested model referenced through $defs and $ref', {
     type: 'object',
@@ -84,6 +88,14 @@ describe('common MCP input schemas: the supported shapes are offered and enforce
     const schema = accepted.find(([label]) => label.includes('nested'))![1]
     expect(checkArguments(schema, { filter: { column: 'id' } }).ok).toBe(true)
     expect(checkArguments(schema, { filter: {} })).toEqual({ ok: false, message: 'filter.column: is required' })
+  })
+
+  it('enforces the pydantic nullable form: null and a bounded string are accepted, a longer string is not', () => {
+    const schema = accepted.find(([label]) => label.includes('pydantic'))![1]
+    expect(checkArguments(schema, { note: null }).ok).toBe(true)
+    expect(checkArguments(schema, { note: 'short' }).ok).toBe(true)
+    expect(checkArguments(schema, { note: 'x'.repeat(41) }).ok).toBe(false)
+    expect(checkArguments(schema, { note: 7 }).ok).toBe(false)
   })
 
   it('enforces the enumerated values', () => {
