@@ -17,6 +17,17 @@ async function until(predicate: () => boolean, timeoutMs = 15_000): Promise<void
   }
 }
 
+/**
+ * Whether this host offers stdio MCP definitions with a working directory: the definition API must exist, and the
+ * version must be 1.105 or later (EDITOR_CWD_MIN_VERSION, verified against the shipped bundles).
+ */
+function hostOffersEditorDefinitions(): boolean {
+  const lm = (vscode as unknown as { lm?: { registerMcpServerDefinitionProvider?: unknown } }).lm
+  if (typeof lm?.registerMcpServerDefinitionProvider !== 'function') {return false}
+  const [major, minor] = vscode.version.split('.').map(part => Number.parseInt(part, 10))
+  return major > 1 || (major === 1 && minor >= 105)
+}
+
 const folder = (name: string): string => {
   const found = vscode.workspace.workspaceFolders?.find(f => path.basename(f.uri.fsPath) === name)
   assert.ok(found, `workspace folder ${name} not found`)
@@ -48,7 +59,11 @@ describe('external servers offered to the editor\'s own agent, in a real Extensi
     assert.deepStrictEqual(api.editorExternalDefinitions(), [])
   })
 
-  it('offers an opted-in user-level server once per workspace folder, each with its folder as the working directory', async () => {
+  it('offers an opted-in user-level server once per workspace folder, each with its folder as the working directory', async function () {
+    if (!hostOffersEditorDefinitions()) {
+      // Below 1.105 nothing is offered, and the check for that is the next test.
+      this.skip()
+    }
     await config().update(SETTING, [{ id: 'ask-ruby', command: 'node', args: ['--version'], exposeToEditor: true }], vscode.ConfigurationTarget.Global)
     await until(() => api.editorExternalDefinitions().length === 2)
     const definitions = api.editorExternalDefinitions()
@@ -59,6 +74,13 @@ describe('external servers offered to the editor\'s own agent, in a real Extensi
         { label: 'ask-ruby (rails_b)', command: 'node', cwd: folder('rails_b') },
       ],
     )
+  })
+
+  it('offers nothing to the editor on a host without the definition API or without cwd support (below 1.105)', async function () {
+    if (hostOffersEditorDefinitions()) {this.skip()}
+    await config().update(SETTING, [{ id: 'ask-ruby', command: 'node', exposeToEditor: true }], vscode.ConfigurationTarget.Global)
+    await new Promise(resolve => setTimeout(resolve, 500))
+    assert.deepStrictEqual(api.editorExternalDefinitions(), [])
   })
 
   it('does not offer a server that is only in workspace settings, so a repository cannot start a process for the editor', async () => {
