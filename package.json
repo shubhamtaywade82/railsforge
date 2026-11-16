@@ -87,6 +87,7 @@
     "test:host": "pnpm run compile && tsc -p tsconfig.host.json && vscode-test",
     "skills:fetch": "node scripts/fetch-skills.mjs",
     "test:host:stable": "pnpm run compile && tsc -p tsconfig.host.json && vscode-test --label stable",
+    "test:host:minimum": "pnpm run compile && tsc -p tsconfig.host.json && vscode-test --label minimum",
     "native-smoke": "node scripts/native-smoke.cjs",
     "vsix-smoke": "tsc -p tsconfig.host.json && node scripts/vsix-smoke.mjs",
     "coverage": "vitest run --coverage",
