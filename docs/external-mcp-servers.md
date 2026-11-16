@@ -6,9 +6,10 @@ RailsForge can let its own agent use tools from other MCP servers. You list the 
 
 What has been verified, and what has not:
 
-- **Verified with real processes.** A stdio server started through the MCP SDK client, with the project root as its working directory. Its tools are listed and called, its errors are reported, and its exit is handled. RailsForge's agent loop discovers an external tool and calls it, and cannot reach one that is not allowed (`test/ExternalMcpStdio.test.ts`, `test/ExternalAgentLoop.test.ts`).
+- **Verified with real processes.** A stdio server started through the MCP SDK client, with the project root as its working directory. Its tools are listed and called, its errors are reported, and its exit is handled (`test/ExternalMcpStdio.test.ts`).
+- **Verified through the gateway.** RailsForge's agent discovers an external tool and calls it. An R3 call runs only with approval for that call. Denied and malformed calls never reach the server. Cancelling an operation, from the chat stop button included, stops the running tool and its process. A crash ends one tool and not the loop. The approval, audit and cancellation claims are checked against the server's own record (`test/ExternalGatewayAcceptance.test.ts`, `test/ExternalCancellation.test.ts`). A static test keeps every external call on this path (`test/GatewayBoundary.test.ts`).
 - **Verified in VS Code.** The configuration rules and the editor path, on VS Code 1.146 and 1.96 (`test-host/suite/editor.host.ts`).
-- **Not yet verified.** A real third-party server, such as `ask-ruby-harness-mcp`. Run the opt-in live check (see below) before relying on one. Also not verified: that Cursor, Claude Code or Copilot connect to RailsForge and call its tools, and that a debugger can be attached and controlled through `debug-mcp`.
+- **Not yet verified.** A real third-party server, such as `ask-ruby-harness-mcp`. Run the opt-in live check (see below) before relying on one. Also not verified: that Cursor, Claude Code or Copilot connect to RailsForge and call its tools, and that a debugger can be attached and controlled through `debug-mcp`. The chat view has no stop control in this build, so its requests cannot be cancelled.
 
 `.cursor/mcp.json` is not read by RailsForge. Adding a server there makes it available to Cursor, not to RailsForge's agent. Use `railsForge.mcp.servers` for RailsForge's agent.
 
@@ -35,6 +36,7 @@ Add entries to `railsForge.mcp.servers` in your user `settings.json`:
 | `args` | no | Arguments for the command. |
 | `env` | no | Extra environment variables for the process. Values are stored in plain text. |
 | `allowTools` | no | The tool names the agent may call. **Nothing is offered unless it is listed here.** |
+| `toolRisk` | no | The risk of an allowed tool: `"R2"` runs without a prompt in a trusted workspace; `"R3"` asks you before every call. A tool not listed is `R3`. The name must be in `allowTools`. `R4` is never accepted. |
 | `enabled` | no | `false` keeps the entry without starting the server. The default is `true`. |
 | `transport` | no | Only `"stdio"` is supported. |
 | `exposeToEditor` | no | `true` also offers the server to the editor's own agent (Copilot, Cursor). The default is `false`. See below. |
@@ -45,11 +47,15 @@ An entry with any problem is left out and reported in the test command. An unkno
 
 - **User settings only.** The setting has application scope, and RailsForge reads the user value only. A repository's `.vscode/settings.json` cannot start a process through it.
 - **Default deny.** A server's tools are offered only when named in `allowTools`. The server's own hints, such as `readOnlyHint`, grant nothing.
+- **Approval for each risky call.** An allowed tool is `R3` unless you declare it `R2`, so each call asks you first. The prompt shows the tool, the workspace, the operation and the arguments. Only "Allow once" runs the call, and the next call asks again.
+- **Strict arguments.** Arguments are checked against the server's schema before anything runs. A schema using a keyword the validator cannot enforce (such as `$ref`, `oneOf` or `format`) makes the tool unavailable, with the reason, rather than being checked more loosely.
+- **Cancellation.** Cancelling an operation sends the MCP cancellation to the server. If that was the only call on the process, the process is stopped too, and the next call starts it again. A timeout stops the process and holds it back for 30 seconds, because its state is unknown.
+- **Failures carry codes.** The agent sees a failed tool as a step with its code (for example `APPROVAL_DENIED`, `TIMEOUT` or `SERVER_EXITED`), not only as text.
 - **Trusted workspaces only.** In a Restricted Mode workspace nothing starts, and no external tool is offered to the agent.
 - **Project root.** Each server starts with the project root as its working directory. In a multi-root workspace, each project gets its own process.
 - **Started on demand.** A server starts the first time the agent may use one, not at activation. A server that fails or exits is not retried for 30 seconds. Connecting and listing time out after 15 seconds; a single call times out after 60 seconds.
 - **Clean environment.** The process gets the usual system variables plus only your `env` values, not the extension host's full environment.
-- **Audited.** Every call RailsForge's own agent makes is written to `.railsforge/mcp/audit.jsonl` with the tool name and the **argument names**, never the values. The editor path below is not audited by RailsForge.
+- **Audited.** Every call RailsForge's own agent makes is written to `.railsforge/mcp/audit.jsonl` with the tool name, its risk, whether it was approved, and the **argument names**, never the values. The editor path below is not audited by RailsForge.
 - **Output.** Only text content reaches the agent. Images and other content are named as omitted. Long results are clipped as the agent's other tools are.
 
 ## Example: ask-ruby-harness-mcp
@@ -110,4 +116,3 @@ Run **RailsForge: Test External MCP Servers**. It opens a report with each serve
 
 - HTTP servers, and OAuth. Remote services such as Sentry and GitHub need these.
 - Secret storage. `env` values are plain text in your settings file, so keep secrets out of it until secret storage is added.
-- Per-call approval. Tools that run project code are refused in untrusted workspaces, but they are not individually confirmed.
