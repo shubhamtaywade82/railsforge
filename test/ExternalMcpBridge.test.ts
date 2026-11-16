@@ -66,6 +66,15 @@ describe('ExternalMcpBridge', () => {
     expect(manager.callTool).not.toHaveBeenCalled()
   })
 
+  it('falls back to the built-in tools, and logs why, when the external tools cannot be listed', async () => {
+    const manager = fakeManager()
+    manager.toolsFor.mockRejectedValueOnce(new Error('registry broke'))
+    const logs: string[] = []
+    const bridge = new ExternalMcpBridge(manager as unknown as ExternalServerManager, () => true, m => logs.push(m))
+    await expect(bridge.loopToolsFor('/project')).resolves.toEqual([])
+    expect(logs).toEqual([expect.stringContaining('external tools unavailable for this request: registry broke')])
+  })
+
   it('asks the manager for no tools when the workspace is untrusted', async () => {
     const manager = fakeManager()
     manager.toolsFor.mockResolvedValueOnce([])

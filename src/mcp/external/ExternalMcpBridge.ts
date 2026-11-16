@@ -39,14 +39,22 @@ export class ExternalMcpBridge {
     return parsed.problems
   }
 
-  /** The external tools the agent may call for `root`, as loop tools. Empty in an untrusted workspace. */
+  /**
+   * The external tools the agent may call for `root`, as loop tools. Empty in an untrusted workspace. A failure here
+   * leaves the agent with its built-in tools rather than failing the request.
+   */
   async loopToolsFor(root: string): Promise<LoopTool[]> {
-    const tools = await this.manager.toolsFor(root, this.isTrusted())
-    return tools.map(tool => externalLoopTool(tool, root, {
-      callRemote: (exposed, projectRoot, args) => this.manager.callTool(exposed.serverId, projectRoot, exposed.remoteName, args),
-      isTrusted: this.isTrusted,
-      warn: message => this.log(message),
-    }))
+    try {
+      const tools = await this.manager.toolsFor(root, this.isTrusted())
+      return tools.map(tool => externalLoopTool(tool, root, {
+        callRemote: (exposed, projectRoot, args) => this.manager.callTool(exposed.serverId, projectRoot, exposed.remoteName, args),
+        isTrusted: this.isTrusted,
+        warn: message => this.log(message),
+      }))
+    } catch (err) {
+      this.log(`[mcp] external tools unavailable for this request: ${err instanceof Error ? err.message : String(err)}`)
+      return []
+    }
   }
 
   /** Markdown for the test command: each server's state, the tools it offers and the configuration problems. */
