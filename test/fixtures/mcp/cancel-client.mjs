@@ -13,6 +13,14 @@ const [serverBundle, projectRoot] = process.argv.slice(2)
 const fakeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rf-cancel-fake-'))
 const exists = name => fs.existsSync(path.join(fakeDir, name))
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+const unsafeJsCharMap = {
+  '<': '\\u003C',
+  '>': '\\u003E',
+  '/': '\\u002F',
+  '\u2028': '\\u2028',
+  '\u2029': '\\u2029',
+}
+const escapeUnsafeJsLiteral = str => str.replace(/[<>/\u2028\u2029]/g, ch => unsafeJsCharMap[ch])
 const until = async (predicate, ms) => {
   const start = Date.now()
   while (Date.now() - start < ms) {
@@ -44,7 +52,7 @@ if (process.platform === 'win32') {
   // must stop both, and both carry the fake directory in their command lines.
   fs.writeFileSync(path.join(fakeDir, 'loop.mjs'), [
     "import * as fs from 'node:fs'",
-    `const beat = () => fs.writeFileSync(${JSON.stringify(path.join(fakeDir, 'bundle-heartbeat'))}, String(Date.now()))`,
+    `const beat = () => fs.writeFileSync(${escapeUnsafeJsLiteral(JSON.stringify(path.join(fakeDir, 'bundle-heartbeat')))}, String(Date.now()))`,
     'beat()',
     'setInterval(beat, 100)',
     '',
