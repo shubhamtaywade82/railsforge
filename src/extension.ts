@@ -128,8 +128,9 @@ import { SteepProvider } from './types/SteepProvider'
 import { LearningResource } from './principles/LearningResources'
 import { loadEffectiveServiceObjectGuidelines } from './config/EffectiveGuidelines'
 import { parseVersion, bumpVersion, replaceVersionInContent, VersionBumpPart } from './gems/GemVersionBumper'
-import { SpeculativeFixCache } from './agent/SpeculativeFixCache'
+import { SpeculativeFixCache, warmAfter } from './agent/SpeculativeFixCache'
 import { Logger } from './util/Logger'
+import { OnceByKey } from './util/OnceByKey'
 import { diffLines, filterFixHunks, applyHunks } from './patch/LineDiff'
 import { checkRubySyntax, rubySyntaxError } from './util/RubySyntax'
 import { handleWorkspaceAutoOptimization, optimizeRailsWorkspace } from './workspace/WorkspaceOptimizer'
@@ -157,6 +158,8 @@ export interface RailsForgeTestApi {
   getSchemaTableNames(): string[]
   /** AST index status keyed by workspace root (only roots that were activated). */
   getAstIndexStatuses(): Record<string, string>
+  /** Starts (or joins) the AST index for `root` and resolves with its settled status. */
+  startAstIndex(root: string): Promise<string>
   /** Number of RBS signatures for `methodName` in the project that owns `filePath`. */
   countRbsMethods(filePath: string, methodName: string): number
   /** DevDocs cache directory of the project that owns `filePath`. */
@@ -166,6 +169,7 @@ export interface RailsForgeTestApi {
 }
 
 export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
+  const activationStartedAt = Date.now()
   ensureSafeProcessReport()
   projectState = new ProjectState(context.workspaceState)
   skillsPackDir = path.join(context.extensionPath, 'dist', 'skills')
@@ -267,8 +271,20 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
       return slugs
     },
   }))
-  const devDocsIndexFor = (uri: vscode.Uri): DevDocsOfflineIndex =>
-    devDocsProjects.get(workspaceRootFor(uri) ?? activeProject.root).index
+  // Offline DevDocs load on first use of a root (its first enabled Ruby hover), never at activation: a cold
+  // cache downloads and JSON-parses large docsets on the extension host. Each root loads once per session;
+  // a failed load is not retried by hovers (a reload retries it).
+  const devDocsLoads = new OnceByKey<string, boolean[]>()
+  const ensureDevDocsLoaded = (root: string): void => {
+    if (!root || !readConfig().devdocsOfflineEnabled) {return}
+    devDocsLoads.run(root, () => devDocsProjects.get(root).refresh(false))
+      .catch(err => Logger.warn(`[devdocs] could not load offline docs for ${root}: ${String(err)}`))
+  }
+  const devDocsIndexFor = (uri: vscode.Uri): DevDocsOfflineIndex => {
+    const root = workspaceRootFor(uri) ?? activeProject.root
+    ensureDevDocsLoaded(root)
+    return devDocsProjects.get(root).index
+  }
   // Parsed on first use of a root (RBS sig dirs are small), so a hover in any root is correct.
   const rbsIndexes = new PerRootRegistry<RBSIndex>(root => {
     const index = new RBSIndex()
@@ -369,13 +385,11 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   })
   const semanticSearchIndex = new SemanticSearchIndex(projectPatternIndexer, text => embeddingClient.embed(text), config.performanceCacheSize)
 
-  // Speculative Fix Cache - pre-generates fixes for common RuboCop offenses
-  // so they're instant when the user requests a fix.
+  // Speculative Fix Cache - pre-generates fixes for common RuboCop offenses so they're instant when the
+  // user requests a fix. Warm-up is one model request per template, so it is never started at activation
+  // (in a 6,000-file benchmark it held the extension host for ~0.5 s and queued model work nobody asked for).
+  // The first AI fix request starts it once that request has finished: see warmAfter (SpeculativeFixCache.ts).
   const speculativeFixCache = new SpeculativeFixCache(agent)
-  if (workspaceRoot && context.extensionMode !== vscode.ExtensionMode.Test) {
-    // Deferred: AI cache warm is CPU/network-heavy, not needed until first fix request.
-    setTimeout(() => void speculativeFixCache.warm(), 8000)
-  }
 
   // 1. Sidebar Chat Webview Provider (Same architecture as PineForge)
   const chatViewProvider = new RailsChatViewProvider(
@@ -395,8 +409,9 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   // project. Fails soft: commands report the precise state (starting / unsupported + reason /
   // failed) rather than the extension crashing if native modules can't load, and an
   // unsupported runtime is surfaced to the user once instead of silently disabling the feature.
-  // Initial root deferred 5s: heaviest startup cost (tree-sitter + SQLite + full scan); core
-  // features (hovers, navigation, linting) work fine without it.
+  // Never started at activation: a full tree-sitter + SQLite scan is the heaviest startup cost, and only the
+  // duplicate-method and dependency-cycle commands read it. They start it on first use (requireAstIndex), which
+  // tells the user to retry once it is ready. Core features (hovers, navigation, linting) do not need it.
   const persistentIndexes = new PersistentIndexRegistry<PersistentIndexManager>(
     root => PersistentIndexManager.activate(context, root),
     (root, state) => {
@@ -409,18 +424,10 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     },
   )
   context.subscriptions.push(persistentIndexes)
-  if (workspaceRoot) {
-    setTimeout(() => void persistentIndexes.ensure(workspaceRoot), 5000)
-  }
 
-  // Offline DevDocs: downloads (or reuses an already-cached) docset in the background,
-  // then swaps that project's index so DevDocsHoverProvider picks it up without a
-  // window reload (per root: a root's docs load when it first becomes the active project). Silent on failure/offline — APIDock/RubyDoc's network-backed hovers
-  // and the live `railsforge.openDevDocs` webview keep working regardless.
-  // Deferred 5s: network I/O that can safely wait until core features are up.
-  if (workspaceRoot && config.devdocsOfflineEnabled) {
-    setTimeout(() => void devDocsProjects.get(workspaceRoot).refresh(false), 5000)
-  }
+  // Offline DevDocs are loaded lazily per root by devDocsIndexFor (first enabled Ruby hover), not here.
+  // Silent on failure/offline — APIDock/RubyDoc's network-backed hovers and the live `railsforge.openDevDocs`
+  // webview keep working regardless.
 
   // 2. Initial Indexing & Live Workspace Analysis
   // Staggered to avoid blocking the extension host and the "thundering herd" problem
@@ -573,9 +580,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     loadStimulusControllers(newRoot, stimulusIndexer)
     factoryBotResolver.indexFactories(newRoot)
     rakeTaskTreeProvider.setRoot(newRoot)
-    void persistentIndexes.ensure(newRoot)
     rbsIndexes.get(newRoot)
-    if (readConfig().devdocsOfflineEnabled) {void devDocsProjects.get(newRoot).refresh(false)}
     architectureTreeProvider.refresh(env)
   }
   const syncActiveProject = (uri: vscode.Uri | undefined): void => {
@@ -696,6 +701,16 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     scheduleDiagnostics(e.document, 300)
     scheduleRubocopLint(e.document, 500)
   }, null, context.subscriptions)
+
+  // Activation runs after startup, so editors restored earlier are already open and onDidOpenTextDocument
+  // will not fire for them. Run the same open-time work for those documents, or they stay without diagnostics,
+  // test discovery or RuboCop until they are edited.
+  for (const doc of vscode.workspace.textDocuments) {
+    if (doc.languageId !== 'ruby' && doc.languageId !== 'erb') {continue}
+    testExplorer.discoverTestsInDocument(doc)
+    scheduleDiagnostics(doc, 100)
+    scheduleRubocopLint(doc, 200)
+  }
 
   let lastBrakemanScanOnSave = 0
   let lastSteepScanOnSave = 0
@@ -1165,6 +1180,9 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     }
   }))
 
+  // Only the synchronous wiring is measured here; indexing and network work is scheduled and logs its own progress.
+  Logger.info(`RailsForge activated in ${Date.now() - activationStartedAt} ms (synchronous wiring).`)
+
   return {
     getActiveProjectRoot: () => activeProject.root,
     getSchemaTableNames: () => schemaIndexer.getAllTables().map(t => t.name),
@@ -1181,6 +1199,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
       return lines
     },
     getAstIndexStatuses: () => Object.fromEntries(persistentIndexes.roots().map(r => [r, persistentIndexes.state(r).status])),
+    startAstIndex: async root => (await persistentIndexes.ensure(root)).status,
   }
 }
 
@@ -2171,7 +2190,7 @@ function registerCommands(
           .then(doc => vscode.window.showTextDocument(doc))
       })
     }),
-    vscode.commands.registerCommand('railsforge.applyAiFix', async (uri: vscode.Uri, range: vscode.Range, diagnosticMessage: string) => {
+    vscode.commands.registerCommand('railsforge.applyAiFix', warmAfter(speculativeFixCache, async (uri: vscode.Uri, range: vscode.Range, diagnosticMessage: string) => {
       const document = await vscode.workspace.openTextDocument(uri)
       const targetRange = range.isEmpty ? document.lineAt(range.start.line).range : range
       const code = document.getText(targetRange)
@@ -2454,7 +2473,7 @@ function registerCommands(
           vscode.window.showWarningMessage(`RailsForge: AI fix could not be resolved — ${lastRejection ?? 'RuboCop still reports the issue'}.`)
         },
       )
-    }),
+    }, () => context.extensionMode !== vscode.ExtensionMode.Test)),
     vscode.commands.registerCommand('railsforge.fixAllInFile', async (uri?: vscode.Uri) => {
       const targetUri = uri ?? vscode.window.activeTextEditor?.document.uri
       if (!targetUri) {return}

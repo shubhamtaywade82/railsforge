@@ -222,3 +222,29 @@ export class SpeculativeFixCache {
     }
   }
 }
+
+/**
+ * Wraps an AI fix handler so `cache.warm()` runs once the handler has settled, whether it succeeded or threw.
+ *
+ * Warm-up is one model request per template. A local model usually serves one request at a time, so warm-up
+ * must not queue ahead of the user's own request: it starts only after that request has finished. `warm()` is
+ * idempotent and coalesces concurrent calls, so calling it after every AI fix costs nothing once it has run.
+ * `shouldWarm` lets the caller skip warm-up entirely (the extension skips it under the test host).
+ */
+export function warmAfter<A extends unknown[]>(
+  cache: Pick<SpeculativeFixCache, 'warm'>,
+  handler: (...args: A) => Promise<void>,
+  shouldWarm: () => boolean = () => true,
+): (...args: A) => Promise<void> {
+  return async (...args: A) => {
+    try {
+      await handler(...args)
+    } finally {
+      if (shouldWarm()) {
+        // Per-template failures are already swallowed inside warm(); this only keeps a stray rejection from
+        // becoming an unhandled one.
+        cache.warm().catch(() => undefined)
+      }
+    }
+  }
+}

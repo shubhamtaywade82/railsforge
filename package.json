@@ -67,12 +67,7 @@
     "ruby-lsp"
   ],
   "activationEvents": [
-    "onLanguage:ruby",
-    "onLanguage:erb",
-    "onLanguage:haml",
-    "onLanguage:slim",
-    "workspaceContains:Gemfile",
-    "workspaceContains:config/routes.rb"
+    "onStartupFinished"
   ],
   "main": "./dist/extension.js",
   "scripts": {

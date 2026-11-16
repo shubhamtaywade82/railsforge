@@ -13,6 +13,7 @@ interface RailsForgeTestApi {
   getActiveProjectRoot(): string
   getSchemaTableNames(): string[]
   getAstIndexStatuses(): Record<string, string>
+  startAstIndex(root: string): Promise<string>
 }
 
 const EXTENSION_ID = 'ShubhamTaywade.railsforge'
@@ -152,11 +153,9 @@ export async function run(): Promise<void> {
       const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(workspaceRoot, 'app', 'models', 'alphas.rb')))
       await vscode.window.showTextDocument(doc)
       await until(() => api!.getSchemaTableNames().includes('alphas'), 20_000, 'schema table "alphas"')
-      await until(() => {
-        const s = Object.values(api!.getAstIndexStatuses())
-        return s.length > 0 && s.every(v => v !== 'starting' && v !== 'idle')
-      }, 45_000, 'AST index to settle')
-      assert.deepStrictEqual([...new Set(Object.values(api.getAstIndexStatuses()))], ['ready'], 'AST index must be ready in the packaged extension')
+      // The AST index is started on first use, not at activation: start it the way the commands do, then require ready.
+      const status = await api.startAstIndex(workspaceRoot)
+      assert.strictEqual(status, 'ready', 'AST index must be ready in the packaged extension')
     } },
   ]
 

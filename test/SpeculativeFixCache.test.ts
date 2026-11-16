@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { SpeculativeFixCache } from '../src/agent/SpeculativeFixCache'
+import { SpeculativeFixCache, warmAfter } from '../src/agent/SpeculativeFixCache'
 import { RailsAgent } from '../src/agent/RailsAgent'
 import { SchemaIndexer } from '../src/rails/SchemaIndexer'
 import { RoutesIndexer } from '../src/rails/RoutesIndexer'
@@ -295,5 +295,56 @@ describe('SpeculativeFixCache', () => {
     cache.set('Cop/A', 'x', 'diff-new')
     expect(cache.get('Cop/A', 'x')).toBe('diff-new')
     expect(cache.stats().size).toBe(1)
+  })
+})
+
+describe('warmAfter', () => {
+  it('starts warm-up only after the AI fix handler has settled (never queued ahead of the user request)', async () => {
+    const order: string[] = []
+    let finish: () => void = () => {}
+    const handler = vi.fn((_uri: string, _range: string, _message: string) => new Promise<void>(resolve => { finish = () => { order.push('handler-done'); resolve() } }))
+    const cache = { warm: vi.fn(async () => { order.push('warm') }) }
+
+    const run = warmAfter(cache, handler)('uri', 'range', 'message')
+    await Promise.resolve()
+    expect(cache.warm).not.toHaveBeenCalled()
+
+    finish()
+    await run
+    expect(order).toEqual(['handler-done', 'warm'])
+    expect(handler).toHaveBeenCalledWith('uri', 'range', 'message')
+  })
+
+  it('still starts warm-up when the handler throws, and rethrows the handler error', async () => {
+    const cache = { warm: vi.fn(async () => undefined) }
+    const boom = new Error('model unavailable')
+    const wrapped = warmAfter(cache, async () => { throw boom })
+
+    await expect(wrapped()).rejects.toBe(boom)
+    expect(cache.warm).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not warm when shouldWarm is false (the test host never warms)', async () => {
+    const cache = { warm: vi.fn(async () => undefined) }
+    await warmAfter(cache, async () => undefined, () => false)()
+    expect(cache.warm).not.toHaveBeenCalled()
+  })
+
+  it('swallows a rejected warm-up so it cannot surface as an unhandled rejection', async () => {
+    const cache = { warm: vi.fn(() => Promise.reject(new Error('warm failed'))) }
+    await expect(warmAfter(cache, async () => undefined)()).resolves.toBeUndefined()
+    expect(cache.warm).toHaveBeenCalledTimes(1)
+  })
+
+  it('calls warm after every AI fix; warm() itself is idempotent, so repeats are no-ops', async () => {
+    const cache = new SpeculativeFixCache(buildMockAgent(null), { maxEntries: 1 })
+    const warm = vi.spyOn(cache, 'warm')
+    const wrapped = warmAfter(cache, async () => undefined)
+
+    await wrapped()
+    await wrapped()
+    expect(warm).toHaveBeenCalledTimes(2)
+    // warm() is fire-and-forget and this file runs on fake timers, so wait on the state rather than on a timer.
+    await vi.waitFor(() => expect(cache.stats().warmed).toBe(true))
   })
 })

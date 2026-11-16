@@ -79,6 +79,7 @@ const { mockContext, vscodeMocks, mockDisposable, mockStatusBar, mockDiagnosticC
     workspace: {
       isTrusted: true,
       workspaceFolders: [{ uri: { fsPath: '/tmp/app', toString: () => 'file:///tmp/app' }, name: 'a', index: 0 }],
+      textDocuments: [] as unknown[],
       getConfiguration: vi.fn(() => ({ get: vi.fn(() => undefined), update: vi.fn(() => Promise.resolve()) })),
       registerTextDocumentContentProvider: vi.fn(() => d),
       onDidOpenTextDocument: vi.fn((_cb: Function, _?, subs?: unknown[]) => { const dd = { dispose: vi.fn() }; if (subs) subs.push(dd); return dd }),
@@ -378,5 +379,44 @@ describe('extension command handler execution', () => {
     }
     // Verify we exercised all 40+ commands
     expect(allCmds.length).toBeGreaterThanOrEqual(40)
+  })
+})
+
+describe('extension activation catch-up for documents already open', () => {
+  const restoredDoc = (rel: string, languageId: string) => ({
+    uri: { fsPath: `/tmp/app/${rel}`, toString: () => `file:///tmp/app/${rel}` },
+    fileName: `/tmp/app/${rel}`,
+    languageId,
+    getText: () => '',
+    lineAt: () => ({ text: '', range: {} }),
+    lineCount: 1,
+  })
+  // Diagnostics are debounced (100 ms for open-time work). Stop short of the 200 ms RuboCop lint so no process starts.
+  const diagnosticsTouched = (): string[] => [...mockDiagnosticCollection.set.mock.calls, ...mockDiagnosticCollection.delete.mock.calls]
+    .map(call => String((call[0] as { toString(): string }).toString()))
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+    vscodeMocks.workspace.workspaceFolders = [{ uri: { fsPath: '/tmp/app', toString: () => 'file:///tmp/app' }, name: 'a', index: 0 }]
+  })
+
+  afterEach(() => {
+    vscodeMocks.workspace.textDocuments = []
+    vi.useRealTimers()
+  })
+
+  it('runs open-time diagnostics for a Ruby editor restored before activation (onDidOpenTextDocument never fires for it)', () => {
+    vscodeMocks.workspace.textDocuments = [restoredDoc('app/models/restored.rb', 'ruby')]
+    activate(mockContext as any)
+    vi.advanceTimersByTime(150)
+    expect(diagnosticsTouched()).toContain('file:///tmp/app/app/models/restored.rb')
+  })
+
+  it('ignores restored documents that are not Ruby or ERB', () => {
+    vscodeMocks.workspace.textDocuments = [restoredDoc('README.md', 'markdown')]
+    activate(mockContext as any)
+    vi.advanceTimersByTime(150)
+    expect(diagnosticsTouched()).not.toContain('file:///tmp/app/README.md')
   })
 })

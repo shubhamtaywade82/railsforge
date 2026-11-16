@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Performance
+- **RailsForge starts after VS Code has finished starting.** Activation was `onLanguage` and `workspaceContains`, which fired while the window and projects were still restoring. It is now `onStartupFinished`.
+- **No model requests or indexing at activation.** The AI fix cache warm-up (28 model requests, which stalled the extension host for ~0.5 s on a 6,000-file synthetic project) starts after the first AI fix request finishes. The AST index starts on first use by its commands. The offline DevDocs download starts on the first Ruby hover per project.
+- **Ruby and ERB files open at activation get diagnostics right away**, because the open-document event does not fire for them.
+- Activation logs its synchronous cost (`RailsForge activated in N ms`).
+
 ### Security
 - **The standalone MCP server runs project code only after an explicit grant.** The trust default was "trusted", so `list_rake_tasks` (which runs `rake -T`) ran for any MCP client. Trust now fails closed until a provider is installed. The extension installs VS Code's workspace trust. The standalone server installs the grant from `RAILSFORGE_MCP_EXECUTION=project-code`, which the MCP client sets. Read-only tools are unaffected.
 - **Every tool declares a risk level (R0 to R4).** One invocation path checks the level before the handler runs, for the standalone server, the Language Model tools and the agent loop.
