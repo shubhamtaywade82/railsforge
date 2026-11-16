@@ -29,8 +29,14 @@ export interface InvocableTool<C> {
   description?: string
   /** Returns a reason when the arguments are not acceptable. Runs before policy, approval and any process start. */
   validate?(input: Record<string, unknown>): string | undefined
-  handler(ctx: C, input: Record<string, unknown>, signal?: AbortSignal): Promise<string>
+  handler(ctx: C, input: Record<string, unknown>, signal?: AbortSignal): Promise<ToolOutput>
 }
+
+/**
+ * What a handler returns: the text a person or model reads, or the text together with the structured value it describes.
+ * A structured value is an object, because MCP's structuredContent must be one. The text is always present.
+ */
+export type ToolOutput = string | { text: string; data: Record<string, unknown> }
 
 /** A failure the handler wants reported under a specific code, such as CANCELLED or TIMEOUT. */
 export class ToolCallError extends Error {
@@ -78,7 +84,9 @@ export interface InvocationOptions {
   newRequestId?(): string
 }
 
-export type InvocationResult = { ok: true; text: string } | { ok: false; code: string; message: string }
+export type InvocationResult =
+  | { ok: true; text: string; data?: Record<string, unknown> }
+  | { ok: false; code: string; message: string }
 
 /** Calls at these risk levels leave a 'started' record before they run, so no execution goes unrecorded. */
 function requiresStartedRecord(risk: RiskLevel): boolean {
@@ -159,9 +167,9 @@ export async function invokeTool<C extends { workspaceRoot: string }>(
   }
 
   try {
-    const text = await tool.handler(ctx, args, options.signal)
+    const output = await tool.handler(ctx, args, options.signal)
     close('finished', 'success')
-    return { ok: true, text }
+    return typeof output === 'string' ? { ok: true, text: output } : { ok: true, text: output.text, data: output.data }
   } catch (err) {
     if (err instanceof UntrustedWorkspaceError) {
       // The process layer refused, which means the policy and the process layer disagree. Record it as a denial.
