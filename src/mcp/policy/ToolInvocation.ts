@@ -171,6 +171,12 @@ export async function invokeTool<C extends { workspaceRoot: string }>(
     close('finished', 'success')
     return typeof output === 'string' ? { ok: true, text: output } : { ok: true, text: output.text, data: output.data }
   } catch (err) {
+    // A failure after the call was cancelled is the cancellation, whatever the handler reported: the work stopped because
+    // of it, not because the tool failed.
+    if (options.signal?.aborted && !(err instanceof UntrustedWorkspaceError)) {
+      close('finished', 'failure', 'CANCELLED')
+      return { ok: false, code: 'CANCELLED', message: 'The operation was cancelled.' }
+    }
     if (err instanceof UntrustedWorkspaceError) {
       // The process layer refused, which means the policy and the process layer disagree. Record it as a denial.
       close('denied', 'denied', 'WORKSPACE_UNTRUSTED')

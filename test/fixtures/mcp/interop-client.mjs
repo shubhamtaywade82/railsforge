@@ -44,7 +44,7 @@ try {
   report.capabilities = client.getServerCapabilities()
 
   const listed = await client.listTools()
-  report.tools = listed.tools.map(tool => ({ name: tool.name, inputSchema: tool.inputSchema }))
+  report.tools = listed.tools.map(tool => ({ name: tool.name, inputSchema: tool.inputSchema, annotations: tool.annotations ?? null }))
 
   report.getSchemaOrder = await call('get_schema', { model: 'Order' })
   report.listRoutesOrders = await call('list_routes', { filter: 'orders' })
@@ -53,6 +53,10 @@ try {
   report.healthRoute = await call('list_routes', { filter: 'health' })
   report.servedAfterErrors = await call('list_routes', { filter: 'orders' })
   report.listPatterns = await call('list_patterns', { type: 'service' })
+  report.similarPatterns = await call('find_similar_pattern', { name: 'CreateOrderService' })
+  report.similarMiss = await call('find_similar_pattern', { name: 'NoSuchService' })
+  report.exampleFile = await call('get_example_file', { pattern_type: 'service' })
+  report.learningResource = await call('suggest_learning_resource', { diagnostic_id: 'SRP-FAT-CLASS' })
   report.listSkills = await call('list_skills', {})
   report.untrustedRake = await call('list_rake_tasks', {})
   report.noIndex = await call('get_dependencies', { name: 'Order' })

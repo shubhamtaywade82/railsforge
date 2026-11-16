@@ -32,7 +32,7 @@ interface Report {
   errors: string[]
   server: { name: string; version: string }
   capabilities: Record<string, unknown>
-  tools: Array<{ name: string; inputSchema: { type?: string; properties?: Record<string, unknown>; required?: string[] } }>
+  tools: Array<{ name: string; inputSchema: { type?: string; properties?: Record<string, unknown>; required?: string[] }; annotations: { readOnlyHint?: boolean; destructiveHint?: boolean; idempotentHint?: boolean } | null }>
   getSchemaOrder: CallReport
   listRoutesOrders: CallReport
   invalidArguments: CallReport
@@ -40,6 +40,10 @@ interface Report {
   healthRoute: CallReport
   servedAfterErrors: CallReport
   listPatterns: CallReport
+  similarPatterns: CallReport
+  similarMiss: CallReport
+  exampleFile: CallReport
+  learningResource: CallReport
   listSkills: CallReport
   untrustedRake: CallReport
   noIndex: CallReport
@@ -135,6 +139,26 @@ describe('an independent MCP client, in its own process, against RailsForge\'s s
     const client = fs.readFileSync(CLIENT, 'utf8')
     expect(client).not.toMatch(/from ['"]\.\.?\/(\.\.\/)*src\//)
   })
+  it('declares MCP hints that follow each tool\'s risk: a read is read-only, and project code is destructive', () => {
+    const hints = (name: string) => report.tools.find(tool => tool.name === name)?.annotations
+    expect(hints('list_routes')).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true })
+    expect(hints('list_rake_tasks')).toMatchObject({ readOnlyHint: false, destructiveHint: true })
+  })
+
+  it('find_similar_pattern, get_example_file and suggest_learning_resource return structured data the SDK client accepted', () => {
+    expect(report.similarPatterns.isError).toBe(false)
+    expect(report.similarPatterns.structured).toMatchObject({ similar: [expect.objectContaining({ name: 'CancelOrderService' })] })
+    expect(report.exampleFile.isError).toBe(false)
+    expect(report.exampleFile.structured).toMatchObject({ name: expect.any(String), filePath: expect.any(String), content: expect.any(String) })
+    expect(report.learningResource.isError).toBe(false)
+    expect(report.learningResource.structured).toMatchObject({ book: expect.any(String), chapter: expect.any(String), note: expect.any(String) })
+  })
+
+  it('a lookup that finds nothing is an error with NOT_FOUND in _meta, not a text answer', () => {
+    expect(report.similarMiss.isError).toBe(true)
+    expect(report.similarMiss.meta?.railsforge?.code).toBe('NOT_FOUND')
+  })
+
   it('list_patterns returns structured data that the SDK client validated against its declared output schema', () => {
     const call = report.listPatterns
     expect(call.ok).toBe(true)

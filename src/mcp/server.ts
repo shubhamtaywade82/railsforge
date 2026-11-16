@@ -16,7 +16,7 @@ import * as path from 'path'
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ToolContext } from './tools/ToolContext'
-import { RAILSFORGE_TOOLS } from './tools/definitions'
+import { RAILSFORGE_TOOLS, toolAnnotations } from './tools/definitions'
 import { invokeTool } from './policy/ToolInvocation'
 import { toCallToolResult } from './McpResults'
 import { readExecutionGrant } from './policy/McpCapabilityPolicy'
@@ -42,7 +42,7 @@ const server = new McpServer({ name: 'railsforge', version: '0.2.0' })
 for (const tool of RAILSFORGE_TOOLS) {
   server.registerTool(
     tool.name,
-    { title: tool.title, description: tool.description, inputSchema: tool.inputSchema, outputSchema: tool.outputSchema },
+    { title: tool.title, description: tool.description, inputSchema: tool.inputSchema, outputSchema: tool.outputSchema, annotations: toolAnnotations(tool.risk) },
     (async (input: Record<string, unknown>, extra: { signal?: AbortSignal }) => {
       // Every call goes through invokeTool: the declared risk, the execution grant and the audit trail all apply. A
       // cancellation from the client reaches the tool through the signal, and is reported as CANCELLED.

@@ -52,9 +52,10 @@ describe('list_patterns', () => {
   it('returns the project\'s services with their public methods, as structured data', async () => {
     const out = structuredOf(await tool('list_patterns').handler(ctx, { type: 'service' }))
     const patterns = out.data.patterns as Array<{ name: string; type: string; publicMethods: string[] }>
-    expect(patterns).toEqual([expect.objectContaining({ name: 'CreateOrderService', type: 'service' })])
-    // The indexer also lists `initialize`, which Ruby makes private; that is an existing indexer behaviour, not asserted here.
-    expect(patterns[0].publicMethods).toContain('call')
+    expect(patterns.map(pattern => pattern.name).sort()).toEqual(['CancelOrderService', 'CreateOrderService'])
+    expect(patterns.every(pattern => pattern.publicMethods.includes('call'))).toBe(true)
+    // `initialize` is private in Ruby, so the indexer leaves it out.
+    expect(patterns.flatMap(pattern => pattern.publicMethods)).not.toContain('initialize')
     expect(declared('list_patterns').safeParse(out.data).success).toBe(true)
   })
 
@@ -101,5 +102,40 @@ describe('the same calls, as the server makes them: invocation, then the MCP map
   it('a call that runs project code, in an untrusted workspace, is refused on the standalone path with its code', async () => {
     const result = toCallToolResult(await standalone('list_rake_tasks', {}, false), tool('list_rake_tasks').outputSchema)
     expect(result).toMatchObject({ isError: true, _meta: { railsforge: { code: 'EXECUTION_DISABLED' } } })
+  })
+})
+
+describe('find_similar_pattern', () => {
+  it('returns the similar patterns as a structured list, and the text is the bare list', async () => {
+    const out = structuredOf(await tool('find_similar_pattern').handler(ctx, { name: 'CreateOrderService' }))
+    const similar = out.data.similar as Array<{ name: string }>
+    expect(similar.map(pattern => pattern.name)).toEqual(['CancelOrderService'])
+    expect(out.text).toBe(JSON.stringify(similar, null, 2))
+    expect(declared('find_similar_pattern').safeParse(out.data).success).toBe(true)
+  })
+
+  it('a name with no pattern is a coded NOT_FOUND error, not a text answer', async () => {
+    await expect(Promise.resolve(tool('find_similar_pattern').handler(ctx, { name: 'NoSuchService' }))).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+})
+
+describe('get_example_file', () => {
+  it('returns the example\'s path, name and content as structured data', async () => {
+    const out = structuredOf(await tool('get_example_file').handler(ctx, { pattern_type: 'service' }))
+    expect(out.data).toMatchObject({ name: expect.stringMatching(/^(CreateOrderService|CancelOrderService)$/), filePath: expect.stringContaining('app/services/'), content: expect.stringContaining('class ') })
+    expect(declared('get_example_file').safeParse(out.data).success).toBe(true)
+  })
+
+  it('a pattern type the project does not have is a coded NOT_FOUND error', async () => {
+    await expect(Promise.resolve(tool('get_example_file').handler(ctx, { pattern_type: 'query' }))).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+})
+
+describe('suggest_learning_resource', () => {
+  it('returns the book, chapter and note as structured data', async () => {
+    const out = structuredOf(await tool('suggest_learning_resource').handler(ctx, { diagnostic_id: 'SRP-FAT-CLASS' }))
+    expect(out.data).toMatchObject({ book: expect.any(String), chapter: expect.any(String), note: expect.any(String) })
+    expect(out.text).toBe(JSON.stringify(out.data, null, 2))
+    expect(declared('suggest_learning_resource').safeParse(out.data).success).toBe(true)
   })
 })
