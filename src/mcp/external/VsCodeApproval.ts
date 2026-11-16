@@ -17,6 +17,12 @@ interface ApprovalItem extends vscode.QuickPickItem {
   readonly answer: ApprovalAnswer
 }
 
+/** Prompts on screen now. Read by the Extension Host tests, which need to know when a prompt is open. */
+let openPrompts = 0
+export function openApprovalPrompts(): number {
+  return openPrompts
+}
+
 export function vscodeApprovalPort(): ApprovalPort {
   return {
     request: (request, signal) => new Promise<ApprovalAnswer>(resolve => {
@@ -29,6 +35,7 @@ export function vscodeApprovalPort(): ApprovalPort {
       const finish = (answer: ApprovalAnswer): void => {
         if (answered) {return}
         answered = true
+        openPrompts--
         signal?.removeEventListener('abort', onAbort)
         resolve(answer)
         pick.hide()
@@ -49,6 +56,7 @@ export function vscodeApprovalPort(): ApprovalPort {
       })
       pick.onDidHide(() => finish('denied'))
       signal?.addEventListener('abort', onAbort, { once: true })
+      openPrompts++
       pick.show()
     }),
   }

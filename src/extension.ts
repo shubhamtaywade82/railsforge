@@ -61,6 +61,8 @@ import { RailsArchitectureTreeProvider } from './views/RailsArchitectureTreeProv
 import { PatternCatalogTreeProvider, PatternItem } from './views/PatternCatalogTreeProvider'
 import { createLoopTools } from './agent/LoopTools'
 import { requestViaVsCodeLm } from './agent/VsCodeLmRequest'
+import { openApprovalPrompts } from './mcp/external/VsCodeApproval'
+import type { ApprovalAnswer, ApprovalRequest } from './mcp/policy/ToolInvocation'
 import { isWorkspaceTrusted, setBlockedListener, setTrustProvider } from './workspace/Trust'
 import { collectDiagnostics } from './diagnostics/collect'
 import { renderDiagnosticsDoc } from './diagnostics/Diagnostics'
@@ -179,6 +181,10 @@ export interface RailsForgeTestApi {
   startAstIndex(root: string): Promise<string>
   /** The definitions the editor's own agent would be offered now (the policy in EditorDefinitions.ts). */
   editorExternalDefinitions(): { label: string; command: string; cwd: string }[]
+  /** Development and test runs only, never a packaged install: shows the approval prompt and resolves with the answer. Runs nothing. */
+  requestApprovalForTest?(request: ApprovalRequest, signal?: AbortSignal): Promise<ApprovalAnswer>
+  /** Development and test runs only: how many approval prompts are on screen now. */
+  openApprovalPromptsForTest?(): number
   /** Number of RBS signatures for `methodName` in the project that owns `filePath`. */
   countRbsMethods(filePath: string, methodName: string): number
   /** DevDocs cache directory of the project that owns `filePath`. */
@@ -1272,6 +1278,13 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     getAstIndexStatuses: () => Object.fromEntries(persistentIndexes.roots().map(r => [r, persistentIndexes.state(r).status])),
     startAstIndex: async root => (await persistentIndexes.ensure(root)).status,
     editorExternalDefinitions: () => currentEditorPlan(editorDeps).definitions.map(d => ({ label: d.label, command: d.command, cwd: d.cwd })),
+    // Not in a packaged install. The prompt grants nothing by itself: the caller only learns the answer.
+    ...(context.extensionMode !== vscode.ExtensionMode.Production
+      ? {
+        requestApprovalForTest: (request: ApprovalRequest, signal?: AbortSignal) => vscodeApprovalPort().request(request, signal),
+        openApprovalPromptsForTest: () => openApprovalPrompts(),
+      }
+      : {}),
   }
 }
 
