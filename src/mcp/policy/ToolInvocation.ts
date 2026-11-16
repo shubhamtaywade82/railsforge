@@ -197,16 +197,27 @@ async function askApproval<C>(
     argumentNames: Object.keys(args).sort(),
     argumentPreview: preview(args),
   }
+  // An operation that is already cancelled gets no prompt at all.
+  if (options.signal?.aborted) {return 'unavailable'}
   const timeoutMs = options.approvalTimeoutMs ?? APPROVAL_TIMEOUT_MS
-  let timer: NodeJS.Timeout | undefined
+  // The port gets its own signal. It aborts when the operation is cancelled, when the wait ends (answer, timeout or
+  // cancellation), so the port can dismiss the prompt on screen. A late answer after that point is ignored: the race
+  // below has already settled, and invokeTool refuses a cancelled call whatever the port says.
+  const prompt = new AbortController()
+  let resolveSettled: (value: 'unavailable') => void = () => undefined
+  const settled = new Promise<'unavailable'>(resolve => { resolveSettled = resolve })
+  const onCancel = (): void => resolveSettled('unavailable')
+  const timer = setTimeout(onCancel, timeoutMs)
+  options.signal?.addEventListener('abort', onCancel, { once: true })
   try {
-    const timeout = new Promise<'unavailable'>(resolve => { timer = setTimeout(() => resolve('unavailable'), timeoutMs) })
-    const answer = await Promise.race([port.request(request, options.signal), timeout])
+    // A port that rejects is treated as not answering, which is refused like a timeout.
+    const answered = port.request(request, prompt.signal).catch((): 'unavailable' => 'unavailable')
+    const answer = await Promise.race([answered, settled])
     return answer === 'granted' ? 'granted' : answer === 'denied' ? 'denied' : 'unavailable'
-  } catch {
-    return 'unavailable'
   } finally {
     clearTimeout(timer)
+    options.signal?.removeEventListener('abort', onCancel)
+    prompt.abort()
   }
 }
 

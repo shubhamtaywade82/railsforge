@@ -85,12 +85,119 @@ describe('R3 calls need approval for each invocation', () => {
     expect(audit).not.toContain('order.rb')
   })
 
-  it('does not ask, and does not run, when the call is cancelled while the prompt is open', async () => {
+  it('refuses and does not run a call that is cancelled while its prompt is open', async () => {
     const controller = new AbortController()
     const handler = vi.fn(async () => 'ran')
     const hanging: ApprovalPort = { request: () => { controller.abort(); return new Promise<'granted'>(() => undefined) } }
     const result = await invokeTool(tool('R3', handler), { workspaceRoot: root }, { path: 'a' }, { source: 'host', isTrusted: () => true, approval: hanging, signal: controller.signal, approvalTimeoutMs: 1000 })
     expect(result).toMatchObject({ ok: false, code: 'CANCELLED' })
+    expect(handler).not.toHaveBeenCalled()
+  })
+})
+
+/** A port whose answers the test gives, one call at a time, and which records the signal each prompt was given. */
+function gatedPort() {
+  const prompts: AbortSignal[] = []
+  const pending: Array<(answer: 'granted' | 'denied') => void> = []
+  const port = {
+    request: vi.fn((_request: ApprovalRequest, signal?: AbortSignal) => {
+      if (signal) {prompts.push(signal)}
+      return new Promise<'granted' | 'denied'>(resolve => { pending.push(resolve) })
+    }),
+  }
+  /** Answers the most recent prompt that is still open. */
+  const answer = (value: 'granted' | 'denied'): void => { pending.pop()?.(value) }
+  return { port: port as ApprovalPort & { request: typeof port.request }, prompts, answer }
+}
+
+describe('the approval lifecycle: a stop, a timeout and a late answer', () => {
+  let root: string
+  beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), 'rf-approval-life-')) })
+  afterEach(() => { fs.rmSync(root, { recursive: true, force: true }) })
+
+  const invoke = (handler: () => Promise<string>, options: Parameters<typeof invokeTool>[3]) =>
+    invokeTool(tool('R3', handler), { workspaceRoot: root }, { path: 'a' }, options)
+
+  it('a stop while the prompt is open ends the invocation at once, and tells the prompt to close', async () => {
+    const gate = gatedPort()
+    const controller = new AbortController()
+    const handler = vi.fn(async () => 'ran')
+    const started = Date.now()
+    const pending = invoke(handler, { source: 'host', isTrusted: () => true, approval: gate.port, signal: controller.signal, approvalTimeoutMs: 60_000 })
+    await vi.waitFor(() => expect(gate.prompts).toHaveLength(1))
+
+    controller.abort()
+    await expect(pending).resolves.toMatchObject({ ok: false, code: 'CANCELLED' })
+    expect(Date.now() - started).toBeLessThan(5_000) // it did not wait for the prompt, which never answered
+    expect(gate.prompts[0].aborted).toBe(true)
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('an "Allow once" that arrives after the stop is never run, and leaves no started record', async () => {
+    const gate = gatedPort()
+    const controller = new AbortController()
+    const handler = vi.fn(async () => 'ran')
+    const pending = invoke(handler, { source: 'host', isTrusted: () => true, approval: gate.port, signal: controller.signal, approvalTimeoutMs: 60_000 })
+    await vi.waitFor(() => expect(gate.prompts).toHaveLength(1))
+    controller.abort()
+    await expect(pending).resolves.toMatchObject({ code: 'CANCELLED' })
+
+    gate.answer('granted') // the user clicks after the stop
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(handler).not.toHaveBeenCalled()
+    expect(auditLines(root).some(line => line.phase === 'started')).toBe(false)
+  })
+
+  it('a timeout ends the wait, tells the prompt to close, and a late answer is ignored', async () => {
+    const gate = gatedPort()
+    const handler = vi.fn(async () => 'ran')
+    const result = await invoke(handler, { source: 'host', isTrusted: () => true, approval: gate.port, approvalTimeoutMs: 20 })
+    expect(result).toMatchObject({ ok: false, code: 'APPROVAL_UNAVAILABLE' })
+    expect(gate.prompts[0].aborted).toBe(true)
+
+    gate.answer('granted')
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('a stop pressed more than once changes nothing after the first', async () => {
+    const gate = gatedPort()
+    const controller = new AbortController()
+    const handler = vi.fn(async () => 'ran')
+    const pending = invoke(handler, { source: 'host', isTrusted: () => true, approval: gate.port, signal: controller.signal, approvalTimeoutMs: 60_000 })
+    await vi.waitFor(() => expect(gate.prompts).toHaveLength(1))
+
+    controller.abort()
+    controller.abort()
+    await expect(pending).resolves.toMatchObject({ code: 'CANCELLED' })
+    expect(gate.port.request).toHaveBeenCalledTimes(1)
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('a later, independent call obtains its own approval after an earlier call was stopped', async () => {
+    const gate = gatedPort()
+    const first = new AbortController()
+    const handler = vi.fn(async () => 'ran')
+    const stopped = invoke(handler, { source: 'host', isTrusted: () => true, approval: gate.port, signal: first.signal, approvalTimeoutMs: 60_000 })
+    await vi.waitFor(() => expect(gate.prompts).toHaveLength(1))
+    first.abort()
+    await expect(stopped).resolves.toMatchObject({ code: 'CANCELLED' })
+
+    const next = invoke(handler, { source: 'host', isTrusted: () => true, approval: gate.port, approvalTimeoutMs: 60_000 })
+    await vi.waitFor(() => expect(gate.prompts).toHaveLength(2))
+    gate.answer('granted')
+    await expect(next).resolves.toEqual({ ok: true, text: 'ran' })
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('a call whose operation was already stopped gets no prompt at all', async () => {
+    const gate = gatedPort()
+    const controller = new AbortController()
+    controller.abort()
+    const handler = vi.fn(async () => 'ran')
+    const result = await invoke(handler, { source: 'host', isTrusted: () => true, approval: gate.port, signal: controller.signal })
+    expect(result).toMatchObject({ ok: false, code: 'CANCELLED' })
+    expect(gate.port.request).not.toHaveBeenCalled()
     expect(handler).not.toHaveBeenCalled()
   })
 })

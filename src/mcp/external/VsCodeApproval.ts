@@ -1,28 +1,61 @@
 /**
- * VsCodeApproval - the host's prompt for a single R3 call. It is a modal, and it names the tool, the workspace, the
- * operation and the arguments, so the person approving knows what they are allowing. Only "Allow once" grants; closing
- * the prompt, or any other answer, denies. A grant covers this one call: ToolInvocation asks again for the next one.
+ * VsCodeApproval - the host's prompt for a single R3 call. It is a Quick Pick, not a modal message, because the editor can
+ * hide a Quick Pick from code. When the operation is cancelled, or the wait for an answer ends, the signal aborts and the
+ * prompt is hidden at once, so a Stop never leaves a question on screen that no longer matters.
+ *
+ * Only "Allow once" grants, and it covers this one call; ToolInvocation asks again for the next one. Deny is the first
+ * item, so Enter denies. Escape, hiding the prompt, and the signal aborting all deny. The first answer wins: an answer
+ * that arrives after the prompt has closed is ignored.
  *
  * Argument values are shown here, to the person approving, and nowhere else. The audit trail records names only.
  */
 
 import * as vscode from 'vscode'
-import type { ApprovalPort } from '../policy/ToolInvocation'
+import type { ApprovalAnswer, ApprovalPort, ApprovalRequest } from '../policy/ToolInvocation'
 
-const ALLOW_ONCE = 'Allow once'
+interface ApprovalItem extends vscode.QuickPickItem {
+  readonly answer: ApprovalAnswer
+}
 
 export function vscodeApprovalPort(): ApprovalPort {
   return {
-    request: async (request, signal) => {
-      const message = [
-        `RailsForge wants to run "${request.tool}" (risk ${request.risk}).`,
-        `Workspace: ${request.workspaceRoot}`,
-        `Operation: ${request.operation}`,
-        `Arguments (${request.argumentNames.join(', ') || 'none'}): ${request.argumentPreview}`,
-      ].join('\n')
-      const choice = await vscode.window.showWarningMessage(message, { modal: true }, ALLOW_ONCE)
-      if (signal?.aborted) {return 'denied'}
-      return choice === ALLOW_ONCE ? 'granted' : 'denied'
-    },
+    request: (request, signal) => new Promise<ApprovalAnswer>(resolve => {
+      if (signal?.aborted) {
+        resolve('denied')
+        return
+      }
+      const pick = vscode.window.createQuickPick<ApprovalItem>()
+      let answered = false
+      const finish = (answer: ApprovalAnswer): void => {
+        if (answered) {return}
+        answered = true
+        signal?.removeEventListener('abort', onAbort)
+        resolve(answer)
+        pick.hide()
+        pick.dispose()
+      }
+      const onAbort = (): void => finish('denied')
+
+      pick.title = `RailsForge wants to run "${request.tool}" (risk ${request.risk})`
+      pick.placeholder = `Workspace: ${request.workspaceRoot} · Operation: ${request.operation}`
+      pick.ignoreFocusOut = true
+      pick.items = [
+        { label: '$(x) Deny', detail: 'Do not run this call.', answer: 'denied' },
+        { label: '$(check) Allow once', detail: argumentSummary(request), answer: 'granted' },
+      ]
+      pick.onDidAccept(() => {
+        const chosen = pick.selectedItems[0] ?? pick.activeItems[0]
+        finish(chosen?.answer === 'granted' ? 'granted' : 'denied')
+      })
+      pick.onDidHide(() => finish('denied'))
+      signal?.addEventListener('abort', onAbort, { once: true })
+      pick.show()
+    }),
   }
+}
+
+/** The names and values of the arguments, for the person approving. The values are shown here and nowhere else. */
+function argumentSummary(request: ApprovalRequest): string {
+  const names = request.argumentNames.join(', ') || 'none'
+  return `Arguments (${names}): ${request.argumentPreview}`
 }
