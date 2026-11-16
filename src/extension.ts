@@ -357,6 +357,11 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     log: message => Logger.warn(message),
   }
   registerEditorExternalProvider(context, editorDeps)
+  // Applies a change to the user's server list at once. This does not go through the railsForge.* config handler
+  // below: that handler's section name is lowercase, so its listener never matches a railsForge.* setting.
+  context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
+    if (event.affectsConfiguration('railsForge.mcp.servers')) {externalMcp.reconfigure(readUserExternalServers())}
+  }))
 
   const getAgentConfig = (cfg: RailsForgeConfig = readConfig()): RailsAgentConfig => ({
     ollamaHost: cfg.ollamaHost,
@@ -1123,7 +1128,6 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     providerRegistry.workspaceFs.onConfigChange(() => {
       const freshConfig = readConfig()
       applyLogSettings(freshConfig, workspaceRoot)
-      externalMcp.reconfigure(readUserExternalServers())
       agent.updateConfig(getAgentConfig(freshConfig))
       void vscode.commands.executeCommand('setContext', 'railsforge.aiProvider', freshConfig.aiProvider)
     })
