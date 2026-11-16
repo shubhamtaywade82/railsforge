@@ -29,8 +29,23 @@ describe('parseExternalServers', () => {
       args: [],
       env: {},
       allowTools: [],
+      toolRisk: {},
       exposeToEditor: false,
     }])
+  })
+
+  it('accepts a declared R2 or R3 risk for an allowed tool, and rejects R4 and any other risk', () => {
+    const declared = parseExternalServers([{ ...valid, allowTools: ['get_schema', 'list_routes'], toolRisk: { get_schema: 'R2', list_routes: 'R3' } }])
+    expect(declared.problems).toEqual([])
+    expect(declared.servers[0].toolRisk).toEqual({ get_schema: 'R2', list_routes: 'R3' })
+    expect(parseExternalServers([{ ...valid, allowTools: ['run_command'], toolRisk: { run_command: 'R4' } }]).problems[0].message).toContain('R4 operations are never offered')
+    expect(parseExternalServers([{ ...valid, allowTools: ['get_schema'], toolRisk: { get_schema: 'R1' } }]).problems[0].message).toContain('must be "R2" or "R3"')
+  })
+
+  it('rejects a risk declared for a tool that is not allowed, so a typo cannot change a risk silently', () => {
+    const result = parseExternalServers([{ ...valid, allowTools: ['get_schema'], toolRisk: { get_scheme: 'R2' } }])
+    expect(result.servers).toEqual([])
+    expect(result.problems[0].message).toContain('"get_scheme", which is not in allowTools')
   })
 
   it('accepts exposeToEditor, and rejects a value that is not a boolean', () => {

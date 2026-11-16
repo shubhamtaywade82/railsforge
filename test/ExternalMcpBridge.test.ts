@@ -18,6 +18,7 @@ function fakeManager() {
       description: 'Gets the schema.',
       jsonSchema: { type: 'object', properties: {} },
       schema: SCHEMA,
+      risk: 'R2',
     }]),
     statusFor: vi.fn(async () => []),
     callTool: vi.fn(async () => 'remote text'),

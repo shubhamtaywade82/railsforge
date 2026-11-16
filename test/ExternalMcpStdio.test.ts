@@ -37,6 +37,8 @@ describe('external stdio MCP server, end to end', () => {
       args: [FIXTURE],
       env: { RF_FIXTURE_VALUE: 'from-configuration' },
       allowTools: ['echo', 'env', 'fail', 'exit_now', 'picture'],
+      // The fixture's tools are declared low-risk here, so these tests exercise the transport and not approval.
+      toolRisk: { echo: 'R2', env: 'R2', fail: 'R2', exit_now: 'R2', picture: 'R2' },
     }])
     expect(problems).toEqual([])
     bridge.reconfigure(servers)

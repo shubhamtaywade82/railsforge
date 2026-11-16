@@ -34,7 +34,9 @@ describe('cancellation and process lifecycle', () => {
       retryBackoffMs: 60_000,
     })
     bridge = new ExternalMcpBridge(manager, () => true, () => undefined)
-    const { servers, problems } = parseExternalServers([{ id: 'echo', command: process.execPath, args: [FIXTURE], allowTools }])
+    // Declared low-risk, so these tests exercise cancellation and not approval (approval has its own acceptance tests).
+    const toolRisk = Object.fromEntries(allowTools.map(name => [name, 'R2' as const]))
+    const { servers, problems } = parseExternalServers([{ id: 'echo', command: process.execPath, args: [FIXTURE], allowTools, toolRisk }])
     expect(problems).toEqual([])
     bridge.reconfigure(servers)
     tools = await bridge.loopToolsFor(root)

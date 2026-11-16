@@ -47,6 +47,7 @@ describe('@rails agent loop with an external MCP server', () => {
       command: process.execPath,
       args: [FIXTURE],
       allowTools: ['echo'],
+      toolRisk: { echo: 'R2' },
     }])
     expect(problems).toEqual([])
     bridge.reconfigure(servers)

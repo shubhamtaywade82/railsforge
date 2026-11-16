@@ -134,6 +134,8 @@ import { OnceByKey } from './util/OnceByKey'
 import { ExternalServerManager } from './mcp/external/ExternalServerManager'
 import { sdkExternalClientFactory } from './mcp/external/SdkExternalClient'
 import { ExternalMcpBridge } from './mcp/external/ExternalMcpBridge'
+import { vscodeApprovalPort } from './mcp/external/VsCodeApproval'
+import { RAILSFORGE_TOOLS } from './mcp/tools/definitions'
 import { EditorProviderDeps, currentEditorPlan, registerEditorExternalProvider } from './mcp/external/EditorProvider'
 import { diffLines, filterFixHunks, applyHunks } from './patch/LineDiff'
 import { checkRubySyntax, rubySyntaxError } from './util/RubySyntax'
@@ -345,6 +347,12 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     }),
     () => isWorkspaceTrusted(),
     message => Logger.warn(message),
+    {
+      // Each R3 call asks the person, once, with the tool, workspace, operation and arguments shown.
+      approval: vscodeApprovalPort(),
+      // An external tool may not take the name of one of RailsForge's own tools.
+      nativeNames: new Set(RAILSFORGE_TOOLS.map(def => def.name)),
+    },
   )
   externalMcp.reconfigure(readUserExternalServers())
   context.subscriptions.push({ dispose: () => void externalMcp.dispose() })

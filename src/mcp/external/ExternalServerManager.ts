@@ -235,7 +235,7 @@ export class ExternalServerManager {
       if (session.closed) {return this.teardown(session)}
       if (session.state !== 'connecting') {return} // the process exited while it was listing
 
-      const exposed = exposeTools(spec.id, listed, spec.allowTools)
+      const exposed = exposeTools(spec.id, listed, spec.allowTools, spec.toolRisk)
       session.tools = exposed.tools
       session.problems = exposed.problems
       session.state = 'ready'
@@ -305,7 +305,7 @@ function sessionKey(serverId: string, root: string): string {
 }
 
 function fingerprint(spec: ExternalServerSpec): string {
-  return JSON.stringify([spec.command, spec.args, spec.env, spec.allowTools, spec.enabled])
+  return JSON.stringify([spec.command, spec.args, spec.env, spec.allowTools, spec.toolRisk, spec.enabled])
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {

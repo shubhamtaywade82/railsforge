@@ -20,7 +20,10 @@ const MAX_ALLOW_TOOLS = 100
 const MAX_TOOL_NAME_LENGTH = 128
 const MAX_COMMAND_LENGTH = 1024
 
-export const EXTERNAL_SERVER_KEYS: readonly string[] = ['id', 'enabled', 'transport', 'command', 'args', 'env', 'allowTools', 'exposeToEditor']
+export const EXTERNAL_SERVER_KEYS: readonly string[] = ['id', 'enabled', 'transport', 'command', 'args', 'env', 'allowTools', 'toolRisk', 'exposeToEditor']
+
+/** The risk a user may declare for an allowed tool. An unlisted tool is R3: it asks for approval on every call. */
+export type DeclaredToolRisk = 'R2' | 'R3'
 
 export interface ExternalServerSpec {
   id: string
@@ -31,6 +34,11 @@ export interface ExternalServerSpec {
   env: Readonly<Record<string, string>>
   /** Remote tool names to expose to RailsForge's own agent. Nothing is exposed unless it is listed here (default deny). */
   allowTools: readonly string[]
+  /**
+   * The risk of each allowed tool. R2: runs without a prompt, in a trusted workspace. R3: asks for approval on every
+   * call. A tool not listed here is R3. R4 is never accepted.
+   */
+  toolRisk: Readonly<Record<string, DeclaredToolRisk>>
   /**
    * Also offer this server to the editor's own agent (Copilot, Cursor). The editor does not apply `allowTools`, so
    * every tool the server provides reaches that agent. Off by default, and only ever set by the user.
@@ -121,6 +129,14 @@ function parseEntry(entry: unknown): EntryResult {
     return fail(`allowTools must be an array of up to ${MAX_ALLOW_TOOLS} tool names.`)
   }
 
+  const toolRisk = entry.toolRisk === undefined ? {} : entry.toolRisk
+  if (!isPlainObject(toolRisk)) {return fail('toolRisk must be an object that maps an allowed tool name to "R2" or "R3".')}
+  for (const [name, risk] of Object.entries(toolRisk)) {
+    if (risk === 'R4') {return fail(`toolRisk for "${name}" is R4. R4 operations are never offered to the agent.`)}
+    if (risk !== 'R2' && risk !== 'R3') {return fail(`toolRisk for "${name}" must be "R2" or "R3".`)}
+    if (!(allowTools as string[]).includes(name)) {return fail(`toolRisk names "${name}", which is not in allowTools.`)}
+  }
+
   return {
     ok: true,
     spec: {
@@ -131,6 +147,7 @@ function parseEntry(entry: unknown): EntryResult {
       args: [...args] as string[],
       env: { ...(env as Record<string, string>) },
       allowTools: [...new Set(allowTools as string[])],
+      toolRisk: { ...(toolRisk as Record<string, DeclaredToolRisk>) },
       exposeToEditor,
     },
   }

@@ -71,6 +71,12 @@ export function decideInvocation(risk: RiskLevel, context: InvocationContext): P
         ? denied('EXECUTION_DISABLED', `The standalone MCP server runs project code only after an explicit grant. Set ${EXECUTION_ENV}=project-code in the environment that launches the server to allow it.`)
         : denied('WORKSPACE_UNTRUSTED', 'This tool runs project code, which is disabled in Restricted Mode. Trust this workspace to enable it.')
     case 'R3':
+      // R3 runs project-scoped code as well, so it is trust-gated like R2. Approval never overrides an untrusted workspace.
+      if (!context.trusted) {
+        return context.source === 'standalone'
+          ? denied('EXECUTION_DISABLED', `The standalone MCP server runs project code only after an explicit grant. Set ${EXECUTION_ENV}=project-code in the environment that launches the server to allow it.`)
+          : denied('WORKSPACE_UNTRUSTED', 'This tool runs project code, which is disabled in Restricted Mode. Trust this workspace to enable it.')
+      }
       if (context.approved === true) {return { allowed: true }}
       return denied('APPROVAL_REQUIRED', 'This tool needs per-call approval, which this build does not provide.')
     case 'R4':

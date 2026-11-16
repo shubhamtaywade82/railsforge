@@ -11,20 +11,37 @@
 import type { LoopTool } from '../../agent/AgentLoop'
 import { ExternalServerProblem, ExternalServerSpec, parseExternalServers } from './ExternalServerConfig'
 import { ExternalServerManager, ServerStatus } from './ExternalServerManager'
-import { externalLoopTool } from './ExternalTools'
+import { ToolGateway } from '../gateway/ToolGateway'
 import type { ApprovalPort } from '../policy/ToolInvocation'
+
+export interface ExternalMcpBridgeOptions {
+  /** Asks the user for each R3 call. */
+  approval?: ApprovalPort
+  /** RailsForge's own tool names; an external tool may not take one of them. */
+  nativeNames?: ReadonlySet<string>
+}
 
 export class ExternalMcpBridge {
   private problems: ExternalServerProblem[] = []
   private servers: readonly ExternalServerSpec[] = []
   private lastRaw: string | undefined
+  /** The only path by which external tools reach the agent. The bridge holds configuration and status, not calls. */
+  private readonly gateway: ToolGateway
 
   constructor(
     private readonly manager: ExternalServerManager,
     private readonly isTrusted: () => boolean,
     private readonly log: (message: string) => void,
-    private readonly approval?: ApprovalPort,
-  ) {}
+    options: ExternalMcpBridgeOptions = {},
+  ) {
+    this.gateway = new ToolGateway({
+      manager,
+      isTrusted,
+      approval: options.approval,
+      warn: log,
+      nativeNames: options.nativeNames,
+    })
+  }
 
   /** Re-reads the user's setting. Invalid entries are logged and left out; the valid ones are applied. */
   reconfigure(raw: unknown): ExternalServerProblem[] {
@@ -53,18 +70,7 @@ export class ExternalMcpBridge {
    * leaves the agent with its built-in tools rather than failing the request.
    */
   async loopToolsFor(root: string, signal?: AbortSignal): Promise<LoopTool[]> {
-    try {
-      const tools = await this.manager.toolsFor(root, this.isTrusted(), signal)
-      return tools.map(tool => externalLoopTool(tool, root, {
-        callRemote: (exposed, projectRoot, args, callSignal) => this.manager.callTool(exposed.serverId, projectRoot, exposed.remoteName, args, callSignal),
-        isTrusted: this.isTrusted,
-        approval: this.approval,
-        warn: message => this.log(message),
-      }))
-    } catch (err) {
-      this.log(`[mcp] external tools unavailable for this request: ${err instanceof Error ? err.message : String(err)}`)
-      return []
-    }
+    return this.gateway.loopToolsFor(root, signal)
   }
 
   /** Markdown for the test command: each server's state, the tools it offers and the configuration problems. */

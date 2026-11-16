@@ -16,6 +16,7 @@ import { ApprovalPort, InvocableTool, ToolCallError, invokeTool } from '../polic
 import { LoopToolError } from '../../agent/AgentLoop'
 import { ExternalCallError } from './ExternalServerManager'
 import { SchemaNode, compileObjectSchema, validateValue } from './JsonSchemaSubset'
+import type { DeclaredToolRisk } from './ExternalServerConfig'
 
 /** The most tools one server may offer. A larger list would crowd the agent's prompt and hide the useful tools. */
 export const MAX_EXTERNAL_TOOLS_PER_SERVER = 50
@@ -46,6 +47,8 @@ export interface ExposedExternalTool {
   jsonSchema: Record<string, unknown>
   /** The schema compiled for validation. Arguments are checked against this, never against the declared text. */
   schema: SchemaNode
+  /** R2 runs without a prompt in a trusted workspace; R3 asks before every call. Set from the user's configuration. */
+  risk: DeclaredToolRisk
 }
 
 export interface ExposeResult {
@@ -54,7 +57,12 @@ export interface ExposeResult {
 }
 
 /** Applies the allowlist to a server's listed tools. Anything not allowed, invalid or over the cap is left out and reported. */
-export function exposeTools(serverId: string, listed: readonly RemoteToolDescriptor[], allowTools: readonly string[]): ExposeResult {
+export function exposeTools(
+  serverId: string,
+  listed: readonly RemoteToolDescriptor[],
+  allowTools: readonly string[],
+  toolRisk: Readonly<Record<string, DeclaredToolRisk>> = {},
+): ExposeResult {
   const problems: string[] = []
   const byName = new Map(listed.map(tool => [tool.name, tool]))
   const tools: ExposedExternalTool[] = []
@@ -86,6 +94,7 @@ export function exposeTools(serverId: string, listed: readonly RemoteToolDescrip
       description: (remote.description ?? '').trim() || `Tool "${name}" provided by ${serverId}.`,
       jsonSchema: remote.inputSchema as Record<string, unknown>,
       schema: compiled.root,
+      risk: toolRisk[name] ?? 'R3',
     })
   }
   return { tools, problems }
@@ -110,7 +119,7 @@ export type ArgCheck = { ok: true; args: Record<string, unknown> } | { ok: false
 export function externalLoopTool(tool: ExposedExternalTool, root: string, deps: ExternalToolDeps): LoopTool {
   const definition: InvocableTool<{ workspaceRoot: string }> = {
     name: tool.exposedName,
-    risk: 'R2',
+    risk: tool.risk,
     description: `${tool.description} (${tool.serverId}: ${tool.remoteName})`,
     validate: input => {
       const result = validateValue(tool.schema, input)

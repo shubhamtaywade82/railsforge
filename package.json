@@ -508,6 +508,18 @@
                 "type": "boolean",
                 "default": false,
                 "description": "Also offer this server to the editor's own agent (Copilot, Cursor) in each project, with the project as its working directory. The editor does not apply allowTools, so every tool the server provides reaches that agent. Needs VS Code 1.105 or later."
+              },
+              "toolRisk": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "enum": [
+                    "R2",
+                    "R3"
+                  ]
+                },
+                "default": {},
+                "description": "Risk of each allowed tool: \"R2\" runs without a prompt, in a trusted workspace; \"R3\" asks you before every call. A tool not listed is R3. Names must appear in allowTools."
               }
             }
           }

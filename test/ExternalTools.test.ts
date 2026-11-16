@@ -102,7 +102,8 @@ describe('externalLoopTool', () => {
     fs.rmSync(root, { recursive: true, force: true })
   })
 
-  const exposed = exposeTools('rails', listed, ['get_schema']).tools[0]
+  // Declared R2 here, so these tests check the call path and not approval.
+  const exposed = exposeTools('rails', listed, ['get_schema'], { get_schema: 'R2' }).tools[0]
 
   it('shows the server schema to the model and checks arguments against it', () => {
     const tool = externalLoopTool(exposed, root, { callRemote: async () => 'ok', isTrusted: () => true })
