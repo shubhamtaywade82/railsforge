@@ -9,12 +9,13 @@
  */
 
 import type { LoopTool } from '../../agent/AgentLoop'
-import { ExternalServerProblem, parseExternalServers } from './ExternalServerConfig'
+import { ExternalServerProblem, ExternalServerSpec, parseExternalServers } from './ExternalServerConfig'
 import { ExternalServerManager, ServerStatus } from './ExternalServerManager'
 import { externalLoopTool } from './ExternalTools'
 
 export class ExternalMcpBridge {
   private problems: ExternalServerProblem[] = []
+  private servers: readonly ExternalServerSpec[] = []
   private lastRaw: string | undefined
 
   constructor(
@@ -31,12 +32,18 @@ export class ExternalMcpBridge {
     this.lastRaw = key
     const parsed = parseExternalServers(raw)
     this.problems = parsed.problems
+    this.servers = parsed.servers
     this.manager.configure(parsed.servers)
     for (const problem of parsed.problems) {
       const where = problem.index >= 0 ? `entry ${problem.index + 1}` : 'setting'
       this.log(`[mcp] railsForge.mcp.servers ${where}${problem.id ? ` (${problem.id})` : ''}: ${problem.message}`)
     }
     return parsed.problems
+  }
+
+  /** The servers the user configured and that parsed cleanly, enabled or not. The editor path filters them itself. */
+  currentServers(): readonly ExternalServerSpec[] {
+    return this.servers
   }
 
   /**

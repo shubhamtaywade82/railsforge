@@ -502,6 +502,11 @@
                 },
                 "default": [],
                 "description": "Names of the server's tools that the agent may call. Tools not listed here are never offered."
+              },
+              "exposeToEditor": {
+                "type": "boolean",
+                "default": false,
+                "description": "Also offer this server to the editor's own agent (Copilot, Cursor) in each project, with the project as its working directory. The editor does not apply allowTools, so every tool the server provides reaches that agent. Needs VS Code 1.105 or later."
               }
             }
           }
@@ -2346,6 +2351,10 @@
       {
         "id": "railsforge.adapters",
         "label": "RailsForge optional tools"
+      },
+      {
+        "id": "railsforge.external",
+        "label": "RailsForge external servers (opted in)"
       }
     ],
     "viewsWelcome": [

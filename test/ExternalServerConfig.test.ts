@@ -29,7 +29,13 @@ describe('parseExternalServers', () => {
       args: [],
       env: {},
       allowTools: [],
+      exposeToEditor: false,
     }])
+  })
+
+  it('accepts exposeToEditor, and rejects a value that is not a boolean', () => {
+    expect(parseExternalServers([{ ...valid, exposeToEditor: true }]).servers[0].exposeToEditor).toBe(true)
+    expect(parseExternalServers([{ ...valid, exposeToEditor: 'yes' }]).problems[0].message).toContain('exposeToEditor must be')
   })
 
   it('accepts a complete valid entry and de-duplicates allowTools', () => {
@@ -38,6 +44,7 @@ describe('parseExternalServers', () => {
     expect(servers[0].args).toEqual(['exec', 'rails-ai-context', 'serve'])
     expect(servers[0].env).toEqual({ RAILS_ENV: 'development' })
     expect(servers[0].allowTools).toEqual(['get_schema', 'list_routes'])
+    expect(servers[0].exposeToEditor).toBe(false)
   })
 
   it('rejects a setting that is not an array', () => {

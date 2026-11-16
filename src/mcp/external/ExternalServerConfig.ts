@@ -20,7 +20,7 @@ const MAX_ALLOW_TOOLS = 100
 const MAX_TOOL_NAME_LENGTH = 128
 const MAX_COMMAND_LENGTH = 1024
 
-export const EXTERNAL_SERVER_KEYS: readonly string[] = ['id', 'enabled', 'transport', 'command', 'args', 'env', 'allowTools']
+export const EXTERNAL_SERVER_KEYS: readonly string[] = ['id', 'enabled', 'transport', 'command', 'args', 'env', 'allowTools', 'exposeToEditor']
 
 export interface ExternalServerSpec {
   id: string
@@ -29,8 +29,13 @@ export interface ExternalServerSpec {
   command: string
   args: readonly string[]
   env: Readonly<Record<string, string>>
-  /** Remote tool names to expose to the agent. Nothing is exposed unless it is listed here (default deny). */
+  /** Remote tool names to expose to RailsForge's own agent. Nothing is exposed unless it is listed here (default deny). */
   allowTools: readonly string[]
+  /**
+   * Also offer this server to the editor's own agent (Copilot, Cursor). The editor does not apply `allowTools`, so
+   * every tool the server provides reaches that agent. Off by default, and only ever set by the user.
+   */
+  exposeToEditor: boolean
 }
 
 export interface ExternalServerProblem {
@@ -108,6 +113,9 @@ function parseEntry(entry: unknown): EntryResult {
     if (!isSafeString(value, MAX_ENV_VALUE_LENGTH)) {return fail(`env value for "${key}" must be a string.`)}
   }
 
+  const exposeToEditor = entry.exposeToEditor === undefined ? false : entry.exposeToEditor
+  if (typeof exposeToEditor !== 'boolean') {return fail('exposeToEditor must be true or false.')}
+
   const allowTools = entry.allowTools === undefined ? [] : entry.allowTools
   if (!Array.isArray(allowTools) || allowTools.length > MAX_ALLOW_TOOLS || !allowTools.every(name => isSafeString(name, MAX_TOOL_NAME_LENGTH))) {
     return fail(`allowTools must be an array of up to ${MAX_ALLOW_TOOLS} tool names.`)
@@ -123,6 +131,7 @@ function parseEntry(entry: unknown): EntryResult {
       args: [...args] as string[],
       env: { ...(env as Record<string, string>) },
       allowTools: [...new Set(allowTools as string[])],
+      exposeToEditor,
     },
   }
 }

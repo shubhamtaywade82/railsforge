@@ -21,6 +21,7 @@ const { mockContext, vscodeMocks, mockDisposable, mockStatusBar, mockDiagnosticC
 
   const mocks = {
     StatusBarAlignment: { Left: 1, Right: 2 },
+    version: '1.146.0',
     ViewColumn: { One: 1, Two: 2, Beside: 3 },
     TextEditorRevealType: { InCenter: 3, Default: 0 },
     CodeActionKind: class CodeActionKind {

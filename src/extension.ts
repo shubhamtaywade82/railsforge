@@ -134,6 +134,7 @@ import { OnceByKey } from './util/OnceByKey'
 import { ExternalServerManager } from './mcp/external/ExternalServerManager'
 import { sdkExternalClientFactory } from './mcp/external/SdkExternalClient'
 import { ExternalMcpBridge } from './mcp/external/ExternalMcpBridge'
+import { EditorProviderDeps, currentEditorPlan, registerEditorExternalProvider } from './mcp/external/EditorProvider'
 import { diffLines, filterFixHunks, applyHunks } from './patch/LineDiff'
 import { checkRubySyntax, rubySyntaxError } from './util/RubySyntax'
 import { handleWorkspaceAutoOptimization, optimizeRailsWorkspace } from './workspace/WorkspaceOptimizer'
@@ -173,6 +174,8 @@ export interface RailsForgeTestApi {
   getAstIndexStatuses(): Record<string, string>
   /** Starts (or joins) the AST index for `root` and resolves with its settled status. */
   startAstIndex(root: string): Promise<string>
+  /** The definitions the editor's own agent would be offered now (the policy in EditorDefinitions.ts). */
+  editorExternalDefinitions(): { label: string; command: string; cwd: string }[]
   /** Number of RBS signatures for `methodName` in the project that owns `filePath`. */
   countRbsMethods(filePath: string, methodName: string): number
   /** DevDocs cache directory of the project that owns `filePath`. */
@@ -345,6 +348,15 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   )
   externalMcp.reconfigure(readUserExternalServers())
   context.subscriptions.push({ dispose: () => void externalMcp.dispose() })
+  // The same servers, opted in with exposeToEditor, are offered to the editor's own agent. The editor starts them.
+  const editorDeps: EditorProviderDeps = {
+    readServers: () => externalMcp.currentServers(),
+    roots: () => workspaceRoots(),
+    isTrusted: () => isWorkspaceTrusted(),
+    hostVersion: vscode.version,
+    log: message => Logger.warn(message),
+  }
+  registerEditorExternalProvider(context, editorDeps)
 
   const getAgentConfig = (cfg: RailsForgeConfig = readConfig()): RailsAgentConfig => ({
     ollamaHost: cfg.ollamaHost,
@@ -1246,6 +1258,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     },
     getAstIndexStatuses: () => Object.fromEntries(persistentIndexes.roots().map(r => [r, persistentIndexes.state(r).status])),
     startAstIndex: async root => (await persistentIndexes.ensure(root)).status,
+    editorExternalDefinitions: () => currentEditorPlan(editorDeps).definitions.map(d => ({ label: d.label, command: d.command, cwd: d.cwd })),
   }
 }
 
