@@ -131,5 +131,8 @@ export function renderStatusMarkdown(input: StatusReportInput): string {
 }
 
 function cell(text: string): string {
-  return text.replace(/\|/g, '\\|').replace(/\n/g, ' ')
+  return text
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|')
+    .replace(/\n/g, ' ')
 }
