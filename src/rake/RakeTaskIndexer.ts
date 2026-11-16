@@ -10,7 +10,7 @@
  * RuboCopProvider/BrakemanProvider — never throws, degrades to an empty task list.
  */
 
-import { execFileAsync } from '../util/ProjectProcess'
+import { runProjectTool } from '../util/ProjectProcess'
 import { ToolCallError } from '../mcp/policy/ToolInvocation'
 import { firstCandidate } from '../util/RubyCommand'
 
@@ -46,7 +46,7 @@ export class RakeTaskIndexer {
 
   private async tryRake(command: string, args: string[], cwd: string, signal?: AbortSignal): Promise<RakeTask[] | null> {
     try {
-      const { stdout } = await execFileAsync(command, args, { cwd, maxBuffer: 10 * 1024 * 1024, timeout: 15000, signal })
+      const { stdout } = await runProjectTool(command, args, { cwd, maxBuffer: 10 * 1024 * 1024, timeout: 15000, signal })
       return parseRakeTaskList(stdout)
     } catch {
       if (signal?.aborted) {throw new ToolCallError('CANCELLED', 'The Rake task listing was cancelled, and its process was stopped.')}

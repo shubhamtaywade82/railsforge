@@ -5,10 +5,38 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import { spawnSync } from 'child_process'
 import { RakeTaskIndexer } from '../src/rake/RakeTaskIndexer'
 import { setTrustProvider } from '../src/workspace/Trust'
 import { invokeTool, InvocableTool, ToolCallError } from '../src/mcp/policy/ToolInvocation'
+import { countProcessesMentioning } from './support/processes'
+
+/**
+ * The stand-in commands. On POSIX they are shell scripts. Windows runs only batch files and executables, so there the
+ * stand-in `bundle` is a batch file that starts a node loop. Cancelling must stop both, and both carry the fake
+ * directory in their command lines, which is what countProcessesMentioning looks for.
+ */
+function writeStandIns(work: string, fake: string): void {
+  if (process.platform === 'win32') {
+    fs.writeFileSync(path.join(fake, 'loop.js'), 'setInterval(() => {}, 1 << 30)\n')
+    fs.writeFileSync(path.join(fake, 'bundle.cmd'), [
+      '@echo off',
+      `echo started > "${work}\\bundle-started"`,
+      `"${process.execPath}" "${path.join(fake, 'loop.js')}"`,
+      '',
+    ].join('\r\n'))
+    fs.writeFileSync(path.join(fake, 'rake.cmd'), [
+      '@echo off',
+      `echo started >> "${work}\\rake-started"`,
+      'echo rake db:migrate  # Migrate',
+      '',
+    ].join('\r\n'))
+    return
+  }
+  fs.writeFileSync(path.join(fake, 'bundle'), `#!/bin/sh\necho started > "${work}/bundle-started"\nwhile true; do sleep 0.1; done\n`)
+  fs.writeFileSync(path.join(fake, 'rake'), `#!/bin/sh\necho started >> "${work}/rake-started"\necho "rake db:migrate  # Migrate"\n`)
+  fs.chmodSync(path.join(fake, 'bundle'), 0o755)
+  fs.chmodSync(path.join(fake, 'rake'), 0o755)
+}
 
 describe('a cancelled Rake listing', () => {
   let work: string
@@ -22,10 +50,7 @@ describe('a cancelled Rake listing', () => {
     fake = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rf-native-bin-')))
     // The project has a Gemfile, so the Bundler candidate is tried first, and bare `rake` second.
     fs.writeFileSync(path.join(work, 'Gemfile'), "source 'https://rubygems.org'\n")
-    fs.writeFileSync(path.join(fake, 'bundle'), `#!/bin/sh\necho started > "${work}/bundle-started"\nwhile true; do sleep 0.1; done\n`)
-    fs.writeFileSync(path.join(fake, 'rake'), `#!/bin/sh\necho started >> "${work}/rake-started"\necho "rake db:migrate  # Migrate"\n`)
-    fs.chmodSync(path.join(fake, 'bundle'), 0o755)
-    fs.chmodSync(path.join(fake, 'rake'), 0o755)
+    writeStandIns(work, fake)
     originalPath = process.env.PATH
     process.env.PATH = `${fake}${path.delimiter}${originalPath ?? ''}`
     setTrustProvider(() => true)
@@ -51,7 +76,7 @@ describe('a cancelled Rake listing', () => {
     expect(Date.now() - abortedAt).toBeLessThan(5_000)
 
     // The stand-in bundle is gone, and the next candidate never started.
-    await expect.poll(() => spawnSync('pgrep', ['-f', fake]).status !== 0, { timeout: 3_000 }).toBe(true)
+    await expect.poll(() => countProcessesMentioning(fake), { timeout: 3_000 }).toBe(0)
     await new Promise(resolve => setTimeout(resolve, 500))
     expect(fs.existsSync(path.join(work, 'rake-started'))).toBe(false)
   }, 30_000)

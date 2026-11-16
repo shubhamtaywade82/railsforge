@@ -20,6 +20,7 @@
 - **A language-model answer is never used after its request was cancelled or timed out.** A stream that ends quietly after cancellation now throws, instead of returning its partial text as the answer.
 - **The chat sidebar works.** Its script had not parsed since 677a025. The HTML is a TypeScript template literal, so `'\n'`, `\s` and `\'…\'` inside it were rewritten before the browser read them, and the whole script failed with a SyntaxError. The send button and every other control were inert. A test now parses the script.
 - **A server stopped by a cancellation is reported as stopped.** It was marked failed, and its tools were withheld for 30 seconds, even though nothing had gone wrong.
+- **`list_rake_tasks` works on Windows.** RubyGems installs `bundle` and `rake` as batch files, which the process call could not find, so the listing came back empty. They are now found through PATHEXT and run through cmd.exe, and cancelling the listing stops the whole process tree.
 
 ### Added
 - **Structured results: seven tools.** `find_similar_pattern`, `get_example_file` and `suggest_learning_resource` join the list tools. Their text is unchanged.
