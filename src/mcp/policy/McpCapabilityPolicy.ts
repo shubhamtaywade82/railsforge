@@ -5,7 +5,8 @@
  *   R0  static reads: AST, schema, routes, documentation, the persistent index
  *   R1  reads of cached data, such as the runtime snapshot; no execution
  *   R2  runs project-controlled code: rake, bundle exec, RuboCop, test runners
- *   R3  boots the application or attaches to a process; needs per-call approval, which this build does not provide
+ *   R3  boots the application or attaches to a process; runs only with approval for that one call (see ToolInvocation).
+ *       Native tools declare no R3 operation, so they are always refused here.
  *   R4  arbitrary evaluation, database writes, arbitrary shell; never exposed
  *
  * vscode-free. The standalone MCP server and the extension host make the same decision. They differ only in where
@@ -25,6 +26,11 @@ export interface InvocationContext {
   source: InvocationSource
   /** Whether project code may run right now: VS Code workspace trust in the host, the explicit grant when standalone. */
   trusted: boolean
+  /**
+   * Set only for this one invocation, after the user approved this call (R3). It is never a standing grant: a second
+   * call needs a second approval.
+   */
+  approved?: boolean
 }
 
 /** The variable through which the MCP client grants project execution to the standalone server. */
@@ -65,6 +71,13 @@ export function decideInvocation(risk: RiskLevel, context: InvocationContext): P
         ? denied('EXECUTION_DISABLED', `The standalone MCP server runs project code only after an explicit grant. Set ${EXECUTION_ENV}=project-code in the environment that launches the server to allow it.`)
         : denied('WORKSPACE_UNTRUSTED', 'This tool runs project code, which is disabled in Restricted Mode. Trust this workspace to enable it.')
     case 'R3':
+      // R3 runs project-scoped code as well, so it is trust-gated like R2. Approval never overrides an untrusted workspace.
+      if (!context.trusted) {
+        return context.source === 'standalone'
+          ? denied('EXECUTION_DISABLED', `The standalone MCP server runs project code only after an explicit grant. Set ${EXECUTION_ENV}=project-code in the environment that launches the server to allow it.`)
+          : denied('WORKSPACE_UNTRUSTED', 'This tool runs project code, which is disabled in Restricted Mode. Trust this workspace to enable it.')
+      }
+      if (context.approved === true) {return { allowed: true }}
       return denied('APPROVAL_REQUIRED', 'This tool needs per-call approval, which this build does not provide.')
     case 'R4':
       return denied('DISABLED_BY_POLICY', 'RailsForge never exposes this capability.')

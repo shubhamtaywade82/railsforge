@@ -60,6 +60,9 @@ import { FactoryBotResolver } from './testing/FactoryBotResolver'
 import { RailsArchitectureTreeProvider } from './views/RailsArchitectureTreeProvider'
 import { PatternCatalogTreeProvider, PatternItem } from './views/PatternCatalogTreeProvider'
 import { createLoopTools } from './agent/LoopTools'
+import { requestViaVsCodeLm } from './agent/VsCodeLmRequest'
+import { openApprovalPrompts } from './mcp/external/VsCodeApproval'
+import type { ApprovalAnswer, ApprovalRequest } from './mcp/policy/ToolInvocation'
 import { isWorkspaceTrusted, setBlockedListener, setTrustProvider } from './workspace/Trust'
 import { collectDiagnostics } from './diagnostics/collect'
 import { renderDiagnosticsDoc } from './diagnostics/Diagnostics'
@@ -128,8 +131,15 @@ import { SteepProvider } from './types/SteepProvider'
 import { LearningResource } from './principles/LearningResources'
 import { loadEffectiveServiceObjectGuidelines } from './config/EffectiveGuidelines'
 import { parseVersion, bumpVersion, replaceVersionInContent, VersionBumpPart } from './gems/GemVersionBumper'
-import { SpeculativeFixCache } from './agent/SpeculativeFixCache'
+import { SpeculativeFixCache, warmAfter } from './agent/SpeculativeFixCache'
 import { Logger } from './util/Logger'
+import { OnceByKey } from './util/OnceByKey'
+import { ExternalServerManager } from './mcp/external/ExternalServerManager'
+import { sdkExternalClientFactory } from './mcp/external/SdkExternalClient'
+import { ExternalMcpBridge } from './mcp/external/ExternalMcpBridge'
+import { vscodeApprovalPort } from './mcp/external/VsCodeApproval'
+import { RAILSFORGE_TOOLS } from './mcp/tools/definitions'
+import { EditorProviderDeps, currentEditorPlan, registerEditorExternalProvider } from './mcp/external/EditorProvider'
 import { diffLines, filterFixHunks, applyHunks } from './patch/LineDiff'
 import { checkRubySyntax, rubySyntaxError } from './util/RubySyntax'
 import { handleWorkspaceAutoOptimization, optimizeRailsWorkspace } from './workspace/WorkspaceOptimizer'
@@ -146,6 +156,16 @@ import {
 
 
 /** Applies railsForge.log.level and railsForge.log.file immediately, without a reload. */
+/**
+ * The user's `railsForge.mcp.servers` value, read from user settings only. A repository's settings file cannot start a
+ * process through this setting: see ExternalServerConfig.
+ */
+function readUserExternalServers(): unknown {
+  const config = vscode.workspace.getConfiguration('railsForge')
+  const inspected = typeof config.inspect === 'function' ? config.inspect<unknown[]>('mcp.servers') : undefined
+  return inspected?.globalValue
+}
+
 function applyLogSettings(config: RailsForgeConfig, workspaceRoot: string): void {
   Logger.setLevel(config.logLevel)
   Logger.setLogFile(config.logFileEnabled && workspaceRoot ? path.join(workspaceRoot, '.railsforge', 'railsforge.log') : undefined)
@@ -157,6 +177,14 @@ export interface RailsForgeTestApi {
   getSchemaTableNames(): string[]
   /** AST index status keyed by workspace root (only roots that were activated). */
   getAstIndexStatuses(): Record<string, string>
+  /** Starts (or joins) the AST index for `root` and resolves with its settled status. */
+  startAstIndex(root: string): Promise<string>
+  /** The definitions the editor's own agent would be offered now (the policy in EditorDefinitions.ts). */
+  editorExternalDefinitions(): { label: string; command: string; cwd: string }[]
+  /** Development and test runs only, never a packaged install: shows the approval prompt and resolves with the answer. Runs nothing. */
+  requestApprovalForTest?(request: ApprovalRequest, signal?: AbortSignal): Promise<ApprovalAnswer>
+  /** Development and test runs only: how many approval prompts are on screen now. */
+  openApprovalPromptsForTest?(): number
   /** Number of RBS signatures for `methodName` in the project that owns `filePath`. */
   countRbsMethods(filePath: string, methodName: string): number
   /** DevDocs cache directory of the project that owns `filePath`. */
@@ -166,6 +194,7 @@ export interface RailsForgeTestApi {
 }
 
 export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
+  const activationStartedAt = Date.now()
   ensureSafeProcessReport()
   projectState = new ProjectState(context.workspaceState)
   skillsPackDir = path.join(context.extensionPath, 'dist', 'skills')
@@ -267,8 +296,20 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
       return slugs
     },
   }))
-  const devDocsIndexFor = (uri: vscode.Uri): DevDocsOfflineIndex =>
-    devDocsProjects.get(workspaceRootFor(uri) ?? activeProject.root).index
+  // Offline DevDocs load on first use of a root (its first enabled Ruby hover), never at activation: a cold
+  // cache downloads and JSON-parses large docsets on the extension host. Each root loads once per session;
+  // a failed load is not retried by hovers (a reload retries it).
+  const devDocsLoads = new OnceByKey<string, boolean[]>()
+  const ensureDevDocsLoaded = (root: string): void => {
+    if (!root || !readConfig().devdocsOfflineEnabled) {return}
+    devDocsLoads.run(root, () => devDocsProjects.get(root).refresh(false))
+      .catch(err => Logger.warn(`[devdocs] could not load offline docs for ${root}: ${String(err)}`))
+  }
+  const devDocsIndexFor = (uri: vscode.Uri): DevDocsOfflineIndex => {
+    const root = workspaceRootFor(uri) ?? activeProject.root
+    ensureDevDocsLoaded(root)
+    return devDocsProjects.get(root).index
+  }
   // Parsed on first use of a root (RBS sig dirs are small), so a hover in any root is correct.
   const rbsIndexes = new PerRootRegistry<RBSIndex>(root => {
     const index = new RBSIndex()
@@ -300,6 +341,43 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
 
   Logger.info(`RailsForge activated. Project type: ${env.projectType}, Ruby: ${env.rubyVersion}, Rails: ${env.hasRails ? env.railsVersion : 'none'}`)
 
+  // External stdio MCP servers (railsForge.mcp.servers, user settings only). Each starts lazily, per project, and only
+  // in a trusted workspace; see ExternalServerManager. Nothing starts at activation.
+  const externalMcp = new ExternalMcpBridge(
+    new ExternalServerManager({
+      ...sdkExternalClientFactory({ onStderr: line => Logger.debug(`[mcp stderr] ${line}`) }),
+      log: (level, message) => {
+        if (level === 'warn') {Logger.warn(message)}
+        else if (level === 'debug') {Logger.debug(message)}
+        else {Logger.info(message)}
+      },
+    }),
+    () => isWorkspaceTrusted(),
+    message => Logger.warn(message),
+    {
+      // Each R3 call asks the person, once, with the tool, workspace, operation and arguments shown.
+      approval: vscodeApprovalPort(),
+      // An external tool may not take the name of one of RailsForge's own tools.
+      nativeNames: new Set(RAILSFORGE_TOOLS.map(def => def.name)),
+    },
+  )
+  externalMcp.reconfigure(readUserExternalServers())
+  context.subscriptions.push({ dispose: () => void externalMcp.dispose() })
+  // The same servers, opted in with exposeToEditor, are offered to the editor's own agent. The editor starts them.
+  const editorDeps: EditorProviderDeps = {
+    readServers: () => externalMcp.currentServers(),
+    roots: () => workspaceRoots(),
+    isTrusted: () => isWorkspaceTrusted(),
+    hostVersion: vscode.version,
+    log: message => Logger.warn(message),
+  }
+  registerEditorExternalProvider(context, editorDeps)
+  // Applies a change to the user's server list at once. This does not go through the railsForge.* config handler
+  // below: that handler's section name is lowercase, so its listener never matches a railsForge.* setting.
+  context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
+    if (event.affectsConfiguration('railsForge.mcp.servers')) {externalMcp.reconfigure(readUserExternalServers())}
+  }))
+
   const getAgentConfig = (cfg: RailsForgeConfig = readConfig()): RailsAgentConfig => ({
     ollamaHost: cfg.ollamaHost,
     model: cfg.ollamaModel,
@@ -322,7 +400,11 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     getApiKey: async () => context.secrets.get(aiApiKeySecretKey(readConfig().aiProvider)),
     vscodeLmFamily: cfg.aiVscodeLmFamily,
     toolLoop: { enabled: cfg.agentToolLoop, maxSteps: cfg.agentMaxToolSteps, verifySyntax: cfg.agentVerifySyntax },
-    loopTools: root => (root ? createLoopTools(semanticContexts.get(root)) : []),
+    loopTools: async (root, signal) => {
+      if (!root) {return []}
+      const builtIn = createLoopTools(semanticContexts.get(root))
+      return readConfig().mcpEnabled ? [...builtIn, ...await externalMcp.loopToolsFor(root, signal)] : builtIn
+    },
     skillContext: ({ prompt, command, fileName, workspaceRoot: root, diagnosticMessage }) => {
       const settings = readConfig()
       if (!settings.skillsEnabled) {return ''}
@@ -342,7 +424,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
       if (!projectRoot) {return ''}
       return buildSemanticContext(semanticContexts.get(projectRoot).getSemanticGraph(), { filePath: fileName, prompt, maxChars: 3500 })
     },
-    vscodeLmRequest: (system, prompt) => requestViaVsCodeLm(system, prompt, readConfig().aiVscodeLmFamily, readConfig().aiTimeoutMs),
+    vscodeLmRequest: (system, prompt, signal) => requestViaVsCodeLm({ selectModel: selectVsCodeLmModel }, system, prompt, readConfig().aiVscodeLmFamily, readConfig().aiTimeoutMs, signal),
     vscodeLmStatus: () => vscodeLmStatus(readConfig().aiVscodeLmFamily),
     log: (level: 'debug' | 'trace' | 'warn', message: string) => {
       if (level === 'debug') { Logger.debug(message) }
@@ -369,13 +451,11 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   })
   const semanticSearchIndex = new SemanticSearchIndex(projectPatternIndexer, text => embeddingClient.embed(text), config.performanceCacheSize)
 
-  // Speculative Fix Cache - pre-generates fixes for common RuboCop offenses
-  // so they're instant when the user requests a fix.
+  // Speculative Fix Cache - pre-generates fixes for common RuboCop offenses so they're instant when the
+  // user requests a fix. Warm-up is one model request per template, so it is never started at activation
+  // (in a 6,000-file benchmark it held the extension host for ~0.5 s and queued model work nobody asked for).
+  // The first AI fix request starts it once that request has finished: see warmAfter (SpeculativeFixCache.ts).
   const speculativeFixCache = new SpeculativeFixCache(agent)
-  if (workspaceRoot && context.extensionMode !== vscode.ExtensionMode.Test) {
-    // Deferred: AI cache warm is CPU/network-heavy, not needed until first fix request.
-    setTimeout(() => void speculativeFixCache.warm(), 8000)
-  }
 
   // 1. Sidebar Chat Webview Provider (Same architecture as PineForge)
   const chatViewProvider = new RailsChatViewProvider(
@@ -395,8 +475,9 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
   // project. Fails soft: commands report the precise state (starting / unsupported + reason /
   // failed) rather than the extension crashing if native modules can't load, and an
   // unsupported runtime is surfaced to the user once instead of silently disabling the feature.
-  // Initial root deferred 5s: heaviest startup cost (tree-sitter + SQLite + full scan); core
-  // features (hovers, navigation, linting) work fine without it.
+  // Never started at activation: a full tree-sitter + SQLite scan is the heaviest startup cost, and only the
+  // duplicate-method and dependency-cycle commands read it. They start it on first use (requireAstIndex), which
+  // tells the user to retry once it is ready. Core features (hovers, navigation, linting) do not need it.
   const persistentIndexes = new PersistentIndexRegistry<PersistentIndexManager>(
     root => PersistentIndexManager.activate(context, root),
     (root, state) => {
@@ -409,18 +490,10 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     },
   )
   context.subscriptions.push(persistentIndexes)
-  if (workspaceRoot) {
-    setTimeout(() => void persistentIndexes.ensure(workspaceRoot), 5000)
-  }
 
-  // Offline DevDocs: downloads (or reuses an already-cached) docset in the background,
-  // then swaps that project's index so DevDocsHoverProvider picks it up without a
-  // window reload (per root: a root's docs load when it first becomes the active project). Silent on failure/offline — APIDock/RubyDoc's network-backed hovers
-  // and the live `railsforge.openDevDocs` webview keep working regardless.
-  // Deferred 5s: network I/O that can safely wait until core features are up.
-  if (workspaceRoot && config.devdocsOfflineEnabled) {
-    setTimeout(() => void devDocsProjects.get(workspaceRoot).refresh(false), 5000)
-  }
+  // Offline DevDocs are loaded lazily per root by devDocsIndexFor (first enabled Ruby hover), not here.
+  // Silent on failure/offline — APIDock/RubyDoc's network-backed hovers and the live `railsforge.openDevDocs`
+  // webview keep working regardless.
 
   // 2. Initial Indexing & Live Workspace Analysis
   // Staggered to avoid blocking the extension host and the "thundering herd" problem
@@ -537,6 +610,17 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     vscode.commands.registerCommand('railsforge.recoverRubyLsp', () => reloadWindowForRubyLspRecovery()),
   )
 
+  context.subscriptions.push(vscode.commands.registerCommand('railsforge.testExternalMcpServers', async () => {
+    const root = activeWorkspaceRoot()
+    if (!root) {
+      void vscode.window.showWarningMessage('RailsForge: Open a project to test its external MCP servers.')
+      return
+    }
+    const report = await externalMcp.statusReport(root)
+    const doc = await vscode.workspace.openTextDocument({ content: report, language: 'markdown' })
+    await vscode.window.showTextDocument(doc, { preview: true })
+  }))
+
   const rakeTaskIndexer = new RakeTaskIndexer()
   const rakeTaskTreeProvider = new RakeTaskTreeProvider(rakeTaskIndexer, workspaceRoot)
 
@@ -573,9 +657,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     loadStimulusControllers(newRoot, stimulusIndexer)
     factoryBotResolver.indexFactories(newRoot)
     rakeTaskTreeProvider.setRoot(newRoot)
-    void persistentIndexes.ensure(newRoot)
     rbsIndexes.get(newRoot)
-    if (readConfig().devdocsOfflineEnabled) {void devDocsProjects.get(newRoot).refresh(false)}
     architectureTreeProvider.refresh(env)
   }
   const syncActiveProject = (uri: vscode.Uri | undefined): void => {
@@ -696,6 +778,16 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     scheduleDiagnostics(e.document, 300)
     scheduleRubocopLint(e.document, 500)
   }, null, context.subscriptions)
+
+  // Activation runs after startup, so editors restored earlier are already open and onDidOpenTextDocument
+  // will not fire for them. Run the same open-time work for those documents, or they stay without diagnostics,
+  // test discovery or RuboCop until they are edited.
+  for (const doc of vscode.workspace.textDocuments) {
+    if (doc.languageId !== 'ruby' && doc.languageId !== 'erb') {continue}
+    testExplorer.discoverTestsInDocument(doc)
+    scheduleDiagnostics(doc, 100)
+    scheduleRubocopLint(doc, 200)
+  }
 
   let lastBrakemanScanOnSave = 0
   let lastSteepScanOnSave = 0
@@ -1165,6 +1257,9 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     }
   }))
 
+  // Only the synchronous wiring is measured here; indexing and network work is scheduled and logs its own progress.
+  Logger.info(`RailsForge activated in ${Date.now() - activationStartedAt} ms (synchronous wiring).`)
+
   return {
     getActiveProjectRoot: () => activeProject.root,
     getSchemaTableNames: () => schemaIndexer.getAllTables().map(t => t.name),
@@ -1181,6 +1276,15 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
       return lines
     },
     getAstIndexStatuses: () => Object.fromEntries(persistentIndexes.roots().map(r => [r, persistentIndexes.state(r).status])),
+    startAstIndex: async root => (await persistentIndexes.ensure(root)).status,
+    editorExternalDefinitions: () => currentEditorPlan(editorDeps).definitions.map(d => ({ label: d.label, command: d.command, cwd: d.cwd })),
+    // Not in a packaged install. The prompt grants nothing by itself: the caller only learns the answer.
+    ...(context.extensionMode !== vscode.ExtensionMode.Production
+      ? {
+        requestApprovalForTest: (request: ApprovalRequest, signal?: AbortSignal) => vscodeApprovalPort().request(request, signal),
+        openApprovalPromptsForTest: () => openApprovalPrompts(),
+      }
+      : {}),
   }
 }
 
@@ -1375,28 +1479,6 @@ async function selectVsCodeLmModel(family: string): Promise<vscode.LanguageModel
 }
 
 /** One system+user request through VS Code's Language Model API (the user is asked for consent on first use). */
-async function requestViaVsCodeLm(system: string, prompt: string, family: string, timeoutMs: number): Promise<string> {
-  const model = await selectVsCodeLmModel(family)
-  if (!model) {
-    throw new Error(family
-      ? `No VS Code language model matches family "${family}". Install/sign in to a model provider or change railsForge.ai.vscodeLm.family.`
-      : 'No VS Code language model is available. Sign in to Copilot or install a Language Model provider extension.')
-  }
-  const source = new vscode.CancellationTokenSource()
-  const timer = setTimeout(() => source.cancel(), timeoutMs)
-  try {
-    // The Language Model API has no system role: fold the system prompt into the first user message.
-    const messages = [vscode.LanguageModelChatMessage.User(`${system}\n\n---\n\n${prompt}`)]
-    const response = await model.sendRequest(messages, { justification: 'RailsForge needs a model to answer your Rails question.' }, source.token)
-    let text = ''
-    for await (const chunk of response.text) {text += chunk}
-    return text
-  } finally {
-    clearTimeout(timer)
-    source.dispose()
-  }
-}
-
 async function vscodeLmStatus(family: string): Promise<{ state: 'authenticated' | 'error'; detail?: string }> {
   try {
     const model = await selectVsCodeLmModel(family)
@@ -2171,7 +2253,7 @@ function registerCommands(
           .then(doc => vscode.window.showTextDocument(doc))
       })
     }),
-    vscode.commands.registerCommand('railsforge.applyAiFix', async (uri: vscode.Uri, range: vscode.Range, diagnosticMessage: string) => {
+    vscode.commands.registerCommand('railsforge.applyAiFix', warmAfter(speculativeFixCache, async (uri: vscode.Uri, range: vscode.Range, diagnosticMessage: string) => {
       const document = await vscode.workspace.openTextDocument(uri)
       const targetRange = range.isEmpty ? document.lineAt(range.start.line).range : range
       const code = document.getText(targetRange)
@@ -2454,7 +2536,7 @@ function registerCommands(
           vscode.window.showWarningMessage(`RailsForge: AI fix could not be resolved — ${lastRejection ?? 'RuboCop still reports the issue'}.`)
         },
       )
-    }),
+    }, () => context.extensionMode !== vscode.ExtensionMode.Test)),
     vscode.commands.registerCommand('railsforge.fixAllInFile', async (uri?: vscode.Uri) => {
       const targetUri = uri ?? vscode.window.activeTextEditor?.document.uri
       if (!targetUri) {return}

@@ -7,6 +7,7 @@
  * CodeAction lightbulb's AI fix.
  */
 
+import { signalFromCancellation } from '../util/CancellationSignal'
 import * as vscode from 'vscode'
 import { activeWorkspaceRoot, workspaceRootFor } from '../workspace/activeRoot'
 import { RailsAgent } from '../agent/RailsAgent'
@@ -44,9 +45,9 @@ export class RailsChatParticipant {
     try {
       this.participant = vscode.chat.createChatParticipant(
         'railsforge.agent',
-        async (request, _chatContext, stream) => {
+        async (request, _chatContext, stream, token) => {
           Logger.info(`[@rails] Chat prompt received: "${request.prompt}" (command: /${request.command ?? 'default'})`)
-          await this.handleRequest(request, stream, agent, schemaIndexer, getTestFramework, getPatterns)
+          await this.handleRequest(request, stream, agent, schemaIndexer, getTestFramework, getPatterns, token)
         },
       )
       Logger.info('Created @rails chat participant.')
@@ -84,6 +85,7 @@ export class RailsChatParticipant {
     schemaIndexer: SchemaIndexer,
     getTestFramework: () => 'rspec' | 'minitest',
     getPatterns: () => string[],
+    token?: vscode.CancellationToken,
   ): Promise<void> {
     const command = request.command
     const prompt = request.prompt.trim()
@@ -109,6 +111,8 @@ export class RailsChatParticipant {
     if (plan.preface) {stream.markdown(plan.preface)}
 
     const result = await agent.run(composePrompt(plan, prompt), {
+      // The chat stop button cancels the operation: a running external tool is cancelled, and the loop ends.
+      signal: token ? signalFromCancellation(token) : undefined,
       fileContent: fullText,
       selection,
       fileName: editor?.document.fileName,

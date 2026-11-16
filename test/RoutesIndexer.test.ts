@@ -215,3 +215,19 @@ end
     expect(find('GET', '/users/:user_id/posts')).toMatchObject({ controller: 'posts' })
   })
 })
+describe('RoutesIndexer: the DSL verb routes, with either quote style', () => {
+  it('reads a verb route whose target is in double quotes, and one in single quotes, and drops neither', () => {
+    const indexer = new RoutesIndexer()
+    indexer.parseRoutesDsl([
+      'Rails.application.routes.draw do',
+      '  get "status", to: "health#show"',
+      "  get 'health', to: 'health#show'",
+      'end',
+    ].join('\n'))
+
+    expect(indexer.getAllRoutes()).toEqual([
+      { verb: 'GET', uriPattern: '/status', controller: 'health', action: 'show' },
+      { verb: 'GET', uriPattern: '/health', controller: 'health', action: 'show' },
+    ])
+  })
+})

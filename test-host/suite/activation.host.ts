@@ -7,6 +7,7 @@ interface RailsForgeTestApi {
   getActiveProjectRoot(): string
   getSchemaTableNames(): string[]
   getAstIndexStatuses(): Record<string, string>
+  startAstIndex(root: string): Promise<string>
   countRbsMethods(filePath: string, methodName: string): number
   getDevDocsCacheDir(filePath: string): string
   discoverTestTree(): Promise<string[]>
@@ -63,17 +64,20 @@ describe('RailsForge in a real Extension Host', function () {
     assert.ok(!api.getSchemaTableNames().includes('alphas'), 'rails_a schema leaked into rails_b context')
   })
 
-  it('multi-root: each visited root gets its own AST index entry that settles (ready or explicitly unsupported)', async () => {
+  it('multi-root: each root gets its own AST index that settles (ready or explicitly unsupported)', async () => {
     await openFile('rails_a', 'app/models/alphas.rb')
     await openFile('rails_b', 'app/models/betas.rb')
-    const settled = (): boolean => {
-      const statuses = api.getAstIndexStatuses()
-      const roots = Object.keys(statuses)
-      return roots.some(r => r.endsWith('rails_a')) && roots.some(r => r.endsWith('rails_b'))
-        && Object.values(statuses).every(s => s !== 'starting' && s !== 'idle')
+    // The AST index starts on first use (the duplicate/cycle commands), not at activation: start each root
+    // explicitly, exactly as those commands do, and check that each one settles.
+    for (const name of ['rails_a', 'rails_b']) {
+      const folder = vscode.workspace.workspaceFolders?.find(f => path.basename(f.uri.fsPath) === name)
+      assert.ok(folder, `workspace folder ${name} not found`)
+      const status = await api.startAstIndex(folder.uri.fsPath)
+      assert.ok(['ready', 'unsupported'].includes(status), `unexpected AST index status for ${name}: ${status}`)
     }
-    await until(settled, 45_000)
-    for (const status of Object.values(api.getAstIndexStatuses())) {
+    const statuses = api.getAstIndexStatuses()
+    assert.ok(Object.keys(statuses).some(r => r.endsWith('rails_a')) && Object.keys(statuses).some(r => r.endsWith('rails_b')))
+    for (const status of Object.values(statuses)) {
       assert.ok(['ready', 'unsupported'].includes(status), `unexpected AST index status: ${status}`)
     }
   })

@@ -28,7 +28,7 @@ export const INDEXED_GLOBS = [
 ] as const
 
 /** Settings namespace - all railsForge.* keys live under this. */
-export const RAILSFORGE_CONFIG_SECTION = 'railsforge'
+export const RAILSFORGE_CONFIG_SECTION = 'railsForge'
 
 /** A handler invoked when a watched file changes. */
 export interface FileChangeHandler {

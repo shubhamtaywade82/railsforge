@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { READ_ONLY_LOOP_TOOLS, createLoopTools } from '../src/agent/LoopTools'
-import { RAILSFORGE_TOOLS } from '../src/mcp/tools/definitions'
+import { RAILSFORGE_TOOLS, ToolDefinition } from '../src/mcp/tools/definitions'
 import { ToolContext } from '../src/mcp/tools/ToolContext'
 import { writeRailsFixture } from './support/railsFixture'
 
@@ -29,5 +29,20 @@ describe('loop tool allowlist', () => {
   it('a tool that is not on the allowlist is simply not offered', () => {
     const tools = createLoopTools(new ToolContext(writeRailsFixture()), RAILSFORGE_TOOLS, ['get_schema'])
     expect(tools.map(t => t.name)).toEqual(['get_schema'])
+  })
+})
+
+describe('a loop tool that fails or is refused', () => {
+  const probe = (risk: 'R0' | 'R3', handler: () => Promise<string>): ToolDefinition =>
+    ({ name: 'probe', title: 'Probe', description: 'Probe', inputSchema: {}, invocationMessage: 'Probing', risk, handler: async () => handler() }) as unknown as ToolDefinition
+
+  it('a failure is thrown, so the loop reports it as an error', async () => {
+    const [tool] = createLoopTools(new ToolContext(writeRailsFixture()), [probe('R0', async () => { throw new Error('the probe broke') })], ['probe'])
+    await expect(tool.run({})).rejects.toThrow('the probe broke')
+  })
+
+  it('a refusal is returned as text the loop can adapt to, and is not thrown', async () => {
+    const [tool] = createLoopTools(new ToolContext(writeRailsFixture()), [probe('R3', async () => 'never reached')], ['probe'])
+    await expect(tool.run({})).resolves.toContain('was not run')
   })
 })

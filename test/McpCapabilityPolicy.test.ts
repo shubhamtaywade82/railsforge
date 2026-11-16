@@ -29,13 +29,16 @@ describe('decideInvocation', () => {
     expect(decideInvocation('R2', { source: 'host', trusted: true })).toEqual({ allowed: true })
   })
 
-  it('refuses R3 (no approval flow in this build) and R4 (never exposed) whatever the trust state', () => {
+  it('refuses R4 whatever the trust state, and R3 without approval; R3 runs only trusted and approved', () => {
     for (const trusted of [false, true]) {
       for (const source of ['standalone', 'host'] as const) {
-        expect(decideInvocation('R3', { source, trusted })).toMatchObject({ allowed: false, code: 'APPROVAL_REQUIRED' })
         expect(decideInvocation('R4', { source, trusted })).toMatchObject({ allowed: false, code: 'DISABLED_BY_POLICY' })
+        expect(decideInvocation('R3', { source, trusted, approved: true }).allowed).toBe(trusted)
       }
     }
+    expect(decideInvocation('R3', { source: 'host', trusted: true })).toMatchObject({ allowed: false, code: 'APPROVAL_REQUIRED' })
+    expect(decideInvocation('R3', { source: 'host', trusted: false })).toMatchObject({ allowed: false, code: 'WORKSPACE_UNTRUSTED' })
+    expect(decideInvocation('R3', { source: 'standalone', trusted: false })).toMatchObject({ allowed: false, code: 'EXECUTION_DISABLED' })
   })
 })
 

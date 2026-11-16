@@ -72,10 +72,12 @@ RailsForge is a **companion** to Shopify's `ruby-lsp`, not a replacement. Instal
 ## 2. Activation & Requirements
 
 ### Activation Events
-RailsForge activates on any of:
-- A file with language `ruby`, `erb`, `haml`, or `slim` is opened
-- A workspace contains a `Gemfile`
-- A workspace contains `config/routes.rb`
+RailsForge activates once VS Code has finished starting (`onStartupFinished`). It does not activate while the window and the projects are still restoring, so it does not compete with the IDE's own startup. Activation only wires up providers and commands; the heavier work is deferred:
+
+- **Offline DevDocs** for a project load on its first Ruby hover, not at activation.
+- **The AST index** (duplicate methods, dependency cycles) starts the first time one of those commands runs. The first run asks you to retry once it is ready.
+- **The AI fix cache** warms up after the first AI fix request finishes, so it never queues ahead of that request.
+- Ruby and ERB files that were already open at activation get their diagnostics straight away.
 
 ### Requirements
 
@@ -510,6 +512,8 @@ Tables: `symbols`, `methods`, `dependencies`, `embeddings`
 **Command:** `RailsForge: Find Near-Duplicate Methods (DRY)` (`railsforge.findDuplicateMethods`)
 
 Uses **Jaccard token-overlap similarity** over normalized method bodies across the entire codebase — not just line-count heuristics. Catches two methods with the same logic under different names or in different files.
+
+The command reads the AST index, which is built on first use per project (see Activation Events). If it is not ready yet, the command says so; run it again once the index finishes.
 
 #### F-14b: Show Circular Dependencies
 

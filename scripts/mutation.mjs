@@ -23,9 +23,9 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
  * `break` is the minimum mutation score (%) for the group; set below the measured score so it only ratchets up. */
 export const GROUPS = [
   { name: 'workspace-path', mutate: ['src/util/WorkspacePath.ts'], tests: ['test/WorkspacePath.test.ts', 'test/ChatDiffApplier.test.ts'], break: 80 },
-  { name: 'trust', mutate: ['src/workspace/Trust.ts', 'src/util/ProjectProcess.ts'], tests: ['test/Trust.test.ts', 'test/ProjectProcess.test.ts', 'test/RestrictedManifest.test.ts'], break: 90 },
+  { name: 'trust', mutate: ['src/workspace/Trust.ts', 'src/util/ProjectProcess.ts'], tests: ['test/Trust.test.ts', 'test/ProjectProcess.test.ts', 'test/ProjectProcessTree.test.ts', 'test/ProjectProcessLaunch.test.ts', 'test/WindowsLaunch.test.ts', 'test/RestrictedManifest.test.ts'], break: 90 },
   { name: 'safety-rules', mutate: ['src/skills/SafetyRules.ts'], tests: ['test/SafetyRules.test.ts', 'test/SkillRoutingCorpus.test.ts'], exclude: ['Regex'], break: 72 },
-  { name: 'agent-loop', mutate: ['src/agent/AgentLoop.ts'], tests: ['test/AgentLoop.test.ts'], exclude: ['Regex'], break: 70 },
+  { name: 'agent-loop', mutate: ['src/agent/AgentLoop.ts'], tests: ['test/AgentLoop.test.ts', 'test/AgentLoopContract.test.ts'], exclude: ['Regex'], break: 70 },
   { name: 'freshness', mutate: ['src/semantic/Freshness.ts'], tests: ['test/GraphFreshness.test.ts'], break: 70 },
   { name: 'diagnostics', mutate: ['src/diagnostics/Diagnostics.ts'], tests: ['test/Diagnostics.test.ts', 'test/DiagnosticsExact.test.ts'], exclude: ['StringLiteral'], break: 90 },
   { name: 'line-diff', mutate: ['src/patch/LineDiff.ts'], tests: ['test/AiFixDiff.test.ts'], break: 70 },

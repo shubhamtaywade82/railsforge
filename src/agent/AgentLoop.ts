@@ -7,14 +7,35 @@
 import { z } from 'zod'
 import { SyntaxCheck } from '../util/RubySyntax'
 
+export type ArgCheck = { ok: true; args: Record<string, unknown> } | { ok: false; message: string }
+
 export interface LoopTool {
   name: string
   description: string
   inputSchema: z.ZodRawShape
-  run(args: Record<string, unknown>): Promise<string>
+  /**
+   * Set by tools whose schema comes from an outside server (an external MCP tool). The schema is shown to the model
+   * and the arguments are checked with `checkArgs` instead of zod.
+   */
+  jsonSchema?: Record<string, unknown>
+  checkArgs?(args: Record<string, unknown>): ArgCheck
+  /** Runs the tool. The signal is aborted when the operation is cancelled; the tool should stop and reject. */
+  run(args: Record<string, unknown>, signal?: AbortSignal): Promise<string>
 }
 
-export type CompleteFn = (system: string, user: string) => Promise<{ success: boolean; response: string }>
+/** A tool failure with a code the model can act on (for example APPROVAL_DENIED or TIMEOUT). */
+export class LoopToolError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message)
+    this.name = 'LoopToolError'
+  }
+}
+
+/**
+ * One model call. The signal, when the loop has one, is aborted if the operation is cancelled; the provider should stop
+ * its request and resolve. The loop checks the signal after every call, so a late answer is never used.
+ */
+export type CompleteFn = (system: string, user: string, signal?: AbortSignal) => Promise<{ success: boolean; response: string }>
 export type SyntaxFn = (code: string) => Promise<SyntaxCheck>
 export type VerifierFn = (answer: string) => Promise<{ ok: boolean; issues?: string[] }>
 
@@ -27,13 +48,15 @@ export interface AgentLoopOptions {
   maxBlocksChecked?: number
 }
 
-export type StopReason = 'final' | 'max-steps' | 'budget' | 'repeat' | 'provider-error'
+export type StopReason = 'final' | 'max-steps' | 'budget' | 'repeat' | 'provider-error' | 'cancelled'
 
 export interface ToolStep {
   tool: string
   args: Record<string, unknown>
   ok: boolean
   chars: number
+  /** Set when the tool failed with a code, so the outcome is structured and not only text. */
+  code?: string
 }
 
 export interface Verification {
@@ -57,6 +80,8 @@ export interface AgentLoopInput {
   prompt: string
   complete: CompleteFn
   tools: readonly LoopTool[]
+  /** Cancels the operation: the running tool is cancelled and the loop stops with stopped: 'cancelled'. */
+  signal?: AbortSignal
   syntax?: SyntaxFn
   verifier?: VerifierFn
   options?: AgentLoopOptions
@@ -95,8 +120,8 @@ export function parseToolCall(text: string): ParsedToolCall | { error: string } 
 export function describeTools(tools: readonly LoopTool[]): string {
   if (tools.length === 0) {return ''}
   const lines = tools.map(t => {
-    const json = z.toJSONSchema(z.object(t.inputSchema)) as { properties?: Record<string, { type?: string; enum?: unknown[] }>; required?: string[] }
-    const props = Object.entries(json.properties ?? {}).map(([k, v]) => `${k}${(json.required ?? []).includes(k) ? '' : '?'}: ${v.enum ? v.enum.join('|') : v.type ?? 'any'}`)
+    const json = (t.jsonSchema ?? z.toJSONSchema(z.object(t.inputSchema))) as { properties?: Record<string, { type?: unknown; enum?: unknown[] }>; required?: string[] }
+    const props = Object.entries(json.properties ?? {}).map(([k, v]) => `${k}${(json.required ?? []).includes(k) ? '' : '?'}: ${typeLabel(v)}`)
     return `- ${t.name}(${props.join(', ')}) — ${t.description.split(/(?<=\.)\s/)[0]}`
   })
   return [
@@ -119,15 +144,22 @@ function plainAnswer(text: string): string {
 
 const clip = (text: string, max: number): string => (text.length <= max ? text : `${text.slice(0, max)}\n…[truncated ${text.length - max} characters]`)
 
-async function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+async function withTimeout<T>(promise: Promise<T>, ms: number, what: string, signal?: AbortSignal): Promise<T> {
   let timer: NodeJS.Timeout | undefined
+  let onAbort: (() => void) | undefined
   try {
     return await Promise.race([
       promise,
       new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${what} timed out after ${ms}ms`)), ms) }),
+      new Promise<never>((_, reject) => {
+        if (!signal) {return}
+        onAbort = () => reject(new LoopToolError('CANCELLED', `${what} was cancelled`))
+        if (signal.aborted) {onAbort()} else {signal.addEventListener('abort', onAbort, { once: true })}
+      }),
     ])
   } finally {
     clearTimeout(timer)
+    if (signal && onAbort) {signal.removeEventListener('abort', onAbort)}
   }
 }
 
@@ -174,17 +206,41 @@ function formatIssues(v: Verification): string {
   return (v.verifierIssues ?? []).map(i => `- ${i}`).join('\n')
 }
 
-async function executeTool(tool: LoopTool, args: Record<string, unknown>, timeoutMs: number, maxChars: number): Promise<{ step: ToolStep; text: string }> {
+function checkToolArgs(tool: LoopTool, args: Record<string, unknown>): ArgCheck {
+  if (tool.checkArgs) {return tool.checkArgs(args)}
+  const parsed = z.object(tool.inputSchema).safeParse(args)
+  if (parsed.success) {return { ok: true, args: parsed.data as Record<string, unknown> }}
+  return { ok: false, message: parsed.error.issues.map(i => `${i.path.join('.') || 'arguments'}: ${i.message}`).join('; ') }
+}
+
+/** A short label for one property in the tool list shown to the model. */
+function typeLabel(prop: { type?: unknown; enum?: unknown[] }): string {
+  if (prop.enum) {return prop.enum.join('|')}
+  if (Array.isArray(prop.type)) {return prop.type.join('|')}
+  return typeof prop.type === 'string' ? prop.type : 'any'
+}
+
+async function executeTool(tool: LoopTool, args: Record<string, unknown>, timeoutMs: number, maxChars: number, signal?: AbortSignal): Promise<{ step: ToolStep; text: string }> {
   let text: string
   let ok = true
+  let code: string | undefined
   try {
-    text = await withTimeout(tool.run(args), timeoutMs, tool.name)
+    // The signal is passed only when there is one, so a tool called without cancellation sees the same call as before.
+    text = await withTimeout(signal ? tool.run(args, signal) : tool.run(args), timeoutMs, tool.name, signal)
   } catch (err) {
     ok = false
-    text = `Error running ${tool.name}: ${err instanceof Error ? err.message : String(err)}`
+    code = codeOf(err)
+    text = `Error running ${tool.name}${code ? ` [${code}]` : ''}: ${err instanceof Error ? err.message : String(err)}`
   }
   const clipped = clip(text, maxChars)
-  return { step: { tool: tool.name, args, ok, chars: clipped.length }, text: clipped }
+  const step: ToolStep = { tool: tool.name, args, ok, chars: clipped.length }
+  if (code) {step.code = code}
+  return { step, text: clipped }
+}
+
+function codeOf(err: unknown): string | undefined {
+  const code = (err as { code?: unknown } | null)?.code
+  return typeof code === 'string' && code.length > 0 ? code : undefined
 }
 
 export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopResult> {
@@ -208,8 +264,15 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopResu
 
   const user = (extra?: string): string => [input.prompt, ...(transcript.length ? ['', '## Tool results so far', ...transcript] : []), ...(extra ? ['', extra] : [])].join('\n')
 
+  const cancelled = (): AgentLoopResult => ({ success: false, response: 'Cancelled.', steps, stopped: 'cancelled' })
+  // The signal is passed only when there is one, so a model called without cancellation sees the same call as before.
+  const ask = (text: string): Promise<{ success: boolean; response: string }> =>
+    input.signal ? complete(system, text, input.signal) : complete(system, text)
+
   for (let turn = 0; ; turn++) {
-    const reply = await complete(system, user())
+    if (input.signal?.aborted) {return cancelled()}
+    const reply = await ask(user())
+    if (input.signal?.aborted) {return cancelled()}
     if (!reply.success) { return { success: false, response: reply.response, steps, stopped: 'provider-error' } }
     const call = tools.length > 0 ? parseToolCall(reply.response) : null
     if (call === null) { answer = reply.response; break }
@@ -217,7 +280,8 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopResu
     // Out of budget: stop calling tools and ask for the answer with what is known.
     if (turn >= opts.maxSteps || toolChars >= opts.maxTotalToolChars) {
       stopped = turn >= opts.maxSteps ? 'max-steps' : 'budget'
-      const final = await complete(system, user('You have used your tool budget. Answer now using only what you already know; do not call tools.'))
+      const final = await ask(user('You have used your tool budget. Answer now using only what you already know; do not call tools.'))
+      if (input.signal?.aborted) {return cancelled()}
       if (!final.success) { return { success: false, response: final.response, steps, stopped: 'provider-error' } }
       answer = plainAnswer(final.response)
       break
@@ -237,25 +301,27 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopResu
     if (seen.has(key)) {
       stopped = 'repeat'
       transcript.push(`(system) You already called ${call.name} with these arguments. Use that result, or answer now.`)
-      const final = await complete(system, user('Answer now using the results above; do not call tools again.'))
+      const final = await ask(user('Answer now using the results above; do not call tools again.'))
+      if (input.signal?.aborted) {return cancelled()}
       if (!final.success) { return { success: false, response: final.response, steps, stopped: 'provider-error' } }
       answer = plainAnswer(final.response)
       break
     }
     seen.add(key)
 
-    const parsed = z.object(tool.inputSchema).safeParse(call.args)
-    if (!parsed.success) {
-      transcript.push(`(system) Invalid arguments for ${tool.name}: ${parsed.error.issues.map(i => `${i.path.join('.') || 'arguments'}: ${i.message}`).join('; ')}`)
+    const checked = checkToolArgs(tool, call.args)
+    if (!checked.ok) {
+      transcript.push(`(system) Invalid arguments for ${tool.name}: ${checked.message}`)
       steps.push({ tool: tool.name, args: call.args, ok: false, chars: 0 })
       continue
     }
 
-    const { step, text } = await executeTool(tool, parsed.data as Record<string, unknown>, opts.toolTimeoutMs, opts.maxResultChars)
+    const { step, text } = await executeTool(tool, checked.args, opts.toolTimeoutMs, opts.maxResultChars, input.signal)
     toolChars += text.length
     steps.push(step)
+    if (input.signal?.aborted) {return cancelled()}
     log?.(`[agent-loop] ${tool.name} -> ${text.length} chars${step.ok ? '' : ' (error)'}`)
-    transcript.push(`### ${tool.name}(${JSON.stringify(parsed.data)})\n${text}`)
+    transcript.push(`### ${tool.name}(${JSON.stringify(checked.args)})\n${text}`)
   }
 
   let verification = (input.syntax || input.verifier)
@@ -268,10 +334,11 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopResu
     const instruction = verification.failed.length > 0
       ? 'Fix only the syntax errors and return the complete corrected answer. Do not call tools.'
       : 'Fix the issues identified above and return the complete corrected answer. Do not call tools.'
-    const repaired = await complete(system, [
+    const repaired = await ask([
       input.prompt, '', '## Your previous answer', answer, '',
       heading, formatIssues(verification), '', instruction,
     ].join('\n'))
+    if (input.signal?.aborted) {return cancelled()}
     if (repaired.success && repaired.response.trim().length > 0) {
       verification = await verifyAnswer(repaired.response, input.syntax, input.verifier, opts.maxBlocksChecked)
       verification.repaired = true

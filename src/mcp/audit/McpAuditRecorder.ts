@@ -28,6 +28,8 @@ export interface McpAuditEvent {
   durationMs?: number
   outcome?: AuditOutcome
   errorCode?: string
+  /** Set only for calls that asked the user: whether the one invocation was approved. */
+  approval?: 'granted' | 'denied' | 'unavailable'
 }
 
 /** Thrown when the workspace root does not exist, so there is nowhere to write an audit trail. */

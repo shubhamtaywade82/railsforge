@@ -14,6 +14,17 @@ import { setTrustProvider } from '../src/workspace/Trust'
 
 // These tests drive the launch path through a mocked child_process. They describe a trusted workspace.
 beforeEach(() => setTrustProvider(() => true))
+
+// The launch depends on which tools the host has on PATH, and a Windows runner has Ruby's batch shims installed. These
+// tests mock the process call, so the tools must not resolve: with an empty PATH each command stays as given, on any host.
+let savedPath: string | undefined
+beforeEach(() => {
+  savedPath = process.env.PATH
+  process.env.PATH = ''
+})
+afterEach(() => {
+  if (savedPath === undefined) {delete process.env.PATH} else {process.env.PATH = savedPath}
+})
 import { parseRakeTaskList, RakeTaskIndexer } from '../src/rake/RakeTaskIndexer'
 
 // Real `rake -T` output against a scratch Rakefile with a namespace, a top-level task,
@@ -33,6 +44,11 @@ describe('parseRakeTaskList', () => {
       { name: 'db:rollback', namespace: 'db', description: 'Rolls the schema back to the previous version' },
       { name: 'greet[name]', namespace: null, description: 'A parameterized task' },
     ])
+  })
+
+  it('parses the same tasks from Windows CRLF output, with no carriage return left in a description', () => {
+    expect(parseRakeTaskList(REAL_RAKE_T_OUTPUT.replace(/\n/g, '\r\n'))).toEqual(parseRakeTaskList(REAL_RAKE_T_OUTPUT))
+    expect(parseRakeTaskList('rake db:migrate  # Migrate\r\n')).toEqual([{ name: 'db:migrate', namespace: 'db', description: 'Migrate' }])
   })
 
   it('ignores non-task lines and blank lines', () => {

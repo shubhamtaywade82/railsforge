@@ -48,16 +48,11 @@ describe('findCustomTemplate', () => {
     expect(findCustomTemplate(tmpRoot, 'query')).toBeNull()
   })
 
-  it.skipIf(process.platform === 'win32')('returns null when the template file exists but cannot be read', () => {
+  it('returns null when the template path exists but cannot be read as a file', () => {
+    // A directory at the template path exists but cannot be read as a file, on every platform and for every user.
+    // The earlier version made the file unreadable with chmod 000, which root ignores, so it failed when run as root.
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'railsforge-tmpl-'))
-    fs.mkdirSync(path.join(tmpRoot, '.railsforge', 'templates'), { recursive: true })
-    const filePath = path.join(tmpRoot, '.railsforge', 'templates', 'service.erb')
-    fs.writeFileSync(filePath, 'content')
-    try {
-      fs.chmodSync(filePath, 0o000)
-      expect(findCustomTemplate(tmpRoot, 'service')).toBeNull()
-    } finally {
-      fs.chmodSync(filePath, 0o644)
-    }
+    fs.mkdirSync(path.join(tmpRoot, '.railsforge', 'templates', 'service.erb'), { recursive: true })
+    expect(findCustomTemplate(tmpRoot, 'service')).toBeNull()
   })
 })

@@ -16,8 +16,9 @@ import * as path from 'path'
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ToolContext } from './tools/ToolContext'
-import { RAILSFORGE_TOOLS } from './tools/definitions'
+import { RAILSFORGE_TOOLS, toolAnnotations } from './tools/definitions'
 import { invokeTool } from './policy/ToolInvocation'
+import { toCallToolResult } from './McpResults'
 import { readExecutionGrant } from './policy/McpCapabilityPolicy'
 import { isWorkspaceTrusted, setTrustProvider } from '../workspace/Trust'
 
@@ -41,13 +42,12 @@ const server = new McpServer({ name: 'railsforge', version: '0.2.0' })
 for (const tool of RAILSFORGE_TOOLS) {
   server.registerTool(
     tool.name,
-    { title: tool.title, description: tool.description, inputSchema: tool.inputSchema },
-    (async (input: Record<string, unknown>) => {
-      // Every call goes through invokeTool: the declared risk, the execution grant and the audit trail all apply.
-      const result = await invokeTool(tool, context, input ?? {}, { source: 'standalone', isTrusted: isWorkspaceTrusted, warn })
-      return result.ok
-        ? { content: [{ type: 'text' as const, text: result.text }] }
-        : { content: [{ type: 'text' as const, text: result.message }], isError: true }
+    { title: tool.title, description: tool.description, inputSchema: tool.inputSchema, outputSchema: tool.outputSchema, annotations: toolAnnotations(tool.risk) },
+    (async (input: Record<string, unknown>, extra: { signal?: AbortSignal }) => {
+      // Every call goes through invokeTool: the declared risk, the execution grant and the audit trail all apply. A
+      // cancellation from the client reaches the tool through the signal, and is reported as CANCELLED.
+      const result = await invokeTool(tool, context, input ?? {}, { source: 'standalone', isTrusted: isWorkspaceTrusted, warn, signal: extra?.signal })
+      return toCallToolResult(result, tool.outputSchema)
     }) as never,
   )
 }

@@ -173,7 +173,7 @@ export class RoutesIndexer {
 
   private parseDslVerb(verb: string, line: string, scope: DslScope): void {
     const target = line.slice(verb.length + 1).trim()
-    const toMatch = target.match(/to:\s*"([^"]+)"/)
+    const toMatch = target.match(/to:\s*["']([^"']+)["']/)
     if (toMatch) {
       const [controller, action] = toMatch[1].split('#')
       if (!controller || !action) { return }

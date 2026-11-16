@@ -10,7 +10,8 @@
  * RuboCopProvider/BrakemanProvider — never throws, degrades to an empty task list.
  */
 
-import { execFileAsync } from '../util/ProjectProcess'
+import { runProjectTool } from '../util/ProjectProcess'
+import { ToolCallError } from '../mcp/policy/ToolInvocation'
 import { firstCandidate } from '../util/RubyCommand'
 
 
@@ -24,7 +25,8 @@ const TASK_LINE = /^rake\s+(\S+)\s*#\s?(.*)$/
 
 export function parseRakeTaskList(stdout: string): RakeTask[] {
   const tasks: RakeTask[] = []
-  for (const line of stdout.split('\n')) {
+  // Windows writes CRLF line endings, so a trailing carriage return must not stay on the line and break the match.
+  for (const line of stdout.split(/\r?\n/)) {
     const match = TASK_LINE.exec(line)
     if (!match) {continue}
     const [, name, description] = match
@@ -35,15 +37,20 @@ export function parseRakeTaskList(stdout: string): RakeTask[] {
 }
 
 export class RakeTaskIndexer {
-  async listTasks(workspaceRoot: string): Promise<RakeTask[]> {
-    return (await firstCandidate(workspaceRoot, 'rake', ['-T'], (cmd, args) => this.tryRake(cmd, args, workspaceRoot))) ?? []
+  /**
+   * Lists the tasks with `rake -T`, trying the Bundler candidate first. A cancellation stops the running process and is
+   * rethrown as CANCELLED. It must not fall through to the next candidate, which would start a second process.
+   */
+  async listTasks(workspaceRoot: string, signal?: AbortSignal): Promise<RakeTask[]> {
+    return (await firstCandidate(workspaceRoot, 'rake', ['-T'], (cmd, args) => this.tryRake(cmd, args, workspaceRoot, signal))) ?? []
   }
 
-  private async tryRake(command: string, args: string[], cwd: string): Promise<RakeTask[] | null> {
+  private async tryRake(command: string, args: string[], cwd: string, signal?: AbortSignal): Promise<RakeTask[] | null> {
     try {
-      const { stdout } = await execFileAsync(command, args, { cwd, maxBuffer: 10 * 1024 * 1024, timeout: 15000 })
+      const { stdout } = await runProjectTool(command, args, { cwd, maxBuffer: 10 * 1024 * 1024, timeout: 15000, signal })
       return parseRakeTaskList(stdout)
     } catch {
+      if (signal?.aborted) {throw new ToolCallError('CANCELLED', 'The Rake task listing was cancelled, and its process was stopped.')}
       return null
     }
   }

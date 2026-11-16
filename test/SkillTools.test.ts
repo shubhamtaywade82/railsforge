@@ -9,7 +9,10 @@ const packDir = path.resolve(__dirname, 'fixtures', 'skills')
 const root = writeRailsFixture()
 const ctx = new ToolContext(root, packDir)
 const tool = (name: string) => RAILSFORGE_TOOLS.find(t => t.name === name)!
-const run = (name: string, input: Record<string, unknown>): Promise<string> => tool(name).handler(ctx, input)
+const run = async (name: string, input: Record<string, unknown>): Promise<string> => {
+  const out = await tool(name).handler(ctx, input)
+  return typeof out === 'string' ? out : out.text
+}
 
 describe('skill tools', () => {
   it('list_skills returns the pack with its source pin and supports a family filter', async () => {
@@ -19,6 +22,14 @@ describe('skill tools', () => {
     const rails = JSON.parse(await run('list_skills', { family: 'rails' })) as { skills: Array<{ family: string }> }
     expect(rails.skills.length).toBeGreaterThan(20)
     expect(rails.skills.every(s => s.family === 'rails')).toBe(true)
+  })
+
+  it('list_skills also returns the same list as structured data', async () => {
+    const out = await tool('list_skills').handler(ctx, {})
+    if (typeof out === 'string' || out.data === undefined) {throw new Error('expected a structured result')}
+    const data = out.data as { source: { ref: string }; count: number; skills: unknown[] }
+    expect(data.source.ref).toBe('dd22f25b435c40e38b28bd5226ef810adf1f4edc')
+    expect(data.skills.length).toBe(data.count)
   })
 
   it('route_skills uses the semantic graph: a controller/model task routes to controller + ActiveRecord skills', async () => {
@@ -47,8 +58,8 @@ describe('skill tools', () => {
 
   it('degrades with clear messages when no pack is installed', async () => {
     const bare = new ToolContext(writeRailsFixture())
-    expect(await tool('list_skills').handler(bare, {})).toContain('No skills are available')
-    expect(await tool('route_skills').handler(bare, { task: 'x' })).toContain('not bundled')
+    await expect(Promise.resolve(tool('list_skills').handler(bare, {}))).rejects.toMatchObject({ code: 'SKILLS_UNAVAILABLE', message: expect.stringContaining('No skills are available') })
+    await expect(Promise.resolve(tool('route_skills').handler(bare, { task: 'x' }))).rejects.toMatchObject({ code: 'SKILLS_UNAVAILABLE', message: expect.stringContaining('not bundled') })
   })
 })
 

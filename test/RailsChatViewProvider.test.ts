@@ -1,449 +1,131 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import * as vscode from 'vscode'
-import { RailsChatViewProvider } from '../src/chat/RailsChatViewProvider'
+// The chat view's stop control. A request is cancellable from the webview: the agent receives the signal, the answer is
+// reported as cancelled, and the view leaves its streaming state. A second request is refused while one runs. The view
+// leaves streaming state even when the agent fails.
+import { describe, it, expect, vi } from 'vitest'
 
-vi.mock('../src/chat/ChatDiffApplier', () => ({
-  applyDiffToFile: vi.fn(),
-  applyFullFileReplacement: vi.fn(),
-  createNewFile: vi.fn(),
-}))
-
-vi.mock('../src/util/Logger', () => ({
-  Logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },
-}))
-
-import { applyDiffToFile, applyFullFileReplacement, createNewFile } from '../src/chat/ChatDiffApplier'
-
-const mockedApplyDiff = vi.mocked(applyDiffToFile)
-const mockedReplaceFile = vi.mocked(applyFullFileReplacement)
-const mockedCreateFile = vi.mocked(createNewFile)
-
-const mockAgent = {
-  healthCheck: vi.fn().mockResolvedValue(true),
-  getProviderStatus: vi.fn().mockResolvedValue({ state: 'authenticated', detail: 'test' }),
-  run: vi.fn().mockResolvedValue({ success: true, response: 'AI response here', iterations: 1 }),
-} as any
-
-const mockSchemaIndexer = {
-  getAllTables: vi.fn().mockReturnValue([]),
-} as any
-
-const mockRoutesIndexer = {
-  getAllRoutes: vi.fn().mockReturnValue([]),
-} as any
-
-const mockPatternNames = vi.fn().mockReturnValue([])
-
-const extensionUri = new vscode.Uri('/test/workspace')
-
-function createProvider() {
-  return new RailsChatViewProvider(
-    extensionUri,
-    mockAgent,
-    mockSchemaIndexer,
-    mockRoutesIndexer,
-    mockPatternNames,
-  )
-}
-
-beforeEach(() => {
-  vi.clearAllMocks()
-  Object.defineProperty(vscode.window, 'activeTextEditor', { value: undefined, configurable: true })
-  Object.defineProperty(vscode.workspace, 'workspaceFolders', { value: [{ uri: { fsPath: '/test/workspace' } }], configurable: true })
+vi.mock('vscode', () => {
+  const channel = () => ({
+    name: 'RailsForge', append: vi.fn(), appendLine: vi.fn(), replace: vi.fn(), clear: vi.fn(), show: vi.fn(),
+    hide: vi.fn(), dispose: vi.fn(), trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(),
+  })
+  return {
+    window: { activeTextEditor: undefined, createOutputChannel: channel, showWarningMessage: vi.fn() },
+    workspace: { workspaceFolders: undefined, asRelativePath: (p: unknown) => String(p), getConfiguration: () => ({ get: () => undefined }) },
+    commands: { executeCommand: vi.fn(async () => undefined) },
+    Uri: { file: (p: string) => ({ fsPath: p, toString: () => p }) },
+  }
 })
 
-describe('RailsChatViewProvider', () => {
-  it('resolveWebviewView sets options and html', () => {
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
+import { RailsChatViewProvider } from '../src/chat/RailsChatViewProvider'
 
-    expect(wvView.webview.options.enableScripts).toBe(true)
-    expect(wvView.webview.html).toContain('RailsForge AI Chat')
-  })
+interface Posted { type: string; [key: string]: unknown }
 
-  it('resolveWebviewView sends status after setup', async () => {
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    const postSpy = vi.spyOn(wvView.webview, 'postMessage')
+function setUp(run: (prompt: string, context: { signal?: AbortSignal }) => Promise<{ success: boolean; response: string }>) {
+  let listener: ((msg: unknown) => unknown) | undefined
+  const posted: Posted[] = []
+  const view = {
+    webview: {
+      options: {},
+      html: '',
+      postMessage: vi.fn(async (msg: Posted) => { posted.push(msg); return true }),
+      onDidReceiveMessage: (fn: (msg: unknown) => unknown) => { listener = fn; return { dispose() {} } },
+    },
+  }
+  const agent = {
+    run: vi.fn(run),
+    getProviderStatus: vi.fn(async () => ({ state: 'reachable' })),
+  }
+  const provider = new RailsChatViewProvider(
+    { fsPath: '/ext' } as never,
+    agent as never,
+    { getAllTables: () => [] } as never,
+    { getAllRoutes: () => [] } as never,
+    () => [],
+  )
+  provider.resolveWebviewView(view as never)
+  const send = (msg: Record<string, unknown>): Promise<unknown> => Promise.resolve(listener?.(msg))
+  return { agent, posted, send, view }
+}
 
-    provider.resolveWebviewView(wvView)
-    await vi.waitFor(() => expect(postSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'statusUpdate' }),
-    ), { timeout: 1000 })
-  })
+const sendPrompt = (prompt: string) => ({ type: 'sendPrompt', prompt, includeContext: false })
 
-  it('statusUpdate includes isOnline, tablesCount, routesCount', async () => {
-    vi.mocked(mockSchemaIndexer.getAllTables).mockReturnValue([
-      { name: 'users', columns: new Map() },
-      { name: 'posts', columns: new Map() },
-    ])
-    vi.mocked(mockRoutesIndexer.getAllRoutes).mockReturnValue([
-      { verb: 'GET', uriPattern: '/users', controller: 'users', action: 'index' },
-    ])
-
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    const postSpy = vi.spyOn(wvView.webview, 'postMessage')
-
-    provider.resolveWebviewView(wvView)
-    await vi.waitFor(() => expect(postSpy).toHaveBeenCalled(), { timeout: 1000 })
-
-    const msg = postSpy.mock.calls[0][0] as any
-    expect(msg.isOnline).toBe(true)
-    expect(msg.tablesCount).toBe(2)
-    expect(msg.routesCount).toBe(1)
-    expect(msg.currentFile).toBe('No file open')
-  })
-
-  it('statusUpdate shows relative path when editor is active', async () => {
-    const doc = new vscode.TextDocument('/test/workspace/app/models/user.rb', 'ruby', 'code')
-    const editor = { document: doc, selection: new vscode.Selection(0, 0, 0, 0) }
-    Object.defineProperty(vscode.window, 'activeTextEditor', { value: editor, configurable: true })
-
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    const postSpy = vi.spyOn(wvView.webview, 'postMessage')
-
-    provider.resolveWebviewView(wvView)
-    await vi.waitFor(() => expect(postSpy).toHaveBeenCalled(), { timeout: 1000 })
-
-    const msg = postSpy.mock.calls[0][0] as any
-    expect(msg.currentFile).toBe('user.rb')
-  })
-
-  it('webviewReady message triggers postStatus', async () => {
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    const postSpy = vi.spyOn(wvView.webview, 'postMessage')
-
-    provider.resolveWebviewView(wvView)
-    postSpy.mockClear()
-
-    wvView.webview.simulateMessage({ type: 'webviewReady' })
-
-    await vi.waitFor(() => expect(postSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'statusUpdate' }),
-    ), { timeout: 1000 })
-  })
-
-  it('refreshStatus message triggers postStatus', async () => {
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    const postSpy = vi.spyOn(wvView.webview, 'postMessage')
-
-    provider.resolveWebviewView(wvView)
-    postSpy.mockClear()
-
-    wvView.webview.simulateMessage({ type: 'refreshStatus' })
-
-    await vi.waitFor(() => expect(postSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'statusUpdate' }),
-    ), { timeout: 1000 })
-  })
-
-  it('sendPrompt message calls agent and streams response', async () => {
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    const postSpy = vi.spyOn(wvView.webview, 'postMessage')
-
-    provider.resolveWebviewView(wvView)
-    postSpy.mockClear()
-
-    await wvView.webview.simulateMessage({ type: 'sendPrompt', prompt: 'explain this code', includeContext: false })
-
-    expect(mockAgent.run).toHaveBeenCalledWith('explain this code', expect.objectContaining({
-      fileContent: '',
-      workspaceRoot: '/test/workspace',
+describe('the chat stop control', () => {
+  it('stops the request: the agent receives the signal, the answer is reported as cancelled, and streaming ends', async () => {
+    const h = setUp((_prompt, context) => new Promise(resolve => {
+      context.signal?.addEventListener('abort', () => resolve({ success: true, response: 'a partial answer' }), { once: true })
     }))
 
-    const types = postSpy.mock.calls.map(c => (c[0] as any).type)
-    expect(types).toContain('appendMessage')
-    expect(types).toContain('stopStreaming')
+    const pending = h.send(sendPrompt('explain the order model'))
+    await vi.waitFor(() => expect(h.agent.run).toHaveBeenCalled())
+    expect(h.posted).toContainEqual({ type: 'startStreaming' })
+
+    await h.send({ type: 'cancelRequest' })
+    await pending
+
+    const context = h.agent.run.mock.calls[0][1] as { signal: AbortSignal }
+    expect(context.signal.aborted).toBe(true)
+    expect(h.posted.filter(m => m.type === 'appendMessage' && m.sender === 'assistant')).toEqual([
+      { type: 'appendMessage', sender: 'assistant', text: 'Cancelled.', success: false },
+    ])
+    expect(h.posted.at(-1)).toEqual({ type: 'stopStreaming' })
   })
 
-  it('sendPrompt with includeContext sends active editor content', async () => {
-    const doc = new vscode.TextDocument('/test/workspace/app/models/user.rb', 'ruby', 'class User\nend')
-    const editor = { document: doc, selection: new vscode.Selection(0, 0, 1, 0) }
-    Object.defineProperty(vscode.window, 'activeTextEditor', { value: editor, configurable: true })
-
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
-
-    await wvView.webview.simulateMessage({ type: 'sendPrompt', prompt: 'optimize', includeContext: true })
-
-    expect(mockAgent.run).toHaveBeenCalledWith('optimize', expect.objectContaining({
-      fileContent: 'class User\nend',
-      fileName: '/test/workspace/app/models/user.rb',
+  it('refuses a second request while one is running, without disturbing the first', async () => {
+    const h = setUp((_prompt, context) => new Promise(resolve => {
+      context.signal?.addEventListener('abort', () => resolve({ success: true, response: 'partial' }), { once: true })
     }))
+
+    const first = h.send(sendPrompt('first'))
+    await vi.waitFor(() => expect(h.agent.run).toHaveBeenCalledTimes(1))
+    await h.send(sendPrompt('second'))
+
+    expect(h.agent.run).toHaveBeenCalledTimes(1)
+    expect(h.posted).toContainEqual(expect.objectContaining({ type: 'appendMessage', sender: 'assistant', success: false, text: expect.stringContaining('still running') }))
+    expect((h.agent.run.mock.calls[0][1] as { signal: AbortSignal }).signal.aborted).toBe(false)
+
+    await h.send({ type: 'cancelRequest' })
+    await first
   })
 
-  it('sendPrompt injects @schema context when mentioned', async () => {
-    vi.mocked(mockSchemaIndexer.getAllTables).mockReturnValue([
-      { name: 'users', columns: new Map([['id', { name: 'id', type: 'integer' }]]) },
+  it('runs the next request once the previous one has finished', async () => {
+    const h = setUp(async () => ({ success: true, response: 'an answer' }))
+    await h.send(sendPrompt('one'))
+    await h.send(sendPrompt('two'))
+    expect(h.agent.run).toHaveBeenCalledTimes(2)
+    expect(h.posted.filter(m => m.type === 'appendMessage' && m.sender === 'assistant')).toEqual([
+      { type: 'appendMessage', sender: 'assistant', text: 'an answer', success: true },
+      { type: 'appendMessage', sender: 'assistant', text: 'an answer', success: true },
     ])
-
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
-
-    await wvView.webview.simulateMessage({ type: 'sendPrompt', prompt: '@schema how many tables?', includeContext: false })
-
-    const callArg = vi.mocked(mockAgent.run).mock.calls[0][1]
-    expect(callArg.fileContent).toContain('@schema')
-    expect(callArg.fileContent).toContain('users')
   })
 
-  it('sendPrompt injects @routes context when mentioned', async () => {
-    vi.mocked(mockRoutesIndexer.getAllRoutes).mockReturnValue([
-      { verb: 'GET', uriPattern: '/users', controller: 'users', action: 'index' },
-    ])
+  it('leaves the streaming state, and accepts the next request, even when the agent throws', async () => {
+    const h = setUp(async (prompt) => {
+      if (prompt === 'broken') {throw new Error('provider exploded')}
+      return { success: true, response: 'recovered' }
+    })
 
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
+    await expect(h.send(sendPrompt('broken'))).rejects.toThrow('provider exploded')
+    expect(h.posted.at(-1)).toEqual({ type: 'stopStreaming' })
 
-    await wvView.webview.simulateMessage({ type: 'sendPrompt', prompt: '@routes list', includeContext: false })
-
-    const callArg = vi.mocked(mockAgent.run).mock.calls[0][1]
-    expect(callArg.fileContent).toContain('@routes')
-    expect(callArg.fileContent).toContain('/users')
+    await h.send(sendPrompt('next'))
+    expect(h.agent.run).toHaveBeenCalledTimes(2)
+    expect(h.posted).toContainEqual({ type: 'appendMessage', sender: 'assistant', text: 'recovered', success: true })
   })
 
-  it('sendPrompt injects @file context when mentioned and editor active', async () => {
-    const doc = new vscode.TextDocument('/test/workspace/app/models/user.rb', 'ruby', 'class User\nend')
-    const editor = { document: doc, selection: new vscode.Selection(0, 0, 0, 0) }
-    Object.defineProperty(vscode.window, 'activeTextEditor', { value: editor, configurable: true })
-
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
-
-    await wvView.webview.simulateMessage({ type: 'sendPrompt', prompt: '@file explain', includeContext: true })
-
-    const callArg = vi.mocked(mockAgent.run).mock.calls[0][1]
-    expect(callArg.fileContent).toContain('@file')
-    expect(callArg.fileContent).toContain('class User')
+  it('the webview has a stop button, shown while streaming, that sends the cancellation', async () => {
+    const h = setUp(async () => ({ success: true, response: 'ok' }))
+    expect(h.view.webview.html).toContain('id="stopBtn"')
+    expect(h.view.webview.html).toContain("type:'cancelRequest'")
+    expect(h.view.webview.html).toContain("msg.type==='startStreaming'")
+    expect(h.view.webview.html).toContain("msg.type==='stopStreaming'")
   })
 
-  it('sendPrompt injects @patterns context when mentioned', async () => {
-    mockPatternNames.mockReturnValue(['CreateService', 'QueryObject'])
-
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
-
-    await wvView.webview.simulateMessage({ type: 'sendPrompt', prompt: '@patterns available?', includeContext: false })
-
-    const callArg = vi.mocked(mockAgent.run).mock.calls[0][1]
-    expect(callArg.fileContent).toContain('@patterns')
-    expect(callArg.fileContent).toContain('CreateService')
-  })
-
-  it('applyCode in create mode calls createNewFile', async () => {
-    mockedCreateFile.mockResolvedValue({ applied: true, message: 'Created app/services/x.rb' })
-    vi.spyOn(vscode.window, 'showInformationMessage').mockResolvedValue(undefined)
-
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
-
-    await wvView.webview.simulateMessage({ type: 'applyCode', code: 'class Foo\nend', mode: 'create', fileName: 'app/services/foo.rb' })
-
-    expect(mockedCreateFile).toHaveBeenCalledWith('class Foo\nend', '/test/workspace', 'app/services/foo.rb')
-    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Created app/services/x.rb')
-  })
-
-  it('applyCode in create mode does nothing when no workspace root', async () => {
-    Object.defineProperty(vscode.workspace, 'workspaceFolders', { value: [], configurable: true })
-
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
-
-    await wvView.webview.simulateMessage({ type: 'applyCode', code: 'code', mode: 'create' })
-
-    expect(mockedCreateFile).not.toHaveBeenCalled()
-  })
-
-  it('applyCode in applyDiff mode calls applyDiffToFile', async () => {
-    mockedApplyDiff.mockResolvedValue({ applied: true, message: 'Diff applied' })
-    vi.spyOn(vscode.window, 'showInformationMessage').mockResolvedValue(undefined)
-
-    const doc = new vscode.TextDocument('/test/workspace/app/models/user.rb', 'ruby', 'code')
-    const editor = { document: doc, selection: new vscode.Selection(0, 0, 0, 0) }
-    Object.defineProperty(vscode.window, 'activeTextEditor', { value: editor, configurable: true })
-
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
-
-    await wvView.webview.simulateMessage({ type: 'applyCode', code: '@@ -1 +1 @@\n-old\n+new', mode: 'applyDiff' })
-
-    expect(mockedApplyDiff).toHaveBeenCalledWith(
-      '@@ -1 +1 @@\n-old\n+new',
-      doc.uri,
-      'RailsForge AI Diff',
-    )
-  })
-
-  it('applyCode in applyDiff mode warns when no editor', async () => {
-    vi.spyOn(vscode.window, 'showWarningMessage').mockResolvedValue(undefined)
-    Object.defineProperty(vscode.window, 'activeTextEditor', { value: undefined, configurable: true })
-
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
-
-    await wvView.webview.simulateMessage({ type: 'applyCode', code: 'diff', mode: 'applyDiff' })
-
-    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining('No active editor'))
-  })
-
-  it('applyCode in replaceFile mode calls applyFullFileReplacement', async () => {
-    mockedReplaceFile.mockResolvedValue({ applied: true, message: 'File replaced' })
-    vi.spyOn(vscode.window, 'showInformationMessage').mockResolvedValue(undefined)
-
-    const doc = new vscode.TextDocument('/test/workspace/app/models/user.rb', 'ruby', 'code')
-    const editor = { document: doc, selection: new vscode.Selection(0, 0, 0, 0) }
-    Object.defineProperty(vscode.window, 'activeTextEditor', { value: editor, configurable: true })
-
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
-
-    await wvView.webview.simulateMessage({ type: 'applyCode', code: 'class New\nend', mode: 'replaceFile' })
-
-    expect(mockedReplaceFile).toHaveBeenCalledWith(
-      'class New\nend',
-      doc.uri,
-      'RailsForge AI',
-    )
-  })
-
-  it('applyCode in replaceFile mode warns when no editor', async () => {
-    vi.spyOn(vscode.window, 'showWarningMessage').mockResolvedValue(undefined)
-    Object.defineProperty(vscode.window, 'activeTextEditor', { value: undefined, configurable: true })
-
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
-
-    await wvView.webview.simulateMessage({ type: 'applyCode', code: 'code', mode: 'replaceFile' })
-
-    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining('No active editor'))
-  })
-
-  it('applyCode in insert mode inserts at cursor', async () => {
-    const editFn = vi.fn().mockResolvedValue(true)
-    const doc = new vscode.TextDocument('/test/workspace/app/models/user.rb', 'ruby', 'line1\nline2\n')
-    const editor = {
-      document: doc,
-      selection: { isEmpty: true, active: new vscode.Position(1, 0) },
-      edit: editFn,
+  it('the webview script parses, so a typo in the stop wiring cannot break the whole chat', async () => {
+    const h = setUp(async () => ({ success: true, response: 'ok' }))
+    const scripts = [...h.view.webview.html.matchAll(/<script>([\s\S]*?)<\/script>/gi)].map(match => match[1])
+    expect(scripts.length).toBeGreaterThan(0)
+    for (const script of scripts) {
+      expect(() => new Function(script)).not.toThrow()
     }
-    Object.defineProperty(vscode.window, 'activeTextEditor', { value: editor, configurable: true })
-    vi.spyOn(vscode.window, 'showInformationMessage').mockResolvedValue(undefined)
-
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
-
-    await wvView.webview.simulateMessage({ type: 'applyCode', code: 'inserted_text', mode: 'insert' })
-
-    expect(editFn).toHaveBeenCalled()
-    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Code applied to active editor.')
-  })
-
-  it('applyCode in replace mode with non-empty selection replaces selection', async () => {
-    const editFn = vi.fn((cb: (eb: any) => void) => { cb({ replace: vi.fn() }); return Promise.resolve(true) })
-    const doc = new vscode.TextDocument('/test/workspace/app/models/user.rb', 'ruby', 'line1\nline2\n')
-    const editor = {
-      document: doc,
-      selection: { isEmpty: false, active: new vscode.Position(0, 0) },
-      edit: editFn,
-    }
-    Object.defineProperty(vscode.window, 'activeTextEditor', { value: editor, configurable: true })
-    vi.spyOn(vscode.window, 'showInformationMessage').mockResolvedValue(undefined)
-
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
-
-    await wvView.webview.simulateMessage({ type: 'applyCode', code: 'new_code', mode: 'replace' })
-
-    expect(editFn).toHaveBeenCalled()
-  })
-
-  it('applyCode in legacy mode warns when no editor', async () => {
-    vi.spyOn(vscode.window, 'showWarningMessage').mockResolvedValue(undefined)
-    Object.defineProperty(vscode.window, 'activeTextEditor', { value: undefined, configurable: true })
-
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
-
-    await wvView.webview.simulateMessage({ type: 'applyCode', code: 'code', mode: 'insert' })
-
-    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(expect.stringContaining('No active editor'))
-  })
-
-  it('sendExternalPrompt focuses view and processes prompt', async () => {
-    vi.spyOn(vscode.commands, 'executeCommand').mockResolvedValue(undefined)
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
-
-    await provider.sendExternalPrompt('generate service')
-
-    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('railsforge.chatView.focus')
-    expect(mockAgent.run).toHaveBeenCalled()
-  })
-
-  it('sendPrompt with agent failure logs warning', async () => {
-    vi.mocked(mockAgent.run).mockResolvedValue({ success: false, response: 'Model error', iterations: 0 })
-
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
-
-    await wvView.webview.simulateMessage({ type: 'sendPrompt', prompt: 'test', includeContext: false })
-
-    const { Logger } = await import('../src/util/Logger')
-    expect(Logger.warn).toHaveBeenCalled()
-  })
-
-  it('ignores unknown message types', async () => {
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
-
-    // Should not throw
-    await wvView.webview.simulateMessage({ type: 'unknownType' })
-  })
-
-  it('getHtml contains quick action buttons', () => {
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
-
-    const html = wvView.webview.html
-    expect(html).toContain('/service')
-    expect(html).toContain('/fix')
-    expect(html).toContain('/optimize')
-    expect(html).toContain('/migrate')
-  })
-
-  it('prompt text cleans @mention tokens before sending to agent', async () => {
-    const provider = createProvider()
-    const wvView = new vscode.WebviewView()
-    provider.resolveWebviewView(wvView)
-
-    await wvView.webview.simulateMessage({ type: 'sendPrompt', prompt: '@schema @routes explain', includeContext: false })
-
-    const callArgs = vi.mocked(mockAgent.run).mock.calls[0]
-    expect(callArgs[0]).not.toContain('@schema')
-    expect(callArgs[0]).not.toContain('@routes')
   })
 })

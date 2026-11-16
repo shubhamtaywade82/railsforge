@@ -99,7 +99,7 @@ export const ADAPTERS: readonly AdapterEntry[] = [
   {
     id: 'actionmcp',
     label: 'ActionMCP',
-    package: { kind: 'ruby-gem', name: 'actionmcp', executable: null },
+    package: { kind: 'ruby-gem', name: 'actionmcp', executable: 'actionmcp_cli' },
     summary: 'Lets an application expose its own operations as MCP tools, over HTTP.',
     minimumRuby: '3.4.8',
     minimumNode: null,
@@ -143,7 +143,7 @@ export const ADAPTERS: readonly AdapterEntry[] = [
   {
     id: 'ask-ruby-harness-mcp',
     label: 'ask-ruby-harness-mcp',
-    package: { kind: 'ruby-gem', name: 'ask-ruby-harness-mcp', executable: null },
+    package: { kind: 'ruby-gem', name: 'ask-ruby-harness-mcp', executable: 'ask-ruby-harness-mcp' },
     summary: 'Ruby project tooling over MCP, usable in any Ruby project. Its tools are not verified here.',
     minimumRuby: '3.2.0',
     minimumNode: null,
@@ -178,7 +178,7 @@ export const ADAPTERS: readonly AdapterEntry[] = [
   {
     id: 'gems-mcp',
     label: '@ruby-mcp/gems-mcp',
-    package: { kind: 'npm', name: '@ruby-mcp/gems-mcp', executable: null },
+    package: { kind: 'npm', name: '@ruby-mcp/gems-mcp', executable: 'gems-mcp' },
     summary: 'RubyGems.org lookups, gem versions, and Gemfile and gemspec parsing.',
     minimumRuby: null,
     minimumNode: '18.0.0',
@@ -187,7 +187,7 @@ export const ADAPTERS: readonly AdapterEntry[] = [
       { label: 'Install the npm package globally', scope: 'tool-environment', steps: ['npm install -g @ruby-mcp/gems-mcp'] },
     ],
     notes: [
-      'Its README lists Gemfile edits and bundle install operations. Review any change it proposes before accepting it.',
+      'Its README lists searches and Gemfile and gemspec edits (pin, unpin, add). It does not run bundle install, so resolving and installing gems stay with you. Review any edit it proposes before accepting it.',
       'The npm metadata names github.com/ruby-mcp/ruby-mcp, but the README clone command names fugufish/ruby-mcp. Check the source before you trust either.',
       'Its README names no executable and no transport, so RailsForge does not launch it. Read the npm bin field and the source first.',
     ],

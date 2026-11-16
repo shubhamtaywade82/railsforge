@@ -22,6 +22,7 @@ import { routeSkills, suggestPatterns } from '../../skills/SkillRouter'
 import { evaluateSafety } from '../../skills/SafetyRules'
 import { buildSkillContext } from '../../skills/SkillContextBuilder'
 import type { RiskLevel } from '../policy/McpCapabilityPolicy'
+import { ToolCallError, type ToolOutput } from '../policy/ToolInvocation'
 import { RUBY_TOOLS } from './ruby'
 import { QUALITY_TOOLS } from './quality'
 import { OBSERVABILITY_TOOLS } from './observability'
@@ -32,6 +33,11 @@ export interface ToolDefinition {
   title: string
   description: string
   inputSchema: z.ZodRawShape
+  /**
+   * The structuredContent of a successful call, for tools that return one. Absent for tools whose result is text only.
+   * Checked on every call (McpResults.ts), so a result that does not match this declaration is an error, not a success.
+   */
+  outputSchema?: z.ZodRawShape
   /** Short sentence for the confirmation/progress UI in VS Code. */
   invocationMessage: string
   /**
@@ -39,12 +45,30 @@ export interface ToolDefinition {
    * R0 static reads, R1 cached reads, R2 runs project code, R3 needs approval, R4 never exposed.
    */
   risk: RiskLevel
-  handler(ctx: ToolContext, input: Record<string, unknown>): Promise<string>
+  /** `signal` is aborted when the call is cancelled; a handler that runs a process should stop it then. */
+  handler(ctx: ToolContext, input: Record<string, unknown>, signal?: AbortSignal): Promise<ToolOutput>
 }
 
 const json = (value: unknown): string => JSON.stringify(value, null, 2)
+/** A result with both its text and the structured value it describes. The text is unchanged from earlier versions. */
+const structured = (text: string, data: Record<string, unknown>): ToolOutput => ({ text, data })
 const NO_INDEX = 'RailsForge persistent index not found (.railsforge/index.sqlite3). Open this workspace in VS Code with RailsForge installed first.'
 const PATTERN_TYPES = ['service', 'query', 'form', 'policy', 'decorator', 'concern'] as const
+
+// Output schemas. Each describes the structuredContent of a successful call. The MCP result must be an object, so a list
+// is returned under a named key, and the text content keeps the bare list as it always was.
+const ROUTE = z.object({ verb: z.string(), uriPattern: z.string(), controller: z.string(), action: z.string(), helperName: z.string().optional(), prefix: z.string().optional() })
+const ROUTES_OUTPUT = { routes: z.array(ROUTE) }
+const PATTERN = z.object({ name: z.string(), type: z.enum(PATTERN_TYPES), filePath: z.string(), publicMethods: z.array(z.string()) })
+const PATTERNS_OUTPUT = { patterns: z.array(PATTERN) }
+const SKILL = z.object({ id: z.string(), family: z.string(), origin: z.string(), description: z.string() })
+const SKILLS_OUTPUT = { source: z.object({ repo: z.string(), ref: z.string() }).nullable(), count: z.number().int().nonnegative(), skills: z.array(SKILL) }
+const RAKE_TASK = z.object({ name: z.string(), namespace: z.string().nullable(), description: z.string() })
+const RAKE_TASKS_OUTPUT = { tasks: z.array(RAKE_TASK) }
+const INDEXED_PATTERN = z.object({ id: z.string(), type: z.enum(PATTERN_TYPES), name: z.string(), filePath: z.string(), lineStart: z.number().int(), superclass: z.string().optional(), publicMethods: z.array(z.string()), preview: z.string() })
+const SIMILAR_PATTERNS_OUTPUT = { similar: z.array(INDEXED_PATTERN) }
+const EXAMPLE_FILE_OUTPUT = { filePath: z.string(), name: z.string(), content: z.string() }
+const LEARNING_RESOURCE_OUTPUT = { book: z.string(), chapter: z.string(), note: z.string() }
 
 /** apidock.com groups docs under a top-level rails/ruby/rspec namespace; guess it from the class name's prefix. */
 function classifyApiDockNamespace(className: string): 'rails' | 'ruby' | 'rspec' {
@@ -58,11 +82,21 @@ function defineTool<S extends z.ZodRawShape>(def: {
   title: string
   description: string
   inputSchema: S
+  outputSchema?: z.ZodRawShape
   invocationMessage: string
   risk: RiskLevel
-  handler(ctx: ToolContext, input: z.infer<z.ZodObject<S>>): Promise<string>
+  handler(ctx: ToolContext, input: z.infer<z.ZodObject<S>>, signal?: AbortSignal): Promise<ToolOutput>
 }): ToolDefinition {
   return def as unknown as ToolDefinition
+}
+
+/**
+ * The MCP hints a tool declares, derived from its risk so they cannot disagree with the policy. A static or cached read
+ * (R0, R1) is read-only and idempotent. Running project code (R2) may write, so it is marked destructive.
+ */
+export function toolAnnotations(risk: RiskLevel): { readOnlyHint: boolean; destructiveHint: boolean; idempotentHint: boolean } {
+  if (risk === 'R0' || risk === 'R1') {return { readOnlyHint: true, destructiveHint: false, idempotentHint: true }}
+  return { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
 }
 
 export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
@@ -81,6 +115,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'list_routes',
+    outputSchema: ROUTES_OUTPUT,
     risk: 'R0',
     title: 'List Rails routes',
     description: 'Lists routes, optionally filtered by a search string matched against verb/path/controller#action.',
@@ -88,11 +123,13 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
     invocationMessage: 'Listing Rails routes',
     async handler(ctx, { filter }) {
       const routes = ctx.loadRoutesIndexer()
-      return json(filter ? routes.searchRoutes(filter) : routes.getAllRoutes())
+      const matched = filter ? routes.searchRoutes(filter) : routes.getAllRoutes()
+      return structured(json(matched), { routes: matched })
     },
   }),
   defineTool({
     name: 'list_patterns',
+    outputSchema: PATTERNS_OUTPUT,
     risk: 'R0',
     title: 'List project patterns',
     description: 'Lists this project\'s own Service/Query/Form/Policy/Decorator/Concern classes, optionally filtered by type.',
@@ -101,11 +138,13 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
     async handler(ctx, { type }) {
       const indexer = ctx.loadPatternIndexer()
       const patterns = type ? indexer.getPatternsByType(type as PatternType) : indexer.getAllPatterns()
-      return json(patterns.map(p => ({ name: p.name, type: p.type, filePath: p.filePath, publicMethods: p.publicMethods })))
+      const listed = patterns.map(p => ({ name: p.name, type: p.type, filePath: p.filePath, publicMethods: p.publicMethods }))
+      return structured(json(listed), { patterns: listed })
     },
   }),
   defineTool({
     name: 'find_similar_pattern',
+    outputSchema: SIMILAR_PATTERNS_OUTPUT,
     risk: 'R0',
     title: 'Find similar existing pattern',
     description: 'Given a proposed class name (e.g. "CreateOrderService"), finds the closest existing Service/Query/etc. in this project — use before generating new code.',
@@ -114,8 +153,9 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
     async handler(ctx, { name }) {
       const indexer = ctx.loadPatternIndexer()
       const target = indexer.getAllPatterns().find(p => p.name === name)
-      if (!target) {return `No existing pattern named "${name}" found; nothing to compare against.`}
-      return json(indexer.findSimilar(target))
+      if (!target) {throw new ToolCallError('NOT_FOUND', `No existing pattern named "${name}" found; nothing to compare against.`)}
+      const similar = indexer.findSimilar(target)
+      return structured(json(similar), { similar })
     },
   }),
   defineTool({
@@ -127,7 +167,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
     invocationMessage: 'Reading the dependency graph',
     async handler(ctx, { name }) {
       const db = ctx.openPersistentDbReadonly()
-      if (!db) {return NO_INDEX}
+      if (!db) {throw new ToolCallError('INDEX_UNAVAILABLE', NO_INDEX)}
       const graph = new PersistentDependencyGraph(db)
       return json({ collaborators: graph.getCollaborators(name), callers: graph.getCallers(name) })
     },
@@ -141,7 +181,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
     invocationMessage: 'Looking for near-duplicate methods',
     async handler(ctx) {
       const db = ctx.openPersistentDbReadonly()
-      if (!db) {return NO_INDEX}
+      if (!db) {throw new ToolCallError('INDEX_UNAVAILABLE', NO_INDEX)}
       return json(new DuplicateMethodDetector(db).findDuplicates())
     },
   }),
@@ -234,19 +274,22 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'list_rake_tasks',
+    outputSchema: RAKE_TASKS_OUTPUT,
     risk: 'R2',
     title: 'List Rake tasks',
     description: 'Lists this project\'s Rake tasks (name, namespace, description) via `rake -T` — use before suggesting a shell command, to check whether a task for it already exists (e.g. db:migrate, a custom deploy/report task) rather than proposing a new script.',
     inputSchema: { filter: z.string().optional().describe('Only return tasks whose name contains this substring') },
     invocationMessage: 'Listing Rake tasks',
-    async handler(ctx, { filter }) {
-      const tasks = await new RakeTaskIndexer().listTasks(ctx.workspaceRoot)
+    async handler(ctx, { filter }, signal) {
+      const tasks = await new RakeTaskIndexer().listTasks(ctx.workspaceRoot, signal)
       const filtered = filter ? tasks.filter(t => t.name.includes(filter)) : tasks
-      return filtered.length === 0 ? 'No Rake tasks found (no Rakefile, rake not installed, or no tasks matched the filter).' : json(filtered)
+      const text = filtered.length === 0 ? 'No Rake tasks found (no Rakefile, rake not installed, or no tasks matched the filter).' : json(filtered)
+      return structured(text, { tasks: filtered })
     },
   }),
   defineTool({
     name: 'suggest_learning_resource',
+    outputSchema: LEARNING_RESOURCE_OUTPUT,
     risk: 'R0',
     title: 'Suggest a learning resource for a design smell',
     description: 'Given one of RailsForge\'s own design-principle diagnostic ids (SRP-FAT-CLASS, DEMETER-VIOLATION, KISS-METAPROGRAMMING, YAGNI-UNUSED-PRIVATE — as seen in this project\'s "RailsForge Principles" diagnostics), returns a specific book/chapter recommendation for further reading.',
@@ -254,7 +297,8 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
     invocationMessage: 'Finding a learning resource',
     async handler(_ctx, { diagnostic_id }) {
       const resource = getLearningResource(diagnostic_id as string)
-      return resource ? json(resource) : `No learning resource mapped for "${diagnostic_id}".`
+      if (!resource) {throw new ToolCallError('NOT_FOUND', `No learning resource mapped for "${diagnostic_id}".`)}
+      return structured(json(resource), { ...resource })
     },
   }),
   defineTool({
@@ -277,6 +321,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'get_example_file',
+    outputSchema: EXAMPLE_FILE_OUTPUT,
     risk: 'R0',
     title: 'Get a representative example file for a pattern type',
     description: 'Returns the full content of this project\'s most complete existing Service/Query/Form/Policy/Decorator/Concern, so an AI agent can learn the repo\'s real style (naming, error handling, how it structures the class) by example instead of guessing. Call this alongside get_project_guidelines before generating a new file of the same pattern type.',
@@ -284,13 +329,14 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
     invocationMessage: 'Reading a representative example file',
     async handler(ctx, { pattern_type }) {
       const candidates = ctx.loadPatternIndexer().getPatternsByType(pattern_type as PatternType)
-      if (candidates.length === 0) {return `No existing ${pattern_type} found in this project to use as an example.`}
+      if (candidates.length === 0) {throw new ToolCallError('NOT_FOUND', `No existing ${pattern_type} found in this project to use as an example.`)}
       // "Most complete" as a proxy for "most representative": the one with the most public methods.
       const best = candidates.reduce((a, b) => (b.publicMethods.length > a.publicMethods.length ? b : a))
       try {
-        return json({ filePath: best.filePath, name: best.name, content: fs.readFileSync(best.filePath, 'utf8') })
+        const example = { filePath: best.filePath, name: best.name, content: fs.readFileSync(best.filePath, 'utf8') }
+        return structured(json(example), example)
       } catch {
-        return `Found ${best.name} at ${best.filePath} but could not read the file.`
+        throw new ToolCallError('UNREADABLE', `Found ${best.name} at ${best.filePath} but could not read the file.`)
       }
     },
   }),
@@ -313,6 +359,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
   }),
   defineTool({
     name: 'list_skills',
+    outputSchema: SKILLS_OUTPUT,
     risk: 'R0',
     title: 'List engineering skills (ruby-agent-skills)',
     description: 'Lists the Ruby/Rails engineering skills available (id, family, one-line description) from the pinned ruby-agent-skills pack plus any project skills in .agents/skills. Use route_skills to pick for a task rather than reading the whole list.',
@@ -320,9 +367,10 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
     invocationMessage: 'Listing engineering skills',
     async handler(ctx, { family }) {
       const registry = ctx.getSkillRegistry()
-      if (!registry.available) {return 'No skills are available in this install (the ruby-agent-skills pack was not bundled and the project has no .agents/skills).'}
+      if (!registry.available) {throw new ToolCallError('SKILLS_UNAVAILABLE', 'No skills are available in this install (the ruby-agent-skills pack was not bundled and the project has no .agents/skills).')}
       const skills = registry.list().filter(s => !family || s.family === family)
-      return json({ source: registry.source ?? null, count: skills.length, skills: skills.map(s => ({ id: s.id, family: s.family, origin: s.origin, description: s.description.slice(0, 220) })) })
+      const data = { source: registry.source ?? null, count: skills.length, skills: skills.map(s => ({ id: s.id, family: s.family, origin: s.origin, description: s.description.slice(0, 220) })) }
+      return structured(json(data), data)
     },
   }),
   defineTool({
@@ -338,7 +386,7 @@ export const RAILSFORGE_TOOLS: readonly ToolDefinition[] = [
     invocationMessage: 'Routing to engineering skills',
     async handler(ctx, { task, file, max_skills }) {
       const registry = ctx.getSkillRegistry()
-      if (!registry.catalog) {return 'The ruby-agent-skills pack is not bundled in this install, so skills cannot be routed.'}
+      if (!registry.catalog) {throw new ToolCallError('SKILLS_UNAVAILABLE', 'The ruby-agent-skills pack is not bundled in this install, so skills cannot be routed.')}
       const kinds = [...new Set(selectSeeds(ctx.getSemanticGraph(), { prompt: task, filePath: file, maxSeeds: 8 }).map(e => e.kind))]
       const input = { prompt: task, entityKinds: kinds, context: file }
       const routed = routeSkills(registry.catalog, input, { maxSkills: max_skills ?? 4 })

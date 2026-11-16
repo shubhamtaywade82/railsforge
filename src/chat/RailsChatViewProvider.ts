@@ -28,6 +28,8 @@ interface WebviewMessage {
 export class RailsChatViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'railsforge.chatView'
   private view?: vscode.WebviewView
+  /** The request in progress, if any. The stop control aborts its signal, which stops the model call and any tool. */
+  private activeRun?: AbortController
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -61,6 +63,9 @@ export class RailsChatViewProvider implements vscode.WebviewViewProvider {
         break
       case 'applyCode':
         if (msg.code) { await this.applyCode(msg.code, msg.mode ?? 'replace', msg.fileName) }
+        break
+      case 'cancelRequest':
+        this.activeRun?.abort()
         break
     }
   }
@@ -103,6 +108,11 @@ export class RailsChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async processPrompt(prompt: string, includeContext: boolean, isolated = false): Promise<void> {
+    // One request at a time. A second one would interleave its answer with the first, and the stop control stops one.
+    if (this.activeRun) {
+      void this.view?.webview.postMessage({ type: 'appendMessage', sender: 'assistant', text: 'A request is still running. Stop it first, or wait for it to finish.', success: false })
+      return
+    }
     const editor = vscode.window.activeTextEditor
     let activeCode = ''
     let fileName = ''
@@ -114,23 +124,36 @@ export class RailsChatViewProvider implements vscode.WebviewViewProvider {
       selection = editor.document.getText(editor.selection)
     }
 
+    const run = new AbortController()
+    this.activeRun = run
     void this.view?.webview.postMessage({ type: 'appendMessage', sender: 'user', text: prompt })
     void this.view?.webview.postMessage({ type: 'startStreaming' })
     Logger.info(`[Chat] "${prompt}"`)
 
-    // Isolated prompts (pattern explanations) carry only their own text: no @mentions are expanded
-    // and no project context is attached.
-    const mentionCtx = isolated ? '' : this.buildMentionContext(prompt, activeCode)
-    const cleanPrompt = isolated ? prompt : prompt.replace(/@(file|schema|routes|patterns)\b/g, '').trim()
-    const groundedContent = mentionCtx ? `${mentionCtx}\n\n---\n\nUser: ${cleanPrompt}` : activeCode
+    try {
+      // Isolated prompts (pattern explanations) carry only their own text: no @mentions are expanded
+      // and no project context is attached.
+      const mentionCtx = isolated ? '' : this.buildMentionContext(prompt, activeCode)
+      const cleanPrompt = isolated ? prompt : prompt.replace(/@(file|schema|routes|patterns)\b/g, '').trim()
+      const groundedContent = mentionCtx ? `${mentionCtx}\n\n---\n\nUser: ${cleanPrompt}` : activeCode
 
-    const result = await this.agent.run(cleanPrompt, isolated
-      ? { isolated: true }
-      : { fileContent: groundedContent, fileName, selection, workspaceRoot: activeWorkspaceRoot() })
+      const result = await this.agent.run(cleanPrompt, isolated
+        ? { isolated: true, signal: run.signal }
+        : { fileContent: groundedContent, fileName, selection, workspaceRoot: activeWorkspaceRoot(), signal: run.signal })
 
-    if (!result.success) { Logger.warn(`[Chat] error: ${result.response}`) }
-    void this.view?.webview.postMessage({ type: 'appendMessage', sender: 'assistant', text: result.response, success: result.success })
-    void this.view?.webview.postMessage({ type: 'stopStreaming' })
+      // A stopped request reports "Cancelled." whatever partial answer the provider returned.
+      const cancelled = run.signal.aborted
+      if (!cancelled && !result.success) { Logger.warn(`[Chat] error: ${result.response}`) }
+      void this.view?.webview.postMessage({
+        type: 'appendMessage',
+        sender: 'assistant',
+        text: cancelled ? 'Cancelled.' : result.response,
+        success: !cancelled && result.success,
+      })
+    } finally {
+      if (this.activeRun === run) { this.activeRun = undefined }
+      void this.view?.webview.postMessage({ type: 'stopStreaming' })
+    }
   }
 
   /**
@@ -299,7 +322,8 @@ export class RailsChatViewProvider implements vscode.WebviewViewProvider {
       <div class="input-highlight" id="inputHighlight" aria-hidden="true"></div>
     </div>
     <div class="send-row">
-      <button class="send-btn" onclick="handleSend()">Send ↵</button>
+      <button class="send-btn" id="sendBtn" onclick="handleSend()">Send ↵</button>
+      <button class="send-btn" id="stopBtn" onclick="stopRequest()" style="display:none;margin-left:6px" title="Stop the request in progress">■ Stop</button>
       <span class="hint-text">Enter to send · Shift+Enter newline · Ctrl+/ commands</span>
     </div>
   </div>
@@ -422,10 +446,19 @@ export class RailsChatViewProvider implements vscode.WebviewViewProvider {
       triggerStart = 0; updateHighlight(); showPopup('cmd', COMMANDS, cmd);
     }
 
+    // ── Streaming state: Send is disabled and Stop is shown while a request runs ──
+    let streaming = false;
+    function setStreaming(on) {
+      streaming = on;
+      document.getElementById('stopBtn').style.display = on ? '' : 'none';
+      document.getElementById('sendBtn').disabled = on;
+    }
+    function stopRequest() { vscode.postMessage({ type:'cancelRequest' }); }
+
     // ── Send ──
     function handleSend() {
       const text = inputEl.value.trim();
-      if (!text) return;
+      if (!text || streaming) return;
       hidePopup();
       vscode.postMessage({ type:'sendPrompt', prompt:text, includeContext:includeCtx.checked });
       inputEl.value = ''; updateHighlight();
@@ -438,7 +471,7 @@ export class RailsChatViewProvider implements vscode.WebviewViewProvider {
 
     // ── Detect if text looks like a full file (has class/module defs) ──
     function isFullFile(text) {
-      return text.split('\n').length > 10 && /^(?:class|module)\s+[A-Z]/m.test(text);
+      return text.split('\\n').length > 10 && /^(?:class|module)\\s+[A-Z]/m.test(text);
     }
 
     // ── Messages from extension host ──
@@ -452,6 +485,10 @@ export class RailsChatViewProvider implements vscode.WebviewViewProvider {
         activeFileLbl.textContent = msg.currentFile;
       } else if (msg.type==='appendMessage') {
         appendMessage(msg.sender, msg.text);
+      } else if (msg.type==='startStreaming') {
+        setStreaming(true);
+      } else if (msg.type==='stopStreaming') {
+        setStreaming(false);
       }
     });
 
@@ -467,10 +504,10 @@ export class RailsChatViewProvider implements vscode.WebviewViewProvider {
           let btns = '<button onclick="copyCode('+enc+')">📋 Copy</button>' +
                      '<button onclick="insertCode('+enc+')">📥 Insert</button>';
           if (diff) {
-            btns = '<button class="btn-apply" onclick="applyCodeAction('+enc+',\'applyDiff\')">🔀 Apply Diff</button>' + btns;
+            btns = '<button class="btn-apply" onclick="applyCodeAction('+enc+',\\'applyDiff\\')">🔀 Apply Diff</button>' + btns;
           }
           if (fullFile && !diff) {
-            btns = '<button class="btn-apply" onclick="applyCodeAction('+enc+',\'replaceFile\')">📄 Replace File</button>' + btns;
+            btns = '<button class="btn-apply" onclick="applyCodeAction('+enc+',\\'replaceFile\\')">📄 Replace File</button>' + btns;
           }
           return '<pre><code>'+esc(raw)+'</code><div class="code-actions">'+btns+'</div></pre>';
         })
