@@ -41,8 +41,8 @@ describe.skipIf(!command)('live external MCP server (opt-in)', () => {
 
     const [status] = await manager.statusFor(root, true)
     expect(status.problems).toEqual([])
-    expect(status.state).toBe('ready')
-    expect(status.failure).toBeUndefined()
+    expect(status.state).toBe('running')
+    expect(status.reason).toBeUndefined()
     // Every name in the allowlist must be one the server provides; a missing one is reported as a problem.
     expect(status.tools.sort()).toEqual([...allow].sort())
   }, 90_000)

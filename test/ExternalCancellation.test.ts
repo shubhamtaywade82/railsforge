@@ -132,4 +132,36 @@ describe('cancellation and process lifecycle', () => {
     expect(result.steps).toEqual([{ tool: 'echo__slow', args: {}, ok: false, chars: expect.any(Number), code: 'CANCELLED' }])
     await expect.poll(() => fs.existsSync(path.join(root, 'cancelled.marker')), { timeout: 10_000 }).toBe(true)
   }, 60_000)
+
+  it('after the cancelled process has exited, a status check reports it stopped and does not start it; the next use does', async () => {
+    await setUp(60_000, ['slow', 'echo'])
+    const controller = new AbortController()
+    const running = tool('echo__slow').run({}, controller.signal)
+    setTimeout(() => controller.abort(), 400)
+    await expect(running).rejects.toMatchObject({ code: 'CANCELLED' })
+
+    // Let the stopped process exit, as it does a moment after it is closed. That exit is expected, not a failure.
+    await new Promise(resolve => setTimeout(resolve, 1_000))
+    const [status] = await manager.statusFor(root, true)
+    expect(status).toMatchObject({ id: 'echo', state: 'stopped', tools: expect.arrayContaining(['slow', 'echo']) })
+    expect(starts()).toBe(1)
+
+    expect(await tool('echo__echo').run({ text: 'after-status' })).toContain('echo:after-status:')
+    expect(starts()).toBe(2)
+  }, 60_000)
+
+  it('a call that completes while a cancelled call is in flight on the same process is not affected by the cancellation', async () => {
+    await setUp(60_000, ['slow', 'echo'])
+    const controller = new AbortController()
+    const slow = tool('echo__slow').run({}, controller.signal)
+
+    // Completes on the same process while `slow` is still waiting on it.
+    expect(await tool('echo__echo').run({ text: 'alongside' })).toContain('echo:alongside:')
+    expect(starts()).toBe(1)
+
+    controller.abort()
+    await expect(slow).rejects.toMatchObject({ code: 'CANCELLED' })
+    expect(await tool('echo__echo').run({ text: 'next' })).toContain('echo:next:')
+    expect(starts()).toBe(2)
+  }, 60_000)
 })

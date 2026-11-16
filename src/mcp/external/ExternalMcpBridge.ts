@@ -107,7 +107,7 @@ export function renderStatusMarkdown(input: StatusReportInput): string {
     lines.push('| Server | State | Offered tools | Notes |', '| :--- | :--- | :--- | :--- |')
     for (const status of input.statuses) {
       const tools = status.tools.length > 0 ? status.tools.map(name => `\`${status.id}__${name}\``).join(', ') : '—'
-      const notes = [status.failure ? `failed: ${status.failure}` : '', ...status.problems].filter(Boolean).join('; ') || '—'
+      const notes = [status.reason ? `${status.state}: ${status.reason}` : '', ...status.problems].filter(Boolean).join('; ') || '—'
       lines.push(`| ${cell(status.id)} | ${status.state} | ${tools} | ${cell(notes)} |`)
     }
     lines.push('')

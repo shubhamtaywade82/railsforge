@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ExternalServerManager, ExternalClient, ExternalTransport, TransportLaunch } from '../src/mcp/external/ExternalServerManager'
+import { ExternalServerManager, ExternalClient, ExternalTransport, TransportLaunch, ExternalCallError } from '../src/mcp/external/ExternalServerManager'
 import { ExternalServerSpec } from '../src/mcp/external/ExternalServerConfig'
 import { RemoteToolDescriptor } from '../src/mcp/external/ExternalTools'
 import { renderStatusMarkdown } from '../src/mcp/external/ExternalMcpBridge'
@@ -20,12 +20,15 @@ const listed: RemoteToolDescriptor[] = [
   { name: 'write_file', inputSchema: { type: 'object' } },
 ]
 
-/** A fake transport whose exit the test can trigger, and which records that it was closed. */
-function fakeTransport() {
+/** A fake transport whose exit the test can trigger, and which records that it was closed. `closeDelayMs` keeps a close in progress. */
+function fakeTransport(closeDelayMs = 0) {
   const transport = {
     closed: false,
     onclose: undefined as (() => void) | undefined,
-    close: vi.fn(async () => { transport.closed = true }),
+    close: vi.fn(async () => {
+      if (closeDelayMs > 0) {await new Promise(resolve => setTimeout(resolve, closeDelayMs))}
+      transport.closed = true
+    }),
     exit() { transport.onclose?.() },
   }
   return transport
@@ -34,7 +37,7 @@ function fakeTransport() {
 interface FakeOptions {
   connect?: () => Promise<void>
   list?: () => Promise<RemoteToolDescriptor[]>
-  call?: (name: string) => Promise<{ text: string; isError: boolean }>
+  call?: (name: string, args: Record<string, unknown>, timeoutMs: number, signal?: AbortSignal) => Promise<{ text: string; isError: boolean }>
 }
 
 function fakeClient(transports: ReturnType<typeof fakeTransport>[], options: FakeOptions = {}) {
@@ -57,7 +60,7 @@ function fakeClient(transports: ReturnType<typeof fakeTransport>[], options: Fak
   return client
 }
 
-function harness(options: FakeOptions & { retryBackoffMs?: number; connectTimeoutMs?: number; now?: () => number } = {}) {
+function harness(options: FakeOptions & { retryBackoffMs?: number; connectTimeoutMs?: number; now?: () => number; closeDelayMs?: number } = {}) {
   const transports: ReturnType<typeof fakeTransport>[] = []
   const clients: ReturnType<typeof fakeClient>[] = []
   const launches: TransportLaunch[] = []
@@ -71,7 +74,7 @@ function harness(options: FakeOptions & { retryBackoffMs?: number; connectTimeou
     },
     createTransport: async launch => {
       launches.push(launch)
-      return fakeTransport() as unknown as ExternalTransport
+      return fakeTransport(options.closeDelayMs) as unknown as ExternalTransport
     },
     now: options.now ?? (() => clock),
     log: (_level, message) => logs.push(message),
@@ -279,7 +282,7 @@ describe('ExternalServerManager: status for the test command', () => {
     const h = harness()
     h.manager.configure([spec({ allowTools: ['get_schema', 'drop_table'] })])
     const [status] = await h.manager.statusFor('/project', true)
-    expect(status.state).toBe('ready')
+    expect(status.state).toBe('running')
     expect(status.tools).toEqual(['get_schema'])
     expect(status.problems).toEqual([expect.stringContaining('"drop_table", which rails does not provide')])
   })
@@ -288,7 +291,91 @@ describe('ExternalServerManager: status for the test command', () => {
     const h = harness({ connect: async () => { throw new Error('no such file') } })
     h.manager.configure([spec()])
     const [status] = await h.manager.statusFor('/project', true)
-    expect(status).toMatchObject({ state: 'failed', failure: 'no such file' })
+    expect(status).toMatchObject({ state: 'failed', reason: 'no such file' })
+  })
+})
+
+describe('ExternalServerManager: a process a cancellation stopped', () => {
+  /** The client's answer to a call the caller cancelled: it rejects when the signal aborts, as the SDK adapter does. */
+  const cancelOnSignal = (_name: string, _args: Record<string, unknown>, _timeoutMs: number, signal?: AbortSignal) =>
+    new Promise<{ text: string; isError: boolean }>((_resolve, reject) => {
+      signal?.addEventListener('abort', () => reject(new ExternalCallError('CANCELLED', 'cancelled')), { once: true })
+    })
+
+  /** The first call waits for its cancellation; every later call answers at once. */
+  function cancelFirstCall(): (name: string, args: Record<string, unknown>, timeoutMs: number, signal?: AbortSignal) => Promise<{ text: string; isError: boolean }> {
+    let first = true
+    return (name, args, timeoutMs, signal) => {
+      if (first) {
+        first = false
+        return cancelOnSignal(name, args, timeoutMs, signal)
+      }
+      return Promise.resolve({ text: `ran ${name}`, isError: false })
+    }
+  }
+
+  it('reports the stopped process as stopped, with its tools, even when its exit arrives afterwards', async () => {
+    const h = harness({ call: cancelOnSignal })
+    h.manager.configure([spec({ allowTools: ['get_schema'] })])
+    await h.manager.toolsFor('/project', true)
+
+    const controller = new AbortController()
+    const pending = h.manager.callTool('rails', '/project', 'get_schema', {}, controller.signal)
+    controller.abort()
+    await expect(pending).rejects.toMatchObject({ code: 'CANCELLED' })
+
+    // A real process reports its exit after close() was asked for. That exit was expected, so it is not a failure.
+    h.transports[0].exit()
+    const [status] = await h.manager.statusFor('/project', true)
+    expect(status).toEqual({ id: 'rails', state: 'stopped', tools: ['get_schema'], problems: [], reason: expect.stringContaining('cancelled') })
+    expect(h.logs.some(line => line.includes('unavailable'))).toBe(false)
+  })
+
+  it('a status report does not start a stopped process; the next call does', async () => {
+    const h = harness({ call: cancelFirstCall() })
+    h.manager.configure([spec({ allowTools: ['get_schema'] })])
+    await h.manager.toolsFor('/project', true)
+    const controller = new AbortController()
+    const pending = h.manager.callTool('rails', '/project', 'get_schema', {}, controller.signal)
+    controller.abort()
+    await expect(pending).rejects.toMatchObject({ code: 'CANCELLED' })
+    h.transports[0].exit()
+
+    await h.manager.statusFor('/project', true)
+    await h.manager.statusFor('/project', true)
+    expect(h.launches).toHaveLength(1)
+
+    await expect(h.manager.callTool('rails', '/project', 'get_schema', {})).resolves.toBe('ran get_schema')
+    expect(h.launches).toHaveLength(2)
+  })
+
+  it('while a stopped process is still closing, it is reported as stopping, and simultaneous calls share one new process', async () => {
+    const h = harness({ call: cancelFirstCall(), closeDelayMs: 50 })
+    h.manager.configure([spec({ allowTools: ['get_schema'] })])
+    await h.manager.toolsFor('/project', true)
+    const controller = new AbortController()
+    const pending = h.manager.callTool('rails', '/project', 'get_schema', {}, controller.signal)
+    controller.abort()
+    await expect(pending).rejects.toMatchObject({ code: 'CANCELLED' })
+
+    const [status] = await h.manager.statusFor('/project', true)
+    expect(status.state).toBe('stopping')
+
+    const calls = [
+      h.manager.callTool('rails', '/project', 'get_schema', {}),
+      h.manager.callTool('rails', '/project', 'get_schema', {}),
+    ]
+    await expect(Promise.all(calls)).resolves.toEqual(['ran get_schema', 'ran get_schema'])
+    expect(h.launches).toHaveLength(2) // the old process, then exactly one new one for both callers
+  })
+
+  it('a process that was not stopped by a cancellation is still a failure when it exits', async () => {
+    const h = harness()
+    h.manager.configure([spec()])
+    await h.manager.toolsFor('/project', true)
+    h.transports[0].exit()
+    const [status] = await h.manager.statusFor('/project', true)
+    expect(status).toMatchObject({ state: 'failed', reason: 'the server process exited' })
   })
 })
 
@@ -298,12 +385,12 @@ describe('renderStatusMarkdown', () => {
       root: '/project',
       trusted: true,
       statuses: [
-        { id: 'rails', state: 'ready', tools: ['get_schema'], problems: [] },
-        { id: 'gems', state: 'failed', tools: [], problems: [], failure: 'spawn ENOENT' },
+        { id: 'rails', state: 'running', tools: ['get_schema'], problems: [] },
+        { id: 'gems', state: 'failed', tools: [], problems: [], reason: 'spawn ENOENT' },
       ],
       problems: [{ index: 2, id: 'bad', message: 'id must be lowercase.' }],
     })
-    expect(text).toContain('| rails | ready | `rails__get_schema` |')
+    expect(text).toContain('| rails | running | `rails__get_schema` |')
     expect(text).toContain('| gems | failed | — | failed: spawn ENOENT |')
     expect(text).toContain('- Entry 3 (bad): id must be lowercase.')
     expect(text).toContain('Workspace trusted: yes')
@@ -316,7 +403,7 @@ describe('renderStatusMarkdown', () => {
   })
 
   it('escapes table separators in notes', () => {
-    const text = renderStatusMarkdown({ root: '/p', trusted: true, statuses: [{ id: 'x', state: 'failed', tools: [], problems: ['a | b'], failure: undefined }], problems: [] })
+    const text = renderStatusMarkdown({ root: '/p', trusted: true, statuses: [{ id: 'x', state: 'failed', tools: [], problems: ['a | b'], reason: undefined }], problems: [] })
     expect(text).toContain('a \\| b')
   })
 })

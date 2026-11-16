@@ -109,7 +109,7 @@ describe('external stdio MCP server, end to end', () => {
   it('shows the status report with the offered tools and no environment values', async () => {
     await manager.toolsFor(root, true)
     const report = await bridge.statusReport(root)
-    expect(report).toContain('| echo | ready |')
+    expect(report).toContain('| echo | running |')
     expect(report).toContain('`echo__echo`')
     expect(report).not.toContain('from-configuration')
   }, 30_000)
