@@ -9,7 +9,7 @@ Run **RailsForge: Diagnose Environment** to see how your own machine measures up
 | Requirement | Value |
 | --- | --- |
 | VS Code | `^1.96.0` (engines floor) — tested on 1.96.0 (Linux) and the latest stable (Linux, Windows, macOS) |
-| Standalone MCP server, independent client | Verified by an MCP client in its own process, using the official MCP SDK client and nothing from RailsForge: initialize, tool discovery and input schemas, `get_schema` and `list_routes` against a Rails fixture, invalid-argument and unknown-tool errors, and clean shutdown (`test/McpInterop.test.ts`). Not verified: Claude Code, Cursor, Copilot or Nexum as the client |
+| Standalone MCP server, independent client | Verified by an MCP client in its own process, using the official MCP SDK client and nothing from RailsForge: initialize, tool discovery and input schemas, `get_schema` and `list_routes` against a Rails fixture, invalid-argument and unknown-tool errors, and clean shutdown (`test/McpInterop.test.ts`). Not verified: Cursor or Copilot as the client. Nexum is partly verified; see the matrix |
 | Standalone MCP server, Claude Code | Verified by Claude Code 2.1.325 (manual run, 2026-11-16, `scripts/acceptance/claude-code-mcp.mjs`): tool discovery, `list_routes`, and error results. Cursor, Copilot and Nexum are not verified. See [the MCP compatibility matrix](mcp-compatibility-matrix.md) |
 | Cursor / VSCodium / other forks | Not tested; the extension only uses stable VS Code APIs, so they should work when built on VS Code ≥ 1.96 |
 | Remote (SSH, WSL, Dev Containers) | Native modules load on the remote host, so the **remote** OS/arch must be in the table below |
