@@ -215,3 +215,44 @@ describe('verification', () => {
     expect(result.response).toContain('Failing spec: expected 200 got 500')
   })
 })
+
+describe('external tools with a JSON Schema (from an MCP server)', () => {
+  const external = (run: LoopTool['run'] = async () => 'remote result'): LoopTool => ({
+    name: 'rails__get_schema',
+    description: 'Gets the schema. More detail follows.',
+    inputSchema: {},
+    jsonSchema: {
+      type: 'object',
+      properties: { model: { type: 'string' }, kind: { enum: ['a', 'b'] }, tags: { type: ['string', 'null'] } },
+      required: ['model'],
+    },
+    checkArgs: args => (typeof args.model === 'string'
+      ? { ok: true, args }
+      : { ok: false, message: 'missing required argument: model.' }),
+    run,
+  })
+
+  it('describes the server schema to the model: required markers, enums and type unions', () => {
+    const text = describeTools([external()])
+    expect(text).toContain('- rails__get_schema(model: string, kind?: a|b, tags?: string|null) — Gets the schema.')
+    expect(text).not.toContain('More detail')
+  })
+
+  it('checks the arguments with the tool, and does not run it when they are invalid', async () => {
+    const run = vi.fn(async () => 'should not run')
+    const p = provider([call('rails__get_schema', { kind: 'a' }), 'Answered without it.'])
+    const result = await runAgentLoop({ system: 'S', prompt: 'P', complete: p.complete, tools: [external(run)] })
+    expect(run).not.toHaveBeenCalled()
+    expect(p.calls[1].user).toContain('(system) Invalid arguments for rails__get_schema: missing required argument: model.')
+    expect(result.steps).toEqual([{ tool: 'rails__get_schema', args: { kind: 'a' }, ok: false, chars: 0 }])
+  })
+
+  it('runs the tool with the checked arguments when they are valid', async () => {
+    const run = vi.fn(async () => 'the schema')
+    const p = provider([call('rails__get_schema', { model: 'Order', tags: null }), 'Done.'])
+    const result = await runAgentLoop({ system: 'S', prompt: 'P', complete: p.complete, tools: [external(run)] })
+    expect(run).toHaveBeenCalledWith({ model: 'Order', tags: null })
+    expect(result.steps[0]).toMatchObject({ tool: 'rails__get_schema', ok: true })
+  })
+})
+

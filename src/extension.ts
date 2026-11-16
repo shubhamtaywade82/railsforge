@@ -131,6 +131,9 @@ import { parseVersion, bumpVersion, replaceVersionInContent, VersionBumpPart } f
 import { SpeculativeFixCache, warmAfter } from './agent/SpeculativeFixCache'
 import { Logger } from './util/Logger'
 import { OnceByKey } from './util/OnceByKey'
+import { ExternalServerManager } from './mcp/external/ExternalServerManager'
+import { sdkExternalClientFactory } from './mcp/external/SdkExternalClient'
+import { ExternalMcpBridge } from './mcp/external/ExternalMcpBridge'
 import { diffLines, filterFixHunks, applyHunks } from './patch/LineDiff'
 import { checkRubySyntax, rubySyntaxError } from './util/RubySyntax'
 import { handleWorkspaceAutoOptimization, optimizeRailsWorkspace } from './workspace/WorkspaceOptimizer'
@@ -147,6 +150,16 @@ import {
 
 
 /** Applies railsForge.log.level and railsForge.log.file immediately, without a reload. */
+/**
+ * The user's `railsForge.mcp.servers` value, read from user settings only. A repository's settings file cannot start a
+ * process through this setting: see ExternalServerConfig.
+ */
+function readUserExternalServers(): unknown {
+  const config = vscode.workspace.getConfiguration('railsForge')
+  const inspected = typeof config.inspect === 'function' ? config.inspect<unknown[]>('mcp.servers') : undefined
+  return inspected?.globalValue
+}
+
 function applyLogSettings(config: RailsForgeConfig, workspaceRoot: string): void {
   Logger.setLevel(config.logLevel)
   Logger.setLogFile(config.logFileEnabled && workspaceRoot ? path.join(workspaceRoot, '.railsforge', 'railsforge.log') : undefined)
@@ -316,6 +329,23 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
 
   Logger.info(`RailsForge activated. Project type: ${env.projectType}, Ruby: ${env.rubyVersion}, Rails: ${env.hasRails ? env.railsVersion : 'none'}`)
 
+  // External stdio MCP servers (railsForge.mcp.servers, user settings only). Each starts lazily, per project, and only
+  // in a trusted workspace; see ExternalServerManager. Nothing starts at activation.
+  const externalMcp = new ExternalMcpBridge(
+    new ExternalServerManager({
+      ...sdkExternalClientFactory({ onStderr: line => Logger.debug(`[mcp stderr] ${line}`) }),
+      log: (level, message) => {
+        if (level === 'warn') {Logger.warn(message)}
+        else if (level === 'debug') {Logger.debug(message)}
+        else {Logger.info(message)}
+      },
+    }),
+    () => isWorkspaceTrusted(),
+    message => Logger.warn(message),
+  )
+  externalMcp.reconfigure(readUserExternalServers())
+  context.subscriptions.push({ dispose: () => void externalMcp.dispose() })
+
   const getAgentConfig = (cfg: RailsForgeConfig = readConfig()): RailsAgentConfig => ({
     ollamaHost: cfg.ollamaHost,
     model: cfg.ollamaModel,
@@ -338,7 +368,11 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     getApiKey: async () => context.secrets.get(aiApiKeySecretKey(readConfig().aiProvider)),
     vscodeLmFamily: cfg.aiVscodeLmFamily,
     toolLoop: { enabled: cfg.agentToolLoop, maxSteps: cfg.agentMaxToolSteps, verifySyntax: cfg.agentVerifySyntax },
-    loopTools: root => (root ? createLoopTools(semanticContexts.get(root)) : []),
+    loopTools: async root => {
+      if (!root) {return []}
+      const builtIn = createLoopTools(semanticContexts.get(root))
+      return readConfig().mcpEnabled ? [...builtIn, ...await externalMcp.loopToolsFor(root)] : builtIn
+    },
     skillContext: ({ prompt, command, fileName, workspaceRoot: root, diagnosticMessage }) => {
       const settings = readConfig()
       if (!settings.skillsEnabled) {return ''}
@@ -543,6 +577,17 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     }),
     vscode.commands.registerCommand('railsforge.recoverRubyLsp', () => reloadWindowForRubyLspRecovery()),
   )
+
+  context.subscriptions.push(vscode.commands.registerCommand('railsforge.testExternalMcpServers', async () => {
+    const root = activeWorkspaceRoot()
+    if (!root) {
+      void vscode.window.showWarningMessage('RailsForge: Open a project to test its external MCP servers.')
+      return
+    }
+    const report = await externalMcp.statusReport(root)
+    const doc = await vscode.workspace.openTextDocument({ content: report, language: 'markdown' })
+    await vscode.window.showTextDocument(doc, { preview: true })
+  }))
 
   const rakeTaskIndexer = new RakeTaskIndexer()
   const rakeTaskTreeProvider = new RakeTaskTreeProvider(rakeTaskIndexer, workspaceRoot)
@@ -1066,6 +1111,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     providerRegistry.workspaceFs.onConfigChange(() => {
       const freshConfig = readConfig()
       applyLogSettings(freshConfig, workspaceRoot)
+      externalMcp.reconfigure(readUserExternalServers())
       agent.updateConfig(getAgentConfig(freshConfig))
       void vscode.commands.executeCommand('setContext', 'railsforge.aiProvider', freshConfig.aiProvider)
     })

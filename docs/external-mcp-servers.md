@@ -1,0 +1,53 @@
+# External MCP servers
+
+RailsForge can let its own agent use tools from other MCP servers. You list the servers in your **user** settings. RailsForge starts each one, lists its tools, and offers the tools you allow. This is separate from the optional tools in [optional-tools.md](optional-tools.md), which are installed and detected by RailsForge. Here you name any server and its command yourself.
+
+## Configuration
+
+Add entries to `railsForge.mcp.servers` in your user `settings.json`:
+
+```json
+"railsForge.mcp.servers": [
+  {
+    "id": "my-tools",
+    "command": "/absolute/path/to/my-mcp-server",
+    "args": ["--stdio"],
+    "env": { "MY_TOOLS_MODE": "read-only" },
+    "allowTools": ["get_schema"]
+  }
+]
+```
+
+| Field | Required | Meaning |
+| :--- | :--- | :--- |
+| `id` | yes | Lowercase letters, digits and hyphens, starting with a letter, up to 32 characters. The agent sees tools as `<id>__<tool>`. |
+| `command` | yes | The executable to start. It is run directly, not through a shell. Use the full path to a global tool. |
+| `args` | no | Arguments for the command. |
+| `env` | no | Extra environment variables for the process. Values are stored in plain text. |
+| `allowTools` | no | The tool names the agent may call. **Nothing is offered unless it is listed here.** |
+| `enabled` | no | `false` keeps the entry without starting the server. The default is `true`. |
+| `transport` | no | Only `"stdio"` is supported. |
+
+An entry with any problem is left out and reported in the test command. An unknown key is a problem, so a typo in `allowTools` cannot silently expose nothing.
+
+## Rules
+
+- **User settings only.** The setting has application scope, and RailsForge reads the user value only. A repository's `.vscode/settings.json` cannot start a process through it.
+- **Default deny.** A server's tools are offered only when named in `allowTools`. The server's own hints, such as `readOnlyHint`, grant nothing.
+- **Trusted workspaces only.** In a Restricted Mode workspace nothing starts, and no external tool is offered to the agent.
+- **Project root.** Each server starts with the project root as its working directory. In a multi-root workspace, each project gets its own process.
+- **Started on demand.** A server starts the first time the agent may use one, not at activation. A server that fails or exits is not retried for 30 seconds. Connecting and listing time out after 15 seconds; a single call times out after 60 seconds.
+- **Clean environment.** The process gets the usual system variables plus only your `env` values, not the extension host's full environment.
+- **Audited.** Every call is written to `.railsforge/mcp/audit.jsonl` with the tool name and the **argument names**, never the values.
+- **Output.** Only text content reaches the agent. Images and other content are named as omitted. Long results are clipped as the agent's other tools are.
+
+## Checking a server
+
+Run **RailsForge: Test External MCP Servers**. It opens a report with each server's state, the tools it offers, and any configuration problems. Use it to choose names for `allowTools`.
+
+## Not in this version
+
+- HTTP servers, and OAuth. Remote services such as Sentry and GitHub need these.
+- Secret storage. `env` values are plain text in your settings file, so keep secrets out of it until secret storage is added.
+- Per-call approval. Tools that run project code are refused in untrusted workspaces, but they are not individually confirmed.
+- Exposing external servers to other editor agents such as Copilot. Only RailsForge's own agent uses them here.

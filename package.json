@@ -1072,6 +1072,11 @@
         "category": "RailsForge"
       },
       {
+        "command": "railsforge.testExternalMcpServers",
+        "title": "RailsForge: Test External MCP Servers",
+        "category": "RailsForge"
+      },
+      {
         "command": "railsforge.recoverRubyLsp",
         "title": "RailsForge: Recover Ruby LSP (Reload Window)",
         "category": "RailsForge"

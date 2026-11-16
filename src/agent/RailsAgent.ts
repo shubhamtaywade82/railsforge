@@ -108,7 +108,8 @@ export interface RailsAgentConfig {
    * Read-only tools the bounded tool loop may call for the project at `workspaceRoot`
    * (see LoopTools.ts). Injected so this class stays free of fs/vscode.
    */
-  loopTools?: (workspaceRoot: string | undefined) => LoopTool[]
+  /** May be asynchronous: external MCP tools need their server connected before the model can be shown them. */
+  loopTools?: (workspaceRoot: string | undefined) => LoopTool[] | Promise<LoopTool[]>
   toolLoop?: ToolLoopSettings
   /**
    * Host-provided logging callback (wired in extension.ts to the RailsForge
@@ -221,7 +222,7 @@ export class RailsAgent {
     // Bounded tool loop + Ruby syntax verification for ordinary requests. Fix flows need a bare
     // diff/snippet back, so they keep the single-completion path.
     const loop = this.config.toolLoop
-    const tools = !context.isFix && loop?.enabled ? this.config.loopTools?.(context.workspaceRoot) ?? [] : []
+    const tools = !context.isFix && loop?.enabled ? await this.config.loopTools?.(context.workspaceRoot) ?? [] : []
     if (!context.isFix && loop?.enabled && (tools.length > 0 || loop.verifySyntax)) {
       const result = await runAgentLoop({
         system: systemPrompt,
