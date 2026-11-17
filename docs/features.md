@@ -1,7 +1,7 @@
 # RailsForge — Complete Feature Documentation
 
 > **All-in-one Ruby & Rails IDE extension for VS Code, Cursor, VSCodium, and Windsurf.**
-> Version: `0.2.0` · Publisher: `ShubhamTaywade` · License: MIT
+> Version: `0.2.1` · Publisher: `ShubhamTaywade` · License: MIT
 
 ---
 

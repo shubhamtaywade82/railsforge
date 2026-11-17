@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.2.1
+
+### AI Features & Configuration
+- **Configurable `baseUrl` for Anthropic, OpenAI, and Ollama**: Added `railsForge.ai.anthropic.baseUrl` for connecting to Anthropic proxies and custom gateways with HTTPS validation and automatic `/v1/messages` endpoint resolution.
+- **Structured AI Settings Hierarchy**: Reorganized and categorized all AI settings in VS Code with clear prefixes (`[AI: Core]`, `[AI Provider: Anthropic]`, `[AI Provider: OpenAI]`, `[AI Provider: Ollama]`, `[AI Provider: VS Code LM]`).
+- **Direct API Key Configuration**: Added optional settings for `railsForge.ai.anthropic.apiKey`, `railsForge.ai.openai.apiKey`, and `railsForge.ai.ollama.apiKey` with multi-tier fallback (SecretStorage -> Settings -> Environment variables).
+
 ## 0.2.0
 
 ### Performance
