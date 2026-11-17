@@ -126,7 +126,13 @@ describe('readConfig', () => {
     expect(config.aiProvider).toBe('ollama')
     expect(config.aiOpenaiModel).toBe('gpt-4o-mini')
     expect(config.aiOpenaiBaseUrl).toBe('https://api.openai.com')
+    expect(config.aiOpenaiApiKey).toBe('')
     expect(config.aiAnthropicModel).toBe('claude-sonnet-4-5')
+    expect(config.aiAnthropicBaseUrl).toBe('https://api.anthropic.com')
+    expect(config.aiAnthropicApiKey).toBe('')
+    expect(config.aiOllamaBaseUrl).toBe('http://localhost:11434')
+    expect(config.aiOllamaModel).toBe('qwen2.5-coder:14b')
+    expect(config.aiOllamaApiKey).toBe('')
     expect(config.aiTemperature).toBe(0.2)
     expect(config.aiMaxTokens).toBe(2048)
     expect(config.aiTimeoutMs).toBe(120000)
@@ -191,6 +197,7 @@ describe('readConfig', () => {
         'ollama.host': 'http://custom:11434',
         'ai.openai.model': 'gpt-4o',
         'ai.openai.baseUrl': 'https://my-proxy.com',
+        'ai.openai.apiKey': 'sk-openai-custom',
         'ai.temperature': 0.7,
         'ai.maxTokens': 4096,
         'ai.timeoutMs': 60000,
@@ -204,6 +211,7 @@ describe('readConfig', () => {
     expect(config.ollamaHost).toBe('http://custom:11434')
     expect(config.aiOpenaiModel).toBe('gpt-4o')
     expect(config.aiOpenaiBaseUrl).toBe('https://my-proxy.com')
+    expect(config.aiOpenaiApiKey).toBe('sk-openai-custom')
     expect(config.aiTemperature).toBe(0.7)
     expect(config.aiMaxTokens).toBe(4096)
     expect(config.aiTimeoutMs).toBe(60000)
@@ -214,6 +222,8 @@ describe('readConfig', () => {
       get: makeMockGet({
         'ai.provider': 'anthropic' as const,
         'ai.anthropic.model': 'claude-3-opus',
+        'ai.anthropic.baseUrl': 'https://anthropic.custom-proxy.com',
+        'ai.anthropic.apiKey': 'sk-ant-custom',
       }),
       update: vi.fn(),
     } as unknown as ReturnType<typeof vscode.workspace.getConfiguration>)
@@ -222,6 +232,28 @@ describe('readConfig', () => {
 
     expect(config.aiProvider).toBe('anthropic')
     expect(config.aiAnthropicModel).toBe('claude-3-opus')
+    expect(config.aiAnthropicBaseUrl).toBe('https://anthropic.custom-proxy.com')
+    expect(config.aiAnthropicApiKey).toBe('sk-ant-custom')
+  })
+
+  it('reads ai.ollama overrides and maps them to ollama fields', () => {
+    getConfigSpy.mockReturnValue({
+      get: makeMockGet({
+        'ai.ollama.baseUrl': 'http://ollama-box:11434',
+        'ai.ollama.model': 'deepseek-r1:14b',
+        'ai.ollama.apiKey': 'ollama-key-xyz',
+      }),
+      update: vi.fn(),
+    } as unknown as ReturnType<typeof vscode.workspace.getConfiguration>)
+
+    const config = readConfig()
+
+    expect(config.aiOllamaBaseUrl).toBe('http://ollama-box:11434')
+    expect(config.aiOllamaModel).toBe('deepseek-r1:14b')
+    expect(config.aiOllamaApiKey).toBe('ollama-key-xyz')
+    expect(config.ollamaHost).toBe('http://ollama-box:11434')
+    expect(config.ollamaModel).toBe('deepseek-r1:14b')
+    expect(config.ollamaApiKey).toBe('ollama-key-xyz')
   })
 
   it('reads ollama-specific overrides', () => {

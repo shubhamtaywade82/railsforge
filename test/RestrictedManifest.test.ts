@@ -20,7 +20,7 @@ describe('Restricted Mode manifest', () => {
 
   it('restricts every setting that chooses a program, a script path or a network target', () => {
     const must = [
-      'railsForge.ollama.host', 'railsForge.ai.provider', 'railsForge.ai.openai.baseUrl',
+      'railsForge.ollama.host', 'railsForge.ai.provider', 'railsForge.ai.openai.baseUrl', 'railsForge.ai.anthropic.baseUrl',
       'railsForge.apidock.baseUrl', 'railsForge.rubydoc.baseUrl', 'railsForge.devdocs.baseUrl', 'railsForge.devdocs.dataBaseUrl',
       'railsForge.ruby.versionManager', 'railsForge.testing.framework',
       'railsForge.rubocop.autocorrectOnSave', 'railsForge.brakeman.scanOnSave', 'railsForge.types.steepEnabled', 'railsForge.types.steepScanOnSave',

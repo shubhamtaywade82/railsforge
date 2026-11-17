@@ -1213,7 +1213,13 @@ Settings marked **"requires reload"** are read once at activation (or when a pro
 | `railsForge.ai.vscodeLm.family` | `string` | `""` | **Requires reload** | Preferred model family (e.g. `gpt-4o`, `claude-sonnet`) when `ai.provider` is `"vscode-lm"` |
 | `railsForge.ai.openai.model` | `string` | `"gpt-4o-mini"` | **Requires reload** | Model used when `ai.provider` is `"openai"` |
 | `railsForge.ai.openai.baseUrl` | `string` | `"https://api.openai.com"` | **Requires reload** | Base URL for OpenAI-compatible endpoints (OpenRouter, self-hosted vLLM). The agent appends `/v1/chat/completions` |
+| `railsForge.ai.openai.apiKey` | `string` | `""` | **Requires reload** | Optional API key setting for OpenAI-compatible endpoints. Can also be set securely via `railsforge.setAiApiKey` command or `OPENAI_API_KEY` env var |
 | `railsForge.ai.anthropic.model` | `string` | `"claude-sonnet-4-5"` | **Requires reload** | Model used when `ai.provider` is `"anthropic"` |
+| `railsForge.ai.anthropic.baseUrl` | `string` | `"https://api.anthropic.com"` | **Requires reload** | Base URL for Anthropic endpoints (official API, proxies, gateways). The agent appends `/v1/messages` |
+| `railsForge.ai.anthropic.apiKey` | `string` | `""` | **Requires reload** | Optional API key setting for Anthropic. Can also be set securely via `railsforge.setAiApiKey` command or `ANTHROPIC_API_KEY` env var |
+| `railsForge.ai.ollama.baseUrl` | `string` | `"http://localhost:11434"` | **Requires reload** | URL of the local or remote Ollama instance (mirrors `railsForge.ollama.host`) |
+| `railsForge.ai.ollama.model` | `string` | `"qwen2.5-coder:14b"` | **Requires reload** | Model used when `ai.provider` is `"ollama"` (mirrors `railsForge.ollama.model`) |
+| `railsForge.ai.ollama.apiKey` | `string` | `""` | **Requires reload** | Optional API key for Ollama Cloud (mirrors `railsForge.ollama.apiKey`) |
 | `railsForge.ai.temperature` | `number` | `0.2` | **Requires reload** | Sampling temperature for every provider. 0.2 keeps AI fixes deterministic; raise toward 1.0 for more creative chat |
 | `railsForge.ai.maxTokens` | `number` | `2048` | **Requires reload** | Max generated tokens per response (`num_predict` on Ollama, `max_tokens` on cloud) |
 | `railsForge.ai.timeoutMs` | `number` | `120000` | **Requires reload** | Per-request timeout for `@rails` agent calls |

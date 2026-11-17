@@ -65,6 +65,8 @@ export interface RailsAgentConfig {
   /** Base URL for OpenAI-compatible endpoints (OpenAI, OpenRouter, self-hosted vLLM/oss models). */
   openaiBaseUrl?: string
   anthropicModel?: string
+  /** Base URL for Anthropic endpoints (Anthropic, proxies, self-hosted gateways). */
+  anthropicBaseUrl?: string
   /**
    * Where Anthropic requests are sent. Not a user setting: extension.ts leaves it unset, so the API key only ever goes to
    * Anthropic's endpoint. It exists so a test can point the real request path at a local server.
@@ -282,20 +284,25 @@ export class RailsAgent {
     if (provider === 'anthropic') {
       const apiKey = await this.config.getApiKey?.()
       if (!apiKey) {return this.missingApiKeyResult('Anthropic')}
-      return this.callAnthropic(systemPrompt, prompt, this.config.anthropicModel ?? 'claude-sonnet-4-5', apiKey, signal)
+      return this.callAnthropic(systemPrompt, prompt, apiKey, signal)
     }
 
     if (provider === 'openai') {
       const apiKey = await this.config.getApiKey?.()
       if (!apiKey) {return this.missingApiKeyResult('OpenAI')}
-      const rawBaseUrl = this.config.openaiBaseUrl ?? 'https://api.openai.com'
+      const rawBaseUrl = (this.config.openaiBaseUrl ?? 'https://api.openai.com').trim()
       const baseUrl = rawBaseUrl.replace(/\/$/, '')
       // Reject non-HTTPS URLs unless targeting localhost (for local proxies)
       if (!/^https:\/\//i.test(baseUrl) && !/^http:\/\/localhost/i.test(baseUrl) && !/^http:\/\/127\.0\.0\.1/i.test(baseUrl)) {
         return { success: false, response: `Invalid openaiBaseUrl: "${rawBaseUrl}". Must use HTTPS (or http://localhost for local proxies).` }
       }
+      const chatUrl = baseUrl.endsWith('/v1/chat/completions')
+        ? baseUrl
+        : baseUrl.endsWith('/v1')
+          ? `${baseUrl}/chat/completions`
+          : `${baseUrl}/v1/chat/completions`
       return this.callOpenAiCompatible(
-        `${baseUrl}/v1/chat/completions`,
+        chatUrl,
         this.config.openaiModel ?? 'gpt-4o-mini',
         systemPrompt,
         prompt,
@@ -436,16 +443,36 @@ export class RailsAgent {
     }
   }
 
+  private resolveAnthropicEndpoint(): { url?: string; error?: string } {
+    if (this.config.anthropicEndpoint) {
+      return { url: this.config.anthropicEndpoint }
+    }
+    const raw = (this.config.anthropicBaseUrl ?? 'https://api.anthropic.com').trim()
+    const clean = raw.replace(/\/$/, '')
+    if (!/^https:\/\//i.test(clean) && !/^http:\/\/(localhost|127\.0\.0\.1)/i.test(clean)) {
+      return { error: `Invalid anthropicBaseUrl: "${raw}". Must use HTTPS (or http://localhost for local proxies).` }
+    }
+    const url = clean.endsWith('/v1/messages')
+      ? clean
+      : clean.endsWith('/v1')
+        ? `${clean}/messages`
+        : `${clean}/v1/messages`
+    return { url }
+  }
+
   private async callAnthropic(
     systemPrompt: string,
     prompt: string,
-    model: string,
     apiKey: string,
     signal?: AbortSignal,
   ): Promise<{ success: boolean; response: string }> {
+    const endpoint = this.resolveAnthropicEndpoint()
+    if (endpoint.error || !endpoint.url) {
+      return { success: false, response: endpoint.error ?? 'Missing Anthropic endpoint' }
+    }
     try {
       const payload = {
-        model,
+        model: this.config.anthropicModel ?? 'claude-sonnet-4-5',
         // Anthropic requires an explicit max_tokens; large cloud models can afford
         // more output than a 4B local model, but the shared cap keeps round time
         // predictable across providers.
@@ -455,7 +482,7 @@ export class RailsAgent {
         temperature: this.config.temperature ?? 0.2,
       }
       this.log('trace', `[Anthropic] request: ${truncate(safeJson(payload), 8000)}`)
-      const res = await fetch(this.config.anthropicEndpoint ?? 'https://api.anthropic.com/v1/messages', {
+      const res = await fetch(endpoint.url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -741,15 +768,21 @@ private buildFixRetryInstruction(code: string, diagnosticMessage: string, previo
     let headers: Record<string, string>
     let model: string
     if (provider === 'anthropic') {
-      url = 'https://api.anthropic.com/v1/models?limit=1000'
+      const rawBase = (this.config.anthropicBaseUrl ?? 'https://api.anthropic.com').trim().replace(/\/$/, '')
+      if (!/^https:\/\//i.test(rawBase) && !/^http:\/\/(localhost|127\.0\.0\.1)/i.test(rawBase)) {
+        return { state: 'error', detail: `Invalid anthropicBaseUrl "${rawBase}" (HTTPS required)` }
+      }
+      const root = rawBase.endsWith('/v1') ? rawBase : `${rawBase}/v1`
+      url = `${root}/models?limit=1000`
       headers = { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }
       model = this.config.anthropicModel ?? 'claude-sonnet-4-5'
     } else {
-      const baseUrl = (this.config.openaiBaseUrl ?? 'https://api.openai.com').replace(/\/$/, '')
+      const baseUrl = (this.config.openaiBaseUrl ?? 'https://api.openai.com').trim().replace(/\/$/, '')
       if (!/^https:\/\//i.test(baseUrl) && !/^http:\/\/(localhost|127\.0\.0\.1)/i.test(baseUrl)) {
         return { state: 'error', detail: `Invalid openaiBaseUrl "${baseUrl}" (HTTPS required)` }
       }
-      url = `${baseUrl}/v1/models`
+      const root = baseUrl.endsWith('/v1') ? baseUrl : `${baseUrl}/v1`
+      url = `${root}/models`
       headers = { Authorization: `Bearer ${apiKey}` }
       model = this.config.openaiModel ?? 'gpt-4o-mini'
     }

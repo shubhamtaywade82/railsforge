@@ -69,7 +69,13 @@ export interface RailsForgeConfig {
   aiVscodeLmFamily: string
   aiOpenaiModel: string
   aiOpenaiBaseUrl: string
+  aiOpenaiApiKey: string
   aiAnthropicModel: string
+  aiAnthropicBaseUrl: string
+  aiAnthropicApiKey: string
+  aiOllamaBaseUrl: string
+  aiOllamaModel: string
+  aiOllamaApiKey: string
   aiTemperature: number
   aiMaxTokens: number
   aiTimeoutMs: number
@@ -119,6 +125,18 @@ export interface RailsForgeConfig {
 export function readConfig(scope?: vscode.ConfigurationScope): RailsForgeConfig {
   const cfg = vscode.workspace.getConfiguration('railsForge', scope)
 
+  const explicitOllamaBaseUrl = cfg.get<string>('ai.ollama.baseUrl', '')
+  const legacyOllamaHost = cfg.get<string>('ollama.host', '')
+  const resolvedOllamaHost = explicitOllamaBaseUrl || legacyOllamaHost || 'http://localhost:11434'
+
+  const explicitOllamaModel = cfg.get<string>('ai.ollama.model', '')
+  const legacyOllamaModel = cfg.get<string>('ollama.model', '')
+  const resolvedOllamaModel = explicitOllamaModel || legacyOllamaModel || 'qwen2.5-coder:14b'
+
+  const explicitOllamaApiKey = cfg.get<string>('ai.ollama.apiKey', '')
+  const legacyOllamaApiKey = cfg.get<string>('ollama.apiKey', '')
+  const resolvedOllamaApiKey = explicitOllamaApiKey || legacyOllamaApiKey || ''
+
   return {
     excludePatterns: cfg.get<string[]>('excludePatterns', DEFAULT_EXCLUDE_PATTERNS),
     projectTypeOverride: cfg.get<ProjectTypeOverride>('projectType.override', 'auto'),
@@ -128,22 +146,28 @@ export function readConfig(scope?: vscode.ConfigurationScope): RailsForgeConfig 
     testingFramework: cfg.get<TestingFramework>('testing.framework', 'rspec'),
     schemaAutoIndex: cfg.get<boolean>('schema.autoIndex', true),
     routesAutoIndex: cfg.get<boolean>('routes.autoIndex', true),
-    ollamaHost: cfg.get<string>('ollama.host', 'http://localhost:11434'),
-    ollamaModel: cfg.get<string>('ollama.model', 'qwen2.5-coder:14b'),
-    ollamaApiKey: cfg.get<string>('ollama.apiKey', ''),
-    ollamaCredentials: cfg.get<Record<string, OllamaCredentialSetting>>('ollama.credentials', {}),
-    ollamaModelBindings: cfg.get<Record<string, string | string[]>>('ollama.modelBindings', {}),
-    ollamaDefaultCredential: cfg.get<string>('ollama.defaultCredential', ''),
-    ollamaEmbeddingModel: cfg.get<string>('ollama.embeddingModel', 'nomic-embed-text'),
-    ollamaNumCtx: cfg.get<number>('ollama.numCtx', 8192),
-    ollamaKeepAlive: cfg.get<string>('ollama.keepAlive', '30m'),
-    ollamaRepeatPenalty: cfg.get<number>('ollama.repeatPenalty', 1.15),
-    ollamaMinP: cfg.get<number>('ollama.minP', 0.05),
-    aiProvider: cfg.get<AiProvider>('ai.provider', 'ollama'),
-    aiVscodeLmFamily: cfg.get<string>('ai.vscodeLm.family', ''),
-    aiOpenaiModel: cfg.get<string>('ai.openai.model', 'gpt-4o-mini'),
-    aiOpenaiBaseUrl: cfg.get<string>('ai.openai.baseUrl', 'https://api.openai.com'),
-    aiAnthropicModel: cfg.get<string>('ai.anthropic.model', 'claude-sonnet-4-5'),
+    ollamaHost: resolvedOllamaHost,
+    ollamaModel: resolvedOllamaModel,
+    ollamaApiKey: resolvedOllamaApiKey,
+      ollamaCredentials: cfg.get<Record<string, OllamaCredentialSetting>>('ollama.credentials', {}),
+      ollamaModelBindings: cfg.get<Record<string, string | string[]>>('ollama.modelBindings', {}),
+      ollamaDefaultCredential: cfg.get<string>('ollama.defaultCredential', ''),
+      ollamaEmbeddingModel: cfg.get<string>('ollama.embeddingModel', 'nomic-embed-text'),
+      ollamaNumCtx: cfg.get<number>('ollama.numCtx', 8192),
+      ollamaKeepAlive: cfg.get<string>('ollama.keepAlive', '30m'),
+      ollamaRepeatPenalty: cfg.get<number>('ollama.repeatPenalty', 1.15),
+      ollamaMinP: cfg.get<number>('ollama.minP', 0.05),
+      aiProvider: cfg.get<AiProvider>('ai.provider', 'ollama'),
+      aiVscodeLmFamily: cfg.get<string>('ai.vscodeLm.family', ''),
+      aiOpenaiModel: cfg.get<string>('ai.openai.model', 'gpt-4o-mini'),
+      aiOpenaiBaseUrl: cfg.get<string>('ai.openai.baseUrl', 'https://api.openai.com'),
+      aiOpenaiApiKey: cfg.get<string>('ai.openai.apiKey', ''),
+      aiAnthropicModel: cfg.get<string>('ai.anthropic.model', 'claude-sonnet-4-5'),
+      aiAnthropicBaseUrl: cfg.get<string>('ai.anthropic.baseUrl', 'https://api.anthropic.com'),
+      aiAnthropicApiKey: cfg.get<string>('ai.anthropic.apiKey', ''),
+      aiOllamaBaseUrl: resolvedOllamaHost,
+      aiOllamaModel: resolvedOllamaModel,
+      aiOllamaApiKey: resolvedOllamaApiKey,
     aiTemperature: cfg.get<number>('ai.temperature', 0.2),
     aiMaxTokens: cfg.get<number>('ai.maxTokens', 2048),
     aiTimeoutMs: cfg.get<number>('ai.timeoutMs', 120000),

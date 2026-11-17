@@ -385,6 +385,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     openaiModel: cfg.aiOpenaiModel,
     openaiBaseUrl: cfg.aiOpenaiBaseUrl,
     anthropicModel: cfg.aiAnthropicModel,
+    anthropicBaseUrl: cfg.aiAnthropicBaseUrl,
     temperature: cfg.aiTemperature,
     maxTokens: cfg.aiMaxTokens,
     timeoutMs: cfg.aiTimeoutMs,
@@ -397,7 +398,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
     ollamaCredentials: cfg.ollamaCredentials,
     ollamaModelBindings: cfg.ollamaModelBindings,
     ollamaDefaultCredential: cfg.ollamaDefaultCredential,
-    getApiKey: async () => context.secrets.get(aiApiKeySecretKey(readConfig().aiProvider)),
+    getApiKey: async () => resolveAiApiKey(context.secrets, readConfig()),
     vscodeLmFamily: cfg.aiVscodeLmFamily,
     toolLoop: { enabled: cfg.agentToolLoop, maxSteps: cfg.agentMaxToolSteps, verifySyntax: cfg.agentVerifySyntax },
     loopTools: async (root, signal) => {
@@ -601,7 +602,7 @@ export function activate(context: vscode.ExtensionContext): RailsForgeTestApi {
           model: activeAiModel(cfg),
           hasApiKey: cfg.aiProvider === 'vscode-lm'
             ? false
-            : Boolean(await context.secrets.get(aiApiKeySecretKey(cfg.aiProvider))) || (cfg.aiProvider === 'ollama' && Boolean(cfg.ollamaApiKey || Object.keys(cfg.ollamaCredentials).length)),
+            : Boolean(await resolveAiApiKey(context.secrets, cfg)) || (cfg.aiProvider === 'ollama' && Boolean(Object.keys(cfg.ollamaCredentials).length)),
         },
       })
       const doc = await vscode.workspace.openTextDocument({ content: renderDiagnosticsDoc(info), language: 'markdown' })
@@ -1493,6 +1494,23 @@ async function vscodeLmStatus(family: string): Promise<{ state: 'authenticated' 
 /** SecretStorage key for a given AI provider's API key — never the same key across providers, so switching providers doesn't require re-entering the other one's key. */
 function aiApiKeySecretKey(provider: AiProvider): string {
   return `railsForge.aiApiKey.${provider}`
+}
+
+/** Resolves the API key for the active provider: SecretStorage first, then settings, then process.env. */
+async function resolveAiApiKey(secrets: vscode.SecretStorage, cfg: RailsForgeConfig): Promise<string | undefined> {
+  const stored = await secrets.get(aiApiKeySecretKey(cfg.aiProvider))
+  if (stored) {return stored}
+
+  if (cfg.aiProvider === 'anthropic') {
+    return cfg.aiAnthropicApiKey || process.env.ANTHROPIC_API_KEY
+  }
+  if (cfg.aiProvider === 'openai') {
+    return cfg.aiOpenaiApiKey || process.env.OPENAI_API_KEY
+  }
+  if (cfg.aiProvider === 'ollama') {
+    return cfg.ollamaApiKey || process.env.OLLAMA_API_KEY
+  }
+  return undefined
 }
 
 /** Resolves `railsForge.excludePatterns` (read fresh, so a settings change applies to the next scan) into the glob `findFiles` expects. */

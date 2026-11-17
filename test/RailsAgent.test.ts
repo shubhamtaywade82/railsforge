@@ -221,6 +221,42 @@ describe('RailsAgent provider dispatch', () => {
     )
   }
 
+  it('calls Anthropic with custom anthropicBaseUrl and validates endpoint path', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ content: [{ type: 'text', text: 'Anthropic reply' }] }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const agent = buildAgent({
+      provider: 'anthropic',
+      anthropicBaseUrl: 'https://custom-anthropic.example.com',
+      anthropicModel: 'claude-3-5-sonnet',
+      getApiKey: async () => 'ant-test-key',
+    })
+    const result = await agent.run('hello', {})
+
+    expect(result.success).toBe(true)
+    expect(result.response).toBe('Anthropic reply')
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('https://custom-anthropic.example.com/v1/messages')
+    const headers = init.headers as Record<string, string>
+    expect(headers['x-api-key']).toBe('ant-test-key')
+  })
+
+  it('rejects cleartext HTTP anthropicBaseUrl for security', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const agent = buildAgent({
+      provider: 'anthropic',
+      anthropicBaseUrl: 'http://insecure-proxy.com',
+      getApiKey: async () => 'ant-test-key',
+    })
+    const result = await agent.run('hello', {})
+
+    expect(result.success).toBe(false)
+    expect(result.response).toContain('Invalid anthropicBaseUrl')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('adds legal-domain guardrails to the system prompt when legal mode is enabled', async () => {
     const fetchMock = vi.fn(cassetteFetch(OLLAMA_CASSETTE))
     vi.stubGlobal('fetch', fetchMock)
@@ -253,6 +289,22 @@ describe('RailsAgent provider dispatch', () => {
       const agent = buildAgent({ provider: 'anthropic', getApiKey: async () => 'k' })
       expect((await agent.getProviderStatus()).state).toBe('authenticated')
       expect(await agent.healthCheck()).toBe(true)
+    })
+
+    it('probes custom anthropicBaseUrl with x-api-key and anthropic-version', async () => {
+      const fetchMock = vi.fn(async () => jsonRes(200, { data: [{ id: 'claude-sonnet-4-5' }] }))
+      vi.stubGlobal('fetch', fetchMock)
+      const agent = buildAgent({
+        provider: 'anthropic',
+        anthropicBaseUrl: 'https://proxy.internal:8443',
+        getApiKey: async () => 'ant-probe-key',
+      })
+      const status = await agent.getProviderStatus()
+      expect(status.state).toBe('authenticated')
+      const [url, init] = fetchMock.mock.calls[0]
+      expect(url).toBe('https://proxy.internal:8443/v1/models?limit=1000')
+      expect((init.headers as Record<string, string>)['x-api-key']).toBe('ant-probe-key')
+      expect((init.headers as Record<string, string>)['anthropic-version']).toBe('2023-06-01')
     })
 
     it('reports a rejected key, a missing model, and an unreachable endpoint distinctly', async () => {

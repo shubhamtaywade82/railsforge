@@ -27,6 +27,12 @@
         "railsForge.refactoring.aiHints",
         "railsForge.ai.provider",
         "railsForge.ai.openai.baseUrl",
+        "railsForge.ai.openai.apiKey",
+        "railsForge.ai.anthropic.baseUrl",
+        "railsForge.ai.anthropic.apiKey",
+        "railsForge.ai.ollama.baseUrl",
+        "railsForge.ai.ollama.apiKey",
+        "railsForge.ai.ollama.model",
         "railsForge.apidock.baseUrl",
         "railsForge.rubydoc.baseUrl",
         "railsForge.devdocs.baseUrl",
@@ -378,37 +384,13 @@
             "vscode-lm"
           ],
           "enumDescriptions": [
-            "Local, private, free — uses railsForge.ollama.host/model (default)",
-            "Cloud — requires an API key set via 'RailsForge: Set AI Provider API Key'",
-            "Cloud — requires an API key set via 'RailsForge: Set AI Provider API Key'",
-            "VS Code's own model picker (Copilot or any installed Language Model provider, e.g. an Ollama provider) — no API key stored by RailsForge; VS Code asks for consent"
+            "Local, private, free — uses railsForge.ollama.host/model or railsForge.ai.ollama.baseUrl/model (default)",
+            "OpenAI / Compatible — uses railsForge.ai.openai.baseUrl/model (OpenAI, OpenRouter, LiteLLM, vLLM)",
+            "Anthropic — uses railsForge.ai.anthropic.baseUrl/model (Claude Sonnet/Opus)",
+            "VS Code Language Model API (Copilot or any installed LM provider) — uses railsForge.ai.vscodeLm.family"
           ],
           "default": "ollama",
-          "description": "Backend for the @rails AI agent and chat participant. Cloud providers send your code/prompts to that provider's API — only switch away from 'ollama' if you're fine with that. Requires a window reload to take effect.",
-          "scope": "machine-overridable"
-        },
-        "railsForge.ai.vscodeLm.family": {
-          "type": "string",
-          "default": "",
-          "description": "Preferred model family (e.g. 'gpt-4o', 'claude-sonnet') when railsForge.ai.provider is 'vscode-lm'. Empty uses the first available model.",
-          "scope": "machine-overridable"
-        },
-        "railsForge.ai.openai.model": {
-          "type": "string",
-          "default": "gpt-4o-mini",
-          "description": "OpenAI model used when railsForge.ai.provider is 'openai'",
-          "scope": "machine-overridable"
-        },
-        "railsForge.ai.openai.baseUrl": {
-          "type": "string",
-          "default": "https://api.openai.com",
-          "description": "Base URL for OpenAI-compatible endpoints. Point this at OpenRouter, a self-hosted vLLM, or any OSS model gateway (e.g. oss-gpt 120b) that speaks the /v1/chat/completions protocol. The agent appends /v1/chat/completions automatically.",
-          "scope": "machine-overridable"
-        },
-        "railsForge.ai.anthropic.model": {
-          "type": "string",
-          "default": "claude-sonnet-4-5",
-          "description": "Anthropic model used when railsForge.ai.provider is 'anthropic'",
+          "description": "[AI: Core] Active backend provider for the @rails AI agent and chat participant ('ollama', 'openai', 'anthropic', or 'vscode-lm'). Requires a window reload to take effect. Scope: User or Workspace settings.",
           "scope": "machine-overridable"
         },
         "railsForge.ai.temperature": {
@@ -416,21 +398,81 @@
           "default": 0.2,
           "minimum": 0,
           "maximum": 2,
-          "description": "Sampling temperature for the @rails agent, applied to every provider. 0.2 keeps AI fixes deterministic (good for diff generation); raise toward 1.0 for more creative chat answers.",
+          "description": "[AI: Core] Sampling temperature for the @rails agent across all providers. 0.2 keeps AI fixes deterministic; raise toward 1.0 for more creative chat answers. Scope: User or Workspace settings.",
           "scope": "machine-overridable"
         },
         "railsForge.ai.maxTokens": {
           "type": "number",
           "default": 2048,
           "minimum": 64,
-          "description": "Maximum generated tokens per response. Sent as num_predict to Ollama and max_tokens to cloud providers. For a 4B local model this caps rambling and cuts round time; cloud models can handle a larger cap (e.g. 4096).",
+          "description": "[AI: Core] Maximum generated tokens per response across all providers (sent as num_predict to Ollama and max_tokens to cloud providers). Scope: User or Workspace settings.",
           "scope": "machine-overridable"
         },
         "railsForge.ai.timeoutMs": {
           "type": "number",
           "default": 120000,
           "minimum": 5000,
-          "description": "Per-request timeout for @rails agent calls. Prevents a hung or overloaded Ollama/cloud endpoint from blocking a fix or chat turn indefinitely.",
+          "description": "[AI: Core] Per-request timeout in milliseconds for @rails agent calls. Prevents hung requests. Scope: User or Workspace settings.",
+          "scope": "machine-overridable"
+        },
+        "railsForge.ai.anthropic.baseUrl": {
+          "type": "string",
+          "default": "https://api.anthropic.com",
+          "description": "[AI Provider: Anthropic] Base URL for Anthropic Claude endpoints (e.g. https://api.anthropic.com, or reverse proxy / AI gateway such as Cloudflare AI Gateway, Portkey, AWS Bedrock proxy). The agent appends /v1/messages automatically. Scope: User or Workspace settings.",
+          "scope": "machine-overridable"
+        },
+        "railsForge.ai.anthropic.model": {
+          "type": "string",
+          "default": "claude-sonnet-4-5",
+          "description": "[AI Provider: Anthropic] Anthropic model name used when railsForge.ai.provider is 'anthropic' (e.g. 'claude-sonnet-4-5', 'claude-3-7-sonnet-latest'). Scope: User or Workspace settings.",
+          "scope": "machine-overridable"
+        },
+        "railsForge.ai.anthropic.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "[AI Provider: Anthropic] Optional API key for Anthropic. Prefer storing securely via Command Palette: 'RailsForge: Set AI Provider API Key' (railsforge.setAiApiKey) or setting ANTHROPIC_API_KEY in your environment. Scope: User or Workspace settings.",
+          "scope": "machine-overridable"
+        },
+        "railsForge.ai.openai.baseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com",
+          "description": "[AI Provider: OpenAI] Base URL for OpenAI-compatible endpoints (e.g. https://api.openai.com, OpenRouter, LiteLLM, self-hosted vLLM, Groq, DeepSeek). The agent appends /v1/chat/completions automatically. Scope: User or Workspace settings.",
+          "scope": "machine-overridable"
+        },
+        "railsForge.ai.openai.model": {
+          "type": "string",
+          "default": "gpt-4o-mini",
+          "description": "[AI Provider: OpenAI] Model name used when railsForge.ai.provider is 'openai' (e.g. 'gpt-4o', 'gpt-4o-mini', 'deepseek-chat'). Scope: User or Workspace settings.",
+          "scope": "machine-overridable"
+        },
+        "railsForge.ai.openai.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "[AI Provider: OpenAI] Optional API key for OpenAI-compatible endpoints. Prefer storing securely via Command Palette: 'RailsForge: Set AI Provider API Key' (railsforge.setAiApiKey) or setting OPENAI_API_KEY in your environment. Scope: User or Workspace settings.",
+          "scope": "machine-overridable"
+        },
+        "railsForge.ai.ollama.baseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "[AI Provider: Ollama] Base URL of the local or remote Ollama server (e.g. http://localhost:11434). When set, overrides railsForge.ollama.host. Scope: User or Workspace settings.",
+          "scope": "machine-overridable"
+        },
+        "railsForge.ai.ollama.model": {
+          "type": "string",
+          "default": "",
+          "description": "[AI Provider: Ollama] Model name for Ollama (e.g. qwen2.5-coder:14b). When set, overrides railsForge.ollama.model. Scope: User or Workspace settings.",
+          "scope": "machine-overridable"
+        },
+        "railsForge.ai.ollama.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "[AI Provider: Ollama] API key for Ollama Cloud (https://ollama.com). When set, overrides railsForge.ollama.apiKey. Scope: User or Workspace settings.",
+          "scope": "machine-overridable"
+        },
+        "railsForge.ai.vscodeLm.family": {
+          "type": "string",
+          "default": "",
+          "description": "[AI Provider: VS Code LM] Preferred model family (e.g. 'gpt-4o', 'claude-sonnet') when railsForge.ai.provider is 'vscode-lm'. Empty uses the first available model. Scope: User or Workspace settings.",
           "scope": "machine-overridable"
         },
         "railsForge.legal.skills.enabled": {
