@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.0
+
 ### Performance
 - **RailsForge starts after VS Code has finished starting.** Activation was `onLanguage` and `workspaceContains`, which fired while the window and projects were still restoring. It is now `onStartupFinished`.
 - **No model requests or indexing at activation.** The AI fix cache warm-up (28 model requests, which stalled the extension host for ~0.5 s on a 6,000-file synthetic project) starts after the first AI fix request finishes. The AST index starts on first use by its commands. The offline DevDocs download starts on the first Ruby hover per project.

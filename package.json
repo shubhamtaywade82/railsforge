@@ -2,7 +2,7 @@
   "name": "railsforge",
   "displayName": "RailsForge - Supercharged Ruby & Rails IDE",
   "description": "All-in-one Ruby on Rails intelligence: Schema Peek, Fast MVC Navigation, Route Autocomplete, RuboCop Autocorrect, Brakeman Security, Service Object Extractors, and @rails AI Agent.",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "publisher": "ShubhamTaywade",
   "license": "MIT",
   "icon": "media/icon.png",
